@@ -7,6 +7,13 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- The graph picks its boxes by how much code each one leads to, not by how near it is: from the entry point it
+  keeps taking the function that leads to the most lines (and AWS calls, HTTP requests and environment variables)
+  below it. On code-node's own command it now draws `make_page`, `map_code`, `page_blocks` and `render_page`
+  instead of small helpers, and the graph is less than half as tall.
+- A box whose calls the graph leaves out says "+3 calls not drawn", and its code panel names them, instead of
+  looking like it does nothing.
+
 - The page is only two tabs now, Graph and Step by step. The title, the cards of numbers, the findings and the tables
   under the graph (AWS calls and their IAM policy, environment variables, the event, functions, imports, HTTP
   requests) are gone. The entry point and the folder sit at the right of the tab bar, which stays at the top as you
@@ -33,6 +40,10 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
 ### Added
+
+- Line links to your editor: each step's card ("line 36 ↗") and each place in a box's code panel ("open ↗") opens
+  that line in VS Code, or in Cursor with `--editor cursor`. Inside WSL they open the Windows editor on the WSL
+  files. `--editor none` leaves them out, and the folder's full path with them.
 
 - The pages have a tab icon (code-node's logo), saved and served.
 

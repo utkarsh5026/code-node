@@ -123,6 +123,7 @@ _EXTRA_CSS = """\
 .cnd .cg .cn .rw{font:12.5px var(--mono);fill-opacity:.88}
 .cnd .cg .cn .rw.mo{font-family:inherit;font-style:italic;fill-opacity:.55}
 .cnd .cg .cn .pr{font-size:12.5px;fill-opacity:.7}
+.cnd .cg .cn .pr.mo{font-style:italic;fill-opacity:.5}
 .cnd .cg .cn .ns{font-size:12px;font-weight:650;fill:light-dark(#b45309,#fbbf24);letter-spacing:.2px}
 .cnd .cg .cn .bu{fill:var(--c,rgba(127,127,127,.6))}
 .cnd .cg .cn .bdg{fill:var(--t,rgba(127,127,127,.12));stroke:var(--c,rgba(127,127,127,.5));stroke-opacity:.22;stroke-width:1}
@@ -206,6 +207,8 @@ _EXTRA_CSS = """\
 .cnd .cside .csl{font-size:12px;opacity:.6}
 .cnd .cside .csw{font:12px var(--mono);margin:16px 0 5px;overflow-wrap:anywhere}
 .cnd .cside .csw span{opacity:.55}
+.cnd .cside .ced{margin-left:6px;font-family:inherit;color:light-dark(#2563eb,#60a5fa);text-decoration:none}
+.cnd .cside .ced:hover{text-decoration:underline}
 .cnd .cside pre.csc{margin:0;padding:8px 0;border:1px solid rgba(127,127,127,.22);border-radius:8px;overflow:auto;background:rgba(127,127,127,.04);font:12.5px/1.6 var(--mono)}
 .cnd .cside .sl{display:block;width:max-content;min-width:100%;box-sizing:border-box;padding-right:14px;white-space:pre}
 .cnd .cside .sl.lit{background:rgba(245,158,11,.16);box-shadow:inset 3px 0 #f59e0b}
@@ -263,6 +266,8 @@ _EXTRA_CSS = """\
 .cnd .walk .wbt.go{color:light-dark(#2563eb,#60a5fa);border-color:light-dark(rgba(37,99,235,.55),rgba(96,165,250,.55))}
 .cnd .walk label.wbt.go:hover{background:light-dark(rgba(37,99,235,.08),rgba(96,165,250,.12))}
 .cnd .walk .wbt.off{opacity:.35;cursor:default}
+.cnd .walk .wed{margin-left:auto;font-size:12px;color:light-dark(#2563eb,#60a5fa);text-decoration:none;font-variant-numeric:tabular-nums}
+.cnd .walk .wed:hover{text-decoration:underline}
 .cnd .walk .wpos{font-size:12px;opacity:.7;padding:0 4px;font-variant-numeric:tabular-nums}
 .cnd .walk .wstk{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:10px 0 2px;font:12px var(--mono)}
 .cnd .walk .wstk label{cursor:pointer;user-select:none;-webkit-user-select:none;opacity:.62;border-radius:4px;padding:0 3px}

@@ -9,6 +9,7 @@ as a graph of who calls whom and what each path reaches, and the steps of each c
     code-node --list                # the entry points it found
     code-node --all                 # every function in the graph, however deep
     code-node --serve               # a live page on localhost that redraws whenever the code changes
+    code-node --editor cursor       # line links open in Cursor (vscode by default, none for no links)
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from pathlib import Path
 
 from .pages import GRAPH_DEPTH, GRAPH_FUNCTIONS, PageOptions, make_mermaid, make_page
 from .platforms import platforms
+from .report.editor import EDITORS
 from .project import (
     EntryPoint, Project, entries_in_file, entry_in_files, entry_points, functions_matching, project_root, read_project,
 )
@@ -56,6 +58,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                              "handler is lambda; default plain Python)")
     parser.add_argument("--lambda", dest="platform", action="store_const", const="lambda",
                         help="the same as --platform lambda")
+    parser.add_argument("--editor", choices=[*EDITORS, "none"], default="vscode",
+                        help="the editor the page's line links open (default vscode; none for no links)")
     return parser.parse_args(argv)
 
 
@@ -198,7 +202,8 @@ def main(argv: list[str] | None = None) -> int:
     entry = _from_file(project, *in_file) if in_file else _pick_entry(project, args.entry)
     if entry is None:
         return 1
-    options = PageOptions(draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform)
+    options = PageOptions(draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform,
+                          editor=args.editor)
     if args.mermaid:
         print(make_mermaid(project.root, entry, options))
         return 0

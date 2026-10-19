@@ -65,7 +65,10 @@ with the folder's name, so you can tell them apart.
 
 ## Large projects { #limits }
 
-The graph shows the nearest 24 functions, 5 calls deep. The step-by-step list always has all of them.
+The graph shows 24 functions, 5 calls deep: starting from the entry point, it keeps taking the function that leads to
+the most code (and to AWS, the web and environment variables), so the boxes are the ones doing the work, not the
+nearest helpers. A box whose calls are left out says so ("+3 calls not drawn"), and its code panel names them. The
+step-by-step list always has all of them.
 
 ```bash
 code-node --all                     # draw everything
@@ -81,6 +84,9 @@ code-node --mermaid > graph.md      # Mermaid, for a README or a PR
 
 Without `-o`, pages are saved in `~/.cache/code-node/`. On WSL they open in your Windows browser.
 
+Each step's card and each place in a box's code panel links to that line in VS Code (`--editor cursor` for Cursor).
+The links hold the folder's full path, so pass `--editor none` for a page you'll share.
+
 ## Every option { #options }
 
 | Option | Does |
@@ -95,3 +101,4 @@ Without `-o`, pages are saved in `~/.cache/code-node/`. On WSL they open in your
 | `-o`, `--out` | Where to save |
 | `--no-open` | Don't open a browser |
 | `--platform`, `--lambda` | Run a platform's checks |
+| `--editor` | What line links open: `vscode`, `cursor` or `none` |

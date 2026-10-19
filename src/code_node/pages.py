@@ -5,6 +5,7 @@ once, and the server makes it again on every change.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,9 +14,10 @@ from .analysis.mapping import map_code
 from .analysis.model import CodeMap
 from .project import EntryPoint, Project, read_project
 from .report.build import page_blocks
+from .report.editor import editor_link
 from .report.style import render_page
 
-GRAPH_FUNCTIONS = 24  # functions the graph draws by default, the nearest first
+GRAPH_FUNCTIONS = 24  # functions the graph draws by default, the ones that lead to the most code first
 
 GRAPH_DEPTH = 5  # ...and how many calls deep
 
@@ -34,6 +36,7 @@ class PageOptions:
     functions: int = GRAPH_FUNCTIONS
     depth: int = GRAPH_DEPTH
     platform: str = ""  # --platform: its checks run whatever the entry point is ('' leaves it to the entry point)
+    editor: str = "vscode"  # --editor: the editor its line links open ('vscode', 'cursor'; 'none' for no links)
 
     @property
     def limits(self) -> tuple[int, int]:
@@ -61,7 +64,8 @@ def make_page(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[str,
     cmap, project = map_entry(root, entry, options)
     max_functions, max_depth = options.limits
     blocks = page_blocks(cmap, project=project.root.name, max_functions=max_functions, max_depth=max_depth,
-                         sources=project.files)
+                         sources=project.files, editor=editor_link(options.editor, str(project.root),
+                                                                   os.environ.get("WSL_DISTRO_NAME", "")))
     return render_page(blocks, f"How {entry.name} works"), cmap
 
 

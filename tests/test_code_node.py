@@ -4,6 +4,7 @@ code-node end to end on small folders written into tmp_path: entry points found,
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from code_node.analysis.graph import code_graph
@@ -275,3 +276,75 @@ def test_a_platform_plugin_finds_its_entry_points_and_adds_findings(tmp_path: Pa
 
     assert ("info", "1 fields of the job are read.") in code_map_findings(cmap)
     assert "It reads size from the job." in _code_summary(cmap)
+
+
+SNAPSHOT = Path(__file__).parent / "snapshots" / "orders-service.txt"
+
+
+def test_the_example_page_matches_its_snapshot(monkeypatch) -> None:
+    """
+    The example's page as text, against tests/snapshots/orders-service.txt, so a change to what the page says shows
+    as a readable diff. UPDATE_SNAPSHOTS=1 uv run pytest writes it anew.
+    """
+    from code_node.kit.render import _render_text
+    from code_node.pages import PageOptions, map_entry
+    from code_node.report.build import page_blocks
+
+    root = Path(__file__).parent.parent / "examples" / "orders-service"
+    entry = entry_points(read_project(root))[0]
+    cmap, project = map_entry(root, entry, PageOptions())
+    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
+                                    sources=project.files), 100) + "\n"
+    if os.environ.get("UPDATE_SNAPSHOTS"):
+        SNAPSHOT.parent.mkdir(exist_ok=True)
+        SNAPSHOT.write_text(text)
+    assert text == SNAPSHOT.read_text()
+
+
+ENGINE = '''
+def main():
+    tidy()
+    note()
+    run()
+
+
+def tidy():
+    pass
+
+
+def note():
+    pass
+
+
+def run():
+    work()
+
+
+def work():
+''' + "".join(f"    step{i} = {i}\n" for i in range(30))
+
+
+def test_the_graph_draws_the_functions_that_do_the_work(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": ENGINE}))
+    cmap = map_code(project.files, "app.main")
+    graph = code_graph(cmap, max_functions=3)
+    assert [n.label for n in graph.nodes if n.kind in ("handler", "function")] == ["main()", "run()", "work()"]
+    main_box = next(n for n in graph.nodes if n.label == "main()")
+    assert main_box.more == ["tidy()", "note()"]  # said in its box, rather than looking like it does nothing
+
+
+def test_line_links_open_the_editor(tmp_path: Path) -> None:
+    from code_node.report.editor import editor_link, open_at
+
+    link = editor_link("vscode", "/home/me/my code")
+    assert open_at(link, "app/main.py", 12) == "vscode://file/home/me/my%20code/app/main.py:12"
+    assert open_at(editor_link("cursor", "/home/me/code", wsl="Ubuntu"), "a.py", 3) == (
+        "cursor://vscode-remote/wsl+Ubuntu/home/me/code/a.py:3")
+    assert open_at(editor_link("vscode", "C:\\code"), "a.py", 1) == "vscode://file/C:/code/a.py:1"
+    assert editor_link("none", "/home/me/code") == ""
+    write(tmp_path / "code", {"app.py": HANDLER})
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    assert f'href="vscode://file{(tmp_path / "code").as_posix()}/app.py:' in out.read_text()
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out), "--editor", "none"]) == 0
+    assert "vscode://" not in out.read_text()

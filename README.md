@@ -76,12 +76,13 @@ at the same scroll position. If the code can't be drawn, the page says why and c
 | `path` | The folder to read, or a file to start from (`main.py`, `main.py:function`) |
 | `-e`, `--entry` | Where to start: `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
 | `-l`, `--list` | List the entry points, then stop |
-| `--all` | Draw every function, however deep (by default the graph shows the nearest 24, 5 calls deep) |
+| `--all` | Draw every function, however deep (by default the graph shows 24, 5 calls deep: the ones that lead to the most code) |
 | `--depth N`, `--functions N` | Your own limits |
 | `--serve`, `--port N` | Serve the page on localhost (8765, or the next free port) and redraw it whenever a `.py` file changes |
 | `--mermaid` | Print the graph as Mermaid |
 | `-o`, `--out`, `--no-open` | Where to save the page (default `~/.cache/code-node/`), and whether to open it |
 | `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler sets it; anything else is plain Python |
+| `--editor vscode\|cursor\|none` | The editor the page's line links open (default `vscode`; links into WSL open in Windows' editor) |
 
 ## From Python
 

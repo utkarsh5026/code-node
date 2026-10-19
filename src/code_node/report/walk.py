@@ -19,6 +19,7 @@ from ..kit.text import _esc
 
 from ..analysis.findings import _short_name
 from ..analysis.model import CodeFunction, CodeStep
+from .editor import editor_name, open_at
 from .outline import _NOTE_TIPS, _Outline, _chips_html, _outline_lines
 from .style import _ROOT
 
@@ -55,6 +56,7 @@ class _Walk:
     functions: list[CodeFunction] = field(default_factory=list)
     sources: dict[str, str] = field(default_factory=dict)
     empty: str = "(nothing it can follow)"
+    editor: str = ""  # a link to open a line in an editor, from editor_link(): each step's card links to its line
 
 
 @dataclass
@@ -230,7 +232,7 @@ def _button(target: int | None, text: str, css: str = "", tip: str = "") -> str:
     return f'<label class="{css}" for="cw{target}"{title}>{text}</label>'
 
 
-def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str]) -> str:
+def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], editor: str = "") -> str:
     """
     The current stop's card: Back and Next, where it is (the calls it's inside, each a link back to its start) and
     what its line does.
@@ -246,6 +248,11 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
         nav.append(_button(over, "Step over", tip="Run the call and stop at the next line here"))
     if out is not None:
         nav.append(_button(out, "Step out", tip="Finish this function"))
+    href = open_at(editor, stop.step.file, stop.step.line) if stop.step.file else ""
+    if href:
+        line = f"line {stop.step.line}" if stop.step.line else stop.step.file
+        nav.append(f'<a class="wed" href="{_esc(href)}" title="Open {_esc(stop.step.file)} at this line in '
+                   f'{_esc(editor_name(editor))}">{line} ↗</a>')
     trail = []
     for k, (name, at) in enumerate(stop.stack):
         css = ' class="here"' if k == depth - 1 else ""
@@ -384,7 +391,7 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         if not opened or opened[-1] != stop.frame:  # into a call
             out.append('<div class="wfn">')
             opened.append(stop.frame)
-        out.append(_item_html(stops, i, _card_html(stops, i, first, docs)))
+        out.append(_item_html(stops, i, _card_html(stops, i, first, docs, block.editor)))
         at = rows_of[stop.frame].get(stop.lit)
         if at is not None:  # the line its code lights
             report.rules.add(f".{root} #cw{i}:checked~.wf{stop.frame}{{--k:{at}}}")
