@@ -19,6 +19,14 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 - Console scripts come from every `pyproject.toml` in the folder, not only the root's, so a monorepo's commands
   (`libs/cli/pyproject.toml`) are found before its CI scripts.
 - SyntaxWarnings from the code being read (`"\d"` in a plain string) no longer show in the terminal.
+- It shows what it already knew about values. In Step by step, a line's card says what the names it sets now hold
+  (`store` holds an OrderStore, `self.table` a DynamoDB Table) and where its AWS call's arguments come from
+  (`Bucket ← env ARCHIVE_BUCKET`, `Key ← event Records[].s3.object.key`). A call's card says when it runs
+  ("only when `check(order)`"). The text and Mermaid output say the same, and the graph's AWS boxes list the sources
+  on hover.
+- A function called only under an `if` says so in its graph box ("when args.serve"), from the `if` nearest around
+  the call. Lines after `if not check(order): continue` (or `return`, `raise`, `break`) count as running only when
+  `check(order)`, rather than always.
 
 - The page is only two tabs now, Graph and Step by step. The title, the cards of numbers, the findings and the tables
   under the graph (AWS calls and their IAM policy, environment variables, the event, functions, imports, HTTP

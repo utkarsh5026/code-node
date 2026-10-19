@@ -181,7 +181,8 @@ def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str
             said = f"Each call starts here, in {name}." if stop.chapter else f"Python runs {name} here."
         else:
             calling = stops[stop.caller]
-            said = (f"<code>{_esc(stop.stack[-2][0])}</code> calls {name} on line {calling.step.line}"
+            when = (f", only when <code>{_esc(' and '.join(step.when))}</code>" if step.when else "")
+            said = (f"<code>{_esc(stop.stack[-2][0])}</code> calls {name} on line {calling.step.line}{when}"
                     + (": its steps follow." if step.steps and not step.seen else "."))
         doc = docs.get(step.name, "")
         out = f"<p>{said}</p>" + (f'<p class="wdoc">{_esc(doc)}</p>' if doc else "")
@@ -219,6 +220,18 @@ def _notes_html(step: CodeStep) -> str:
     """
     rows = [f"<li>{_chips_html([note])}<span>{_esc(_NOTE_TIPS.get(note[0], ''))}</span></li>" for note in step.notes]
     return f'<ul class="wnotes">{"".join(rows)}</ul>' if rows else ""
+
+
+def _values_html(step: CodeStep) -> str:
+    """
+    What the line's names now hold and where its AWS calls' arguments come from, as the reader worked them out:
+    'bucket  holds  event Records[].s3.bucket.name', 'S3 PutObject Bucket  ←  env ARCHIVE_BUCKET'.
+    """
+    rows = [f"<li><code>{_esc(name)}</code><span>holds</span>{_esc(what)}</li>" for name, what in step.holds]
+    one_call = len({arg.rsplit(" ", 1)[0] for arg, _ in step.given}) == 1  # its tag says which: just 'Bucket'
+    rows += [f"<li><code>{_esc(arg.rsplit(' ', 1)[-1] if one_call else arg)}</code><span>←</span>{_esc(source)}</li>"
+             for arg, source in step.given]
+    return f'<ul class="wvals">{"".join(rows)}</ul>' if rows else ""
 
 
 def _button(target: int | None, text: str, css: str = "", tip: str = "") -> str:
@@ -270,7 +283,7 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
         then = "That's the last step."
     return (f'<div class="wc"><div class="wnav">{"".join(nav)}</div>'
             f'<div class="wstk">{stack}</div><div class="wsay">{_says(stops, i, first, docs)}'
-            f"{_notes_html(stop.step)}</div>"
+            f"{_notes_html(stop.step)}{_values_html(stop.step)}</div>"
             + (f'<div class="wthen">{_esc(then)}</div>' if then else "") + "</div>")
 
 

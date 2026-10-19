@@ -20,7 +20,8 @@ from .terms import (
     _MAP_RUNS, _MAP_STEPS, _REMOVED_MODULES, _RESOURCE_ACTIONS, _ROUTE_METHODS, _RUNTIME_MODULES, _TRANSFERS,
 )
 from .syntax import (
-    _a, _const, _def_line, _doc_line, _is_main_guard, _names_in, _parse, _secret_spots, _swallows, _target, _unparse,
+    _a, _const, _def_line, _doc_line, _ends_early, _is_main_guard, _names_in, _negated, _parse, _secret_spots,
+    _swallows, _target, _unparse,
 )
 from .aws_model import _access, _aws_model, _event_label, _iam_action, _service_name
 from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, EnvRead, EventField, ImportUse
@@ -65,6 +66,7 @@ class _Frame:
     outers: list[dict[str, _Sym | None]] = field(default_factory=list)  # the functions around it (closures)
     loops: list[str] = field(default_factory=list)  # the loops it's in, its callers' first
     guards: list[str] = field(default_factory=list)  # the tests of the ifs it's in
+    early: set[int] = field(default_factory=set)  # which of guards come from an `if x: return` above, not around it
     globals: set[str] = field(default_factory=set)
     optional: int = 0  # inside a try that catches ImportError
     cached: bool = False  # @lru_cache and the like: it runs once
@@ -95,6 +97,8 @@ class _Collect:
 
     notes: list[tuple[str, str]] = field(default_factory=list)
     calls: list[CodeStep] = field(default_factory=list)
+    holds: list[tuple[str, str]] = field(default_factory=list)  # a name it sets -> what that holds, in words
+    given: list[tuple[str, str]] = field(default_factory=list)  # an AWS call's argument -> where it comes from
 
     def note(self, kind: str, text: str) -> None:
         if (kind, text) not in self.notes:
@@ -146,6 +150,7 @@ class _CodeReader:
         self.loading = 0  # modules being loaded: what runs now runs when Python imports the code
         self.runs = 0  # function bodies read
         self.max_depth = _MAP_DEPTH  # calls followed from the entry point
+        self.keywords: tuple[Any, dict[str, _Sym | None]] = (None, {})  # the call being read, and its keywords' values
 
     # ---------------------------------------------------------------- reading
 
@@ -278,9 +283,20 @@ class _CodeReader:
     # ---------------------------------------------------------------- statements
 
     def _block(self, stmts: list[Any], frame: _Frame) -> list[CodeStep]:
+        """
+        A block's lines. After `if x: ... continue` (or return, raise, break) with no else, the lines below it run only
+        when x isn't so: that's a guard on them too.
+        """
         out: list[CodeStep] = []
+        guards = len(frame.guards)
         for stmt in stmts:
             out.extend(self._stmt(stmt, frame))
+            if isinstance(stmt, ast.If) and not stmt.orelse and _ends_early(stmt.body) and not (
+                    frame.top and _is_main_guard(stmt.test)):
+                frame.early.add(len(frame.guards))
+                frame.guards.append(_negated(stmt.test))
+        del frame.guards[guards:]
+        frame.early = {i for i in frame.early if i < guards}
         return out
 
     def _step(self, node: Any, frame: _Frame, code: str, kind: str, got: _Collect | None = None,
@@ -291,7 +307,7 @@ class _CodeReader:
         notes = [(k, text) for k, text in notes if k != "event" or not any(
             other.startswith((text + "[", text + ".", text + " (")) for other in events)]
         return CodeStep(frame.file, getattr(node, "lineno", 0), code, kind, notes, list(steps),
-                        got.calls if got else [])
+                        got.calls if got else [], holds=got.holds if got else [], given=got.given if got else [])
 
     def _stmt(self, stmt: Any, frame: _Frame) -> list[CodeStep]:
         if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -336,6 +352,7 @@ class _CodeReader:
                 if stmt.value is not None:
                     for target in targets:
                         self._bind(target, value, frame)
+                        self._holds(target, value)
             else:
                 for child in ast.iter_child_nodes(stmt):
                     if isinstance(child, ast.expr):
@@ -352,6 +369,8 @@ class _CodeReader:
             else:
                 items = self._eval(stmt.iter, frame)
                 self._bind_loop(stmt.target, items, frame)
+                if not (items is not None and items.kind == "enumerate"):
+                    self._holds(stmt.target, self._item(items), each=True)
                 prefix = "async for" if isinstance(stmt, ast.AsyncFor) else "for"
                 header = f"{prefix} {_target(stmt.target)} in {_unparse(stmt.iter, 100)}:"
         frame.loops.append(header)
@@ -378,7 +397,7 @@ class _CodeReader:
             if rest and rest[0].kind == "if" and rest[0].line == stmt.orelse[0].lineno:
                 rest[0].code = "el" + rest[0].code
         elif stmt.orelse:
-            frame.guards.append(f"not ({test})")
+            frame.guards.append(_negated(stmt.test))
             orelse = self._block(stmt.orelse, frame)
             frame.guards.pop()
             if orelse:
@@ -403,6 +422,7 @@ class _CodeReader:
                     entered.append(value)
                 if item.optional_vars is not None:
                     self._bind(item.optional_vars, given if ran else value, frame)
+                    self._holds(item.optional_vars, given if ran else value)
                 parts.append(_unparse(item.context_expr, 100) + (
                     f" as {_unparse(item.optional_vars, 30)}" if item.optional_vars is not None else ""))
         body = self._block(stmt.body, frame)
@@ -656,6 +676,37 @@ class _CodeReader:
             for elt in target.elts:
                 self._bind(elt.value if isinstance(elt, ast.Starred) else elt, None, frame)
 
+    def _holds(self, target: Any, value: _Sym | None, each: bool = False) -> None:
+        """
+        Notes what a name (or self.name) set on this line holds, when that can be said: shown beside the line.
+        """
+        said = self._describe(value)
+        if said and isinstance(target, (ast.Name, ast.Attribute)):
+            self.cur.holds.append((_unparse(target, 40), f"each {said}" if each else said))
+
+    def _describe(self, value: _Sym | None) -> str:
+        """
+        What a value is, in a few words: 'event Records[].s3.bucket.name', 'env ARCHIVE_BUCKET', 'an S3 client',
+        'a DynamoDB Table', 'an OrderStore'. '' for what it can't say.
+        """
+        if value is None:
+            return ""
+        kind, name = value.kind, value.name
+        service = _service_name(name) if name and name != "?" else "boto3"
+        last = name.rsplit(".", 1)[-1]
+        said = {
+            "event": f"event {_event_label(value.path)}" if value.path else "the event",
+            "envval": f"env {name}", "env": "os.environ", "context": "its context",
+            "client": f"{_a(service)} {service} client", "resource": f"{_a(service)} {service} resource",
+            "res": f"{_a(service)} {service} {value.sub or 'resource object'}",
+            "coll": f"{_a(service)} {service} collection", "batch": f"{_a(service)} {service} batch writer",
+            "paginator": f"{_a(service)} {service} {value.sub} paginator",
+            "obj": f"{_a(last)} {last}", "class": f"the class {last}", "func": f"{last}()", "bound": f"{last}()",
+            "logger": "a logger", "http": f"{_a(name)} {name} session" if name else "an HTTP session",
+            "own": f"the module {name}",
+        }
+        return said.get(kind, "")
+
     def _item(self, items: _Sym | None) -> _Sym | None:
         """
         What a loop over `items` gets each time round.
@@ -813,6 +864,7 @@ class _CodeReader:
             value = self._eval(kw.value, frame)
             if kw.arg:
                 kwargs[kw.arg] = value
+        self.keywords = (node, kwargs)
         if func is None:
             return self._unknown_call(node, frame)
         kind = func.kind
@@ -1078,7 +1130,11 @@ class _CodeReader:
             where = f"{caller.function} line {call.lineno}"
             if where not in info.called_from:
                 info.called_from.append(where)
-        step = CodeStep(file, node.lineno, _def_line(node), "def", name=key)
+                if caller.guards:  # the if nearest around the call, else the early exit above it nearest
+                    around = [g for i, g in enumerate(caller.guards) if i not in caller.early]
+                    info.when[where] = (around or caller.guards)[-1]
+        step = CodeStep(file, node.lineno, _def_line(node), "def", name=key,
+                        when=list(caller.guards) if caller is not None else [])
         if label:
             step.notes.append(("route", label))
         self.cur.calls.append(step)
@@ -1151,12 +1207,33 @@ class _CodeReader:
         if pages is None:
             pages = self._pages(service, op, node, frame)
         key = (service, op, frame.file, node.lineno)
+        args = self._sources(node)
         if key not in self.seen:
             self.seen.add(key)
             self.cmap.aws.append(AwsCall(service, op, access, _iam_action(service, op), frame.file, node.lineno,
                                          frame.function, _unparse(node, 120), self._loop_of(frame), pages, guessed,
-                                         self.loading > 0))
+                                         self.loading > 0, args))
         self.cur.note(f"aws-{access}", f"{_service_name(service)} {op}")
+        for arg, source in args:
+            if (f"{_service_name(service)} {op} {arg}", source) not in self.cur.given:
+                self.cur.given.append((f"{_service_name(service)} {op} {arg}", source))
+
+    def _sources(self, node: ast.Call) -> list[tuple[str, str]]:
+        """
+        Where a call's keyword arguments come from, the ones that can be told: [('Bucket', 'env ARCHIVE_BUCKET'),
+        ('Key', "f'{prefix}/{name}'")]: what a name holds, or the literal or f-string written there.
+        """
+        values = self.keywords[1] if self.keywords[0] is node else {}
+        found = []
+        for kw in node.keywords:
+            if not kw.arg:
+                continue
+            said = self._describe(values.get(kw.arg))
+            if not said and isinstance(kw.value, (ast.Constant, ast.JoinedStr)):
+                said = _unparse(kw.value, 50)
+            if said:
+                found.append((kw.arg, said))
+        return found
 
     def _pages(self, service: str, op: str, node: ast.Call, frame: _Frame) -> str:
         """

@@ -15,8 +15,8 @@ orders.handler.lambda_handler · orders-service · 4 files, 92 lines, nothing ru
   lambda_handler()  orders/handler.py line 30
       calls read_orders() (line 35)
       calls check() (line 36)
-      calls OrderStore.save() (line 39)
-      calls announce() (line 40)
+      calls OrderStore.save() (line 39) when check(order)
+      calls announce() (line 40) when check(order)
   OrderStore()  orders/store.py line 12
       makes the DynamoDB client
       makes the S3 client
@@ -56,8 +56,8 @@ flowchart LR
   start --> f1
   f0 --> f2
   f0 --> f3
-  f0 --> f4
-  f0 --> f5
+  f0 -->|"when check(order)"| f4
+  f0 -->|"when check(order)"| f5
   f4 --> f6
   f5 --> f7
   env -.->|"ORDERS_TABLE"| start
@@ -81,33 +81,33 @@ flowchart LR
            ↳ orders/notify.py, run when it's imported
    11          sns = boto3.client('sns')   # makes an SNS client
    15  s3 = boto3.client('s3')   # makes an S3 client
-   16  store = OrderStore(os.environ['ORDERS_TABLE'])   # env ORDERS_TABLE
+   16  store = OrderStore(os.environ['ORDERS_TABLE'])   # env ORDERS_TABLE · store: an OrderStore
    12      ↳ def __init__(self, table_name):   # orders/store.py
-   13          self.table = boto3.resource('dynamodb').Table(table_name)   # makes a DynamoDB resource
+   13          self.table = boto3.resource('dynamodb').Table(table_name)   # makes a DynamoDB resource · self.table: a DynamoDB Table
    14          self.archive = boto3.client('s3')   # makes an S3 client
 
 -- What each call does, step by step from lambda_handler() --
    30  def lambda_handler(event, context):   # orders/handler.py
-   32    for record in event['Records']:   # event Records
+   32    for record in event['Records']:   # event Records · record: each event Records[]
    33      bucket = record['s3']['bucket']['name']   # event Records[].s3.bucket.name
    34      key = record['s3']['object']['key']   # event Records[].s3.object.key
    35      for order in read_orders(bucket, key):
    19          ↳ def read_orders(bucket, key):   # orders/handler.py
-   21              body = s3.get_object(Bucket=bucket, Key=key)['Body'].read()   # S3 GetObject (reads)
+   21              body = s3.get_object(Bucket=bucket, Key=key)['Body'].read()   # S3 GetObject (reads) · Bucket ← event Records[].s3.bucket.name · Key ← event Records[].s3.object.key
    22              return [json.loads(line) for line in body.splitlines() if line]
    36        if not check(order):
    25            ↳ def check(order):   # orders/handler.py
    27                return bool(order.get('id')) and bool(order.get('customer')) and (order.get('total', 0) > 0)
    37          log.warning('skipping %s', order.get('id'))   # logs a warning
    39        store.save(order)
-   16            ↳ def save(self, order):   # orders/store.py
+   16            ↳ def save(self, order):   # orders/store.py · when check(order)
    18                self.table.put_item(Item=order)   # DynamoDB PutItem (writes)
    19                self._archive(order)
    21                    ↳ def _archive(self, order):   # orders/store.py
-   23                        self.archive.put_object(Bucket=os.environ['ARCHIVE_BUCKET'], Key=key, Body=json.dumps(order))   # env ARCHIVE_BUCKET · S3 PutObject (writes)
+   23                        self.archive.put_object(Bucket=os.environ['ARCHIVE_BUCKET'], Key=key, Body=json.dumps(order))   # env ARCHIVE_BUCKET · S3 PutObject (writes) · Bucket ← env ARCHIVE_BUCKET
    40        announce(order)
-   14            ↳ def announce(order):   # orders/notify.py
-   16                sns.publish(TopicArn=os.environ['ORDERS_TOPIC'], Message=json.dumps(order))   # env ORDERS_TOPIC · SNS Publish (sends)
+   14            ↳ def announce(order):   # orders/notify.py · when check(order)
+   16                sns.publish(TopicArn=os.environ['ORDERS_TOPIC'], Message=json.dumps(order))   # env ORDERS_TOPIC · SNS Publish (sends) · TopicArn ← env ORDERS_TOPIC
    17                post_to_chat(f"New order {order['id']} for {order['total']}")
    20                    ↳ def post_to_chat(text):   # orders/notify.py
    21                        requests.post(os.environ.get('CHAT_WEBHOOK', 'https://chat.example.com/hook'), json={'text': text})   # env CHAT_WEBHOOK · HTTP POST

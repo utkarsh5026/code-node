@@ -264,7 +264,7 @@ def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[
         else:
             card.label = _g_wrap(n.label, room, lambda t: _g_measure_label(n, t))
         card.head = (_GRAPH_HEAD if n.sub else _GRAPH_HEAD_BARE) + _GRAPH_LABEL_LINE * (len(card.label) - 1)
-        top = card.head + (_GRAPH_ROUTE if card.route else 0)
+        top = card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if n.when else 0)
         card.body = top
         if n.kind in _GRAPH_LISTS and card.rows:
             card.height = top + 6 + _GRAPH_ROW * len(card.rows) + 8
@@ -516,7 +516,7 @@ def _g_edge_tip(e: GraphEdge, graph: CodeGraph) -> str:
     elif e.kind == "env":
         said = f"{dst} reads {e.label} from its environment"
     elif e.kind == "call":
-        said = f"{src} calls {dst}" + (f" ({e.label})" if e.label else "")
+        said = f"{src} calls {dst}" + (f" ({e.label})" if e.label else "") + (f", only when {e.when}" if e.when else "")
     elif e.kind == "client":
         said = f"{src} makes the {dst} client"
     elif e.kind == "http":
@@ -655,6 +655,12 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
         parts.append(f'<g class="rt"><rect x="14" y="{top:.0f}" width="{pill_w:.0f}" height="21" rx="10.5"/>'
                      f'<text x="24" y="{top + 14.8:.1f}"><tspan class="mt">{_esc(method)}</tspan> {_esc(shown)}'
                      f'{_esc(more)}</text></g>')
+        top += _GRAPH_ROUTE
+    if n.when:  # called only under an if: its test, in a pill like a route's
+        test = _g_fit(n.when, w - 28 - 20 - _g_mono("when ", 12.5), lambda t: _g_mono(t, 12.5))
+        pill_w = _g_mono("when " + test, 12.5) + 20
+        parts.append(f'<g class="rt wh"><rect x="14" y="{top:.0f}" width="{pill_w:.0f}" height="21" rx="10.5"/>'
+                     f'<text x="24" y="{top + 14.8:.1f}"><tspan class="ww">when </tspan>{_esc(test)}</text></g>')
         top += _GRAPH_ROUTE
     if n.kind in _GRAPH_LISTS and card.rows:
         parts.append(f'<path class="dv" d="M1,{card.body:.0f}H{w - 1:.0f}"/>')
@@ -903,7 +909,8 @@ def _graph_lines(block: _Graph, report: _Report) -> list[str]:
         for e in leaving.get(n.id, []):
             target = graph.node(e.target)
             name = target.label if target else e.target
-            said = {"call": f"calls {name}" + (f" ({e.label})" if e.label else ""), "event": f"→ {name}",
+            said = {"call": f"calls {name}" + (f" ({e.label})" if e.label else "") + (f" when {e.when}" if e.when else ""),
+                    "event": f"→ {name}",
                     "env": f"→ {name} reads {e.label}", "client": f"makes the {name} client",
                     "http": f"sends {e.label}"}.get(e.kind) or f"{_EDGE_WORDS.get(e.kind, e.kind)} {name}: {e.label}"
             said += "".join([", in a loop" if e.loop else "", ", guessed from a method's name" if e.guessed else "",

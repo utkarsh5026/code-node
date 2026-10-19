@@ -434,3 +434,49 @@ def test_console_scripts_come_from_every_pyproject(tmp_path: Path) -> None:
     assert project.configs == ["pyproject.toml", "libs/cli/pyproject.toml"]
     first = entry_points(project)[0]
     assert (first.name, first.why) == ("tool.main.run", "the tool command in libs/cli/pyproject.toml")
+
+
+DISPATCH = '''
+import os
+import boto3
+
+s3 = boto3.client("s3")
+
+
+def init():
+    pass
+
+
+def deploy(name):
+    s3.put_object(Bucket=os.environ["BUCKET"], Key=f"apps/{name}", Body=b"")
+
+
+def main(command, names):
+    if command == "init":
+        init()
+    elif command == "deploy":
+        for name in names:
+            if not name:
+                continue
+            deploy(name)
+'''
+
+
+def test_what_names_hold_where_arguments_come_from_and_when_calls_run(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": DISPATCH}))
+    cmap = map_code(project.files, "app.main")
+    steps = list(cmap.steps[0].walk())
+    calls = {s.name: s.when for s in steps if s.kind == "def" and s.name != "app.main"}
+    # the if around each call; `if not name: continue` makes the rest of the loop run only when name
+    assert calls == {"app.init": ["command == 'init'"], "app.deploy": ["command == 'deploy'", "name"]}
+    put = next(c for c in cmap.aws if c.operation == "PutObject")
+    assert put.args == [("Bucket", "env BUCKET"), ("Key", "f'apps/{name}'"), ("Body", "b''")]
+    line = next(s for s in steps if s.given)
+    assert line.given[:2] == [("S3 PutObject Bucket", "env BUCKET"), ("S3 PutObject Key", "f'apps/{name}'")]
+    holds = next(s for s in cmap.startup[0].walk() if s.holds)
+    assert holds.holds == [("s3", "an S3 client")]
+    graph = code_graph(cmap)
+    deploy = next(n for n in graph.nodes if n.label == "deploy()")
+    assert deploy.when == "command == 'deploy'"  # the graph says the if nearest around the call
+    assert any(e.kind == "call" and e.when == deploy.when for e in graph.edges)
+    assert '|"when command == \'deploy\'"|' in graph.mermaid()

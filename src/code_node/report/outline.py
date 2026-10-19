@@ -131,8 +131,12 @@ def _outline_lines(block: _Outline, report: _Report) -> list[str]:
     if not block.steps:
         return out + [block.empty]
 
-    def comment(notes: list[tuple[str, str]], *more: str) -> str:
+    def comment(notes: list[tuple[str, str]], *more: str, step: CodeStep | None = None) -> str:
         said = [_note_text(kind, text) for kind, text in notes] + [m for m in more if m]
+        if step is not None:  # what the reader knows: names' values, AWS arguments' sources, a call's condition
+            said += [f"{name}: {what}" for name, what in step.holds if not any(what in s for s in said)]
+            said += [f"{arg.rsplit(' ', 1)[-1]} ← {source}" for arg, source in step.given]
+            said += [f"when {' and '.join(step.when)}"] if step.when else []
         return "   # " + " · ".join(said) if said else ""
 
     def walk(steps: list[CodeStep], pad: int, called: bool) -> None:
@@ -145,10 +149,10 @@ def _outline_lines(block: _Outline, report: _Report) -> list[str]:
                 more = ("its steps are shown where it's first called" if step.seen and not any(
                     k == "more" for k, _ in step.notes) else "" if step.steps or step.notes else "nothing in it to follow")
                 out.append(f"{step.line:>5}  {' ' * pad}{'↳ ' if called else ''}{step.code}"
-                           + comment(step.notes, step.file, more))
+                           + comment(step.notes, step.file, more, step=step))
                 walk(step.steps, pad + (4 if called else 2), False)
                 continue
-            out.append(f"{step.line or '':>5}  {' ' * pad}{step.code}{comment(step.notes)}")
+            out.append(f"{step.line or '':>5}  {' ' * pad}{step.code}{comment(step.notes, step=step)}")
             for call in step.calls:
                 walk([call], pad + 4, True)
             walk(step.steps, pad + 2, False)

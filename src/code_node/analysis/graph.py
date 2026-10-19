@@ -52,6 +52,7 @@ class GraphNode:
     # {'TEAM_TOPIC': 'not set'}, {'Query': 'first page only'}, {'GET https://...': 'no timeout'}
     code: list[CodeSpan] = field(default_factory=list)  # the lines of code it's about
     more: list[str] = field(default_factory=list)  # its own functions it calls that the graph leaves out: 'save()'
+    when: str = ""  # a function called only under an if, everywhere it's called: 'check(order)'
 
 
 @dataclass
@@ -69,6 +70,7 @@ class GraphEdge:
     loop: bool = False  # made inside a loop: once per item
     guessed: bool = False  # AWS calls known only by their method's name: their client couldn't be followed
     indirect: bool = False  # made in functions the graph leaves out, below the box it starts from
+    when: str = ""  # a call made only under an if: its test, 'args.command == "init"'
 
 
 @dataclass
@@ -100,6 +102,7 @@ class CodeGraph:
         for e in self.edges:
             arrow = arrows.get(e.kind, "-->")
             label = e.label if e.kind != "call" or not e.label.startswith("line ") else ""
+            label = " · ".join(filter(None, [label, f"when {e.when}" if e.when else ""]))
             text = f'|"{_mermaid_text(_clip(label, 60))}"|' if label else ""
             out.append(f"  {_mermaid_id(e.source)} {arrow}{text} {_mermaid_id(e.target)}")
         warned = [n.id for n in self.nodes if n.tone == "warn"]
@@ -180,6 +183,16 @@ def _start_places(steps: list[CodeStep]) -> list[tuple[str, int, str]]:
 
 def _listed_lines(items: list[str], most: int = _GRAPH_LINES) -> list[str]:
     return items[:most] if len(items) <= most else items[:most - 1] + [f"+{len(items) - most + 1} more"]
+
+
+def _when(f: CodeFunction, places: list[str]) -> str:
+    """
+    The condition a function is called under from these places ('check(order)'), when every one of them has one:
+    each place's nearest test, joined with 'or'. '' when one of them always calls it.
+    """
+    if not places or any(not f.when.get(where) for where in places):
+        return ""
+    return " or ".join(dict.fromkeys(f.when[where] for where in places))
 
 
 def _weights(cmap: CodeMap, children: dict[str, list[tuple[str, str]]]) -> dict[str, int]:
@@ -370,7 +383,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             lines = [ln for c, ln in parents[f.name] if c == caller and ln]
             label = ("; ".join(routes[f.name]) if caller == entry and f.name in routes else
                      "line " + ", ".join(lines[:3]) + (" …" if len(lines) > 3 else "") if lines else "")
-            edges.append(GraphEdge(source, ids[f.name], "call", label))
+            edges.append(GraphEdge(source, ids[f.name], "call", label, when=_when(f, [
+                where for where in f.called_from if where.rpartition(" line ")[0] == caller])))
     has_input = bool(cmap.event) or platform.draws_input
     if has_input:
         edges.insert(0, GraphEdge("event", entry_id, "event", "its input"))
@@ -400,6 +414,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         does = list(dict.fromkeys(c.access for c in calls))
         tip = f"{_service_name(service)}: " + ", ".join(
             f"{c.operation} ({c.permission or 'no permission needed'})" for c in {c.operation: c for c in calls}.values())
+        tip += "".join(f"\n{c.operation} line {c.line}: " + ", ".join(f"{arg} ← {source}" for arg, source in c.args)
+                       for c in calls if c.args)
         if all(c.guessed for c in calls):
             tip += "\nKnown only by the methods' names: their client couldn't be followed"
         reach.append(GraphNode(node_id, "aws", _service_name(service), " · ".join(does), _listed_lines(ops),
@@ -501,7 +517,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
                           if more else ""), why),
             column=1 + drawn_level.get(f.name, level.get(f.name, f.depth)),
             code=[CodeSpan(f.file, f.line, f.line + f.lines - 1,
-                           sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))], more=more))
+                           sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))], more=more,
+            when=_when(f, f.called_from)))
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
     for node in reach:
         node.column = out_column

@@ -26,6 +26,31 @@ def _parse(text: str, filename: str = "<unknown>", mode: str = "exec") -> Any:
         return ast.parse(text, filename=filename, mode=mode)
 
 
+_OPPOSITES = {ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In, ast.Eq: ast.NotEq,
+              ast.NotEq: ast.Eq}  # a comparison's operator -> the one that's true when it isn't
+
+
+def _negated(test: Any) -> str:
+    """
+    The opposite of an if's test, as code: 'check(order)' for `not check(order)`, 'x is not None' for `x is None`,
+    'not (a or b)' for `a or b`.
+    """
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return _unparse(test.operand, 110)
+    if isinstance(test, ast.Compare) and len(test.ops) == 1 and type(test.ops[0]) in _OPPOSITES:
+        flipped = ast.Compare(test.left, [_OPPOSITES[type(test.ops[0])]()], test.comparators)
+        return _unparse(flipped, 110)
+    code = _unparse(test, 110)
+    return f"not ({code})" if isinstance(test, (ast.BoolOp, ast.IfExp, ast.NamedExpr, ast.Lambda)) else f"not {code}"
+
+
+def _ends_early(body: list[Any]) -> bool:
+    """
+    Whether a block always leaves where it is: its last line returns, raises, continues or breaks.
+    """
+    return bool(body) and isinstance(body[-1], (ast.Return, ast.Raise, ast.Continue, ast.Break))
+
+
 def _secret_spots(node: Any) -> list[tuple[str, Any]]:
     """
     The secret-looking literals in a piece of code, with the name each is given to: a password=, token= or key given

@@ -148,6 +148,8 @@ _EXTRA_CSS = """\
 .cnd .cg .rt rect{fill:rgba(127,127,127,.1);stroke:rgba(127,127,127,.22)}
 .cnd .cg .rt text{font:12.5px var(--mono);fill-opacity:.85}
 .cnd .cg .rt .mt{font-weight:700;fill-opacity:1}
+.cnd .cg .wh rect{fill:none;stroke-dasharray:3 3}
+.cnd .cg .wh .ww{font-weight:600;fill-opacity:.55}
 .cnd .cg .ce path{fill:none}
 .cnd .cg .ce .ln{stroke:var(--c);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .cnd .cg .ce .ah{fill:var(--c);stroke:var(--c);stroke-width:.6;stroke-linejoin:round}
@@ -268,6 +270,10 @@ _EXTRA_CSS = """\
 .cnd .walk .wbt.off{opacity:.35;cursor:default}
 .cnd .walk .wed{margin-left:auto;font-size:12px;color:light-dark(#2563eb,#60a5fa);text-decoration:none;font-variant-numeric:tabular-nums}
 .cnd .walk .wed:hover{text-decoration:underline}
+.cnd .walk .wvals{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px}
+.cnd .walk .wvals li{display:flex;gap:8px;align-items:baseline;padding:2px 0;overflow-wrap:anywhere}
+.cnd .walk .wvals code{font:12.5px var(--mono)}
+.cnd .walk .wvals span{opacity:.5;flex:none}
 .cnd .walk .wpos{font-size:12px;opacity:.7;padding:0 4px;font-variant-numeric:tabular-nums}
 .cnd .walk .wstk{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:10px 0 2px;font:12px var(--mono)}
 .cnd .walk .wstk label{cursor:pointer;user-select:none;-webkit-user-select:none;opacity:.62;border-radius:4px;padding:0 3px}
