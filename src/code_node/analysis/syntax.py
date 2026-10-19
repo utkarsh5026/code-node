@@ -8,11 +8,22 @@ from __future__ import annotations
 import ast
 import copy
 import re
+import warnings
 from typing import Any, Iterable
 
 from ..kit.text import _clip
 
 from .terms import _AWS_KEY_RE, _NOT_SECRET_NAME_RE, _PLACEHOLDERS, _SECRET_NAME_RE
+
+
+def _parse(text: str, filename: str = "<unknown>", mode: str = "exec") -> Any:
+    """
+    ast.parse, with the warnings Python gives while parsing (a SyntaxWarning for '\\d' in a plain string) kept quiet:
+    they're about the code read, and would only clutter the terminal.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return ast.parse(text, filename=filename, mode=mode)
 
 
 def _secret_spots(node: Any) -> list[tuple[str, Any]]:

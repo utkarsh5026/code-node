@@ -13,6 +13,12 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
   instead of small helpers, and the graph is less than half as tall.
 - A box whose calls the graph leaves out says "+3 calls not drawn", and its code panel names them, instead of
   looking like it does nothing.
+- It follows what Python calls for you: `super().__init__()` and other `super()` calls open the base class's method,
+  reading a `@property` (or `cached_property`) runs its getter, and a `with` block on one of your classes runs its
+  `__enter__` (what `as` names is what that returns) and, after the block, its `__exit__`.
+- Console scripts come from every `pyproject.toml` in the folder, not only the root's, so a monorepo's commands
+  (`libs/cli/pyproject.toml`) are found before its CI scripts.
+- SyntaxWarnings from the code being read (`"\d"` in a plain string) no longer show in the terminal.
 
 - The page is only two tabs now, Graph and Step by step. The title, the cards of numbers, the findings and the tables
   under the graph (AWS calls and their IAM policy, environment variables, the event, functions, imports, HTTP

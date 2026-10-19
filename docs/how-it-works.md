@@ -14,6 +14,10 @@ How code-node follows your code without running it, and what it can't see.
 So `self.store.save()` opens `Store.save`. And `s3.get_object(...)` becomes **S3 GetObject**, which needs
 `s3:GetObject`.
 
+It also follows what Python calls for you: `super().__init__()` opens the base class's method, reading `obj.size`
+runs a `@property` getter, and `with Store() as s:` runs `Store.__enter__` (and `s` is what it returns), the block,
+then `Store.__exit__`.
+
 ## What it can't see { #limits }
 
 | Blind spot | Example |

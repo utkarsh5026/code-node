@@ -348,3 +348,88 @@ def test_line_links_open_the_editor(tmp_path: Path) -> None:
     assert f'href="vscode://file{(tmp_path / "code").as_posix()}/app.py:' in out.read_text()
     assert main([str(tmp_path / "code"), "--no-open", "-o", str(out), "--editor", "none"]) == 0
     assert "vscode://" not in out.read_text()
+
+
+IDIOMS = '''
+class Base:
+    def __init__(self, name):
+        self.setup(name)
+
+    def setup(self, name):
+        open(name, "w").write("x")
+
+
+class Repo(Base):
+    def __init__(self, name):
+        super().__init__(name)
+
+    @property
+    def size(self):
+        return count()
+
+    @size.setter
+    def size(self, value):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        close()
+
+    def save(self, item):
+        pass
+
+
+def count():
+    pass
+
+
+def close():
+    pass
+
+
+def main(item):
+    repo = Repo("x")
+    n = repo.size
+    with Repo("y") as r:
+        r.save(item)
+'''
+
+
+def test_super_properties_and_with_blocks_are_followed(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": IDIOMS}))
+    cmap = map_code(project.files, "app.main")
+    reached = {f.name for f in cmap.functions}
+    assert {"app.Base.__init__", "app.Base.setup"} <= reached  # through super().__init__()
+    assert {"app.Repo.size", "app.count"} <= reached  # repo.size runs its getter, not its setter
+    # r is what __enter__ returns, and __exit__ runs after the block
+    assert {"app.Repo.__enter__", "app.Repo.save", "app.Repo.__exit__", "app.close"} <= reached
+    with_step = next(s for s in cmap.steps[0].steps if s.kind == "with")
+    assert [s.code for s in with_step.steps] == ["r.save(item)", "# leaving the with block: __exit__ runs"]
+    assert [c.name for c in with_step.calls] == ["app.Repo.__init__", "app.Repo.__enter__"]
+
+
+def test_syntax_warnings_stay_out_of_the_terminal(tmp_path: Path) -> None:
+    import warnings
+
+    code = 'import re\n\n\ndef main():\n    return re.match("\\d+", "1")\n'  # '\\d' in a plain string: a SyntaxWarning
+    project = read_project(write(tmp_path, {"app.py": code}))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert "app.py" in project.trees
+        map_code(project.files, "app.main")
+    assert not caught
+
+
+def test_console_scripts_come_from_every_pyproject(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {
+        "pyproject.toml": '[project]\nname = "workspace"\n',
+        "libs/cli/pyproject.toml": '[project]\nname = "tool"\n[project.scripts]\ntool = "tool.main:run"\n',
+        "libs/cli/tool/__init__.py": "",
+        "libs/cli/tool/main.py": "def run():\n    pass\n",
+        "scripts/release.py": "def main():\n    pass\n\n\nif __name__ == '__main__':\n    main()\n",
+    }))
+    assert project.configs == ["pyproject.toml", "libs/cli/pyproject.toml"]
+    first = entry_points(project)[0]
+    assert (first.name, first.why) == ("tool.main.run", "the tool command in libs/cli/pyproject.toml")

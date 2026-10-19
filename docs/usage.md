@@ -37,7 +37,7 @@ in your browser.
 ??? more "What it finds on its own"
     In this order:
 
-    - console scripts in `pyproject.toml`
+    - console scripts in every `pyproject.toml` (the root's first, then a monorepo's `libs/*/pyproject.toml`)
     - Lambda handlers: `def handler(event, context)`
     - FastAPI / Flask apps: every route
     - Typer apps: every command

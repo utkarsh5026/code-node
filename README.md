@@ -51,7 +51,7 @@ code-node -e pkg.cli.main              # a dotted name
 code-node -e save                      # part of a name: it lists the matches
 ```
 
-It finds `pyproject.toml` console scripts, Lambda handlers, FastAPI / Flask apps (each route), Typer apps (each
+It finds console scripts in every `pyproject.toml` (a monorepo's too), Lambda handlers, FastAPI / Flask apps (each route), Typer apps (each
 command), what runs under `if __name__ == "__main__":`, and functions named `main`. Test files are skipped.
 
 <picture>
