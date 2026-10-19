@@ -35,7 +35,7 @@ _NOTE_TIPS = {  # what an outline tag means, on hover
     "aws-signs": "a signed link for this AWS call: no request is sent now", "client": "a boto3 client or resource",
     "env": "an environment variable it reads", "event": "a field of the event it reads", "http": "an HTTP request",
     "log": "a log line", "file": "a file it writes", "sleep": "a pause",
-    "command": "a command run as another process", "warn": "worth a look: see the findings", "route": "a web route",
+    "command": "a command run as another process", "warn": "worth a look", "route": "a web route",
     "more": "",
 }
 

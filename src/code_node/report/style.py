@@ -213,14 +213,24 @@ _EXTRA_CSS = """\
 .cnd .cside .csm{font-size:12px;font-style:italic;opacity:.6;margin:6px 2px 0}
 @media (min-width:1100px){.cnd .cgw:has(.cside:target){margin-right:min(660px,94vw)}}
 @media (prefers-reduced-motion:reduce){.cnd .cside,.cnd .cside:target{transition:none}}
-.cnd .tabs{position:relative;margin:20px 0 8px}
-.cnd .tbar{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid rgba(127,127,127,.25);margin:0 0 10px}
+.cnd .tabs{position:relative;margin:0 0 8px}
+.cnd .tbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:flex-end;gap:2px;padding-top:6px;margin:0 0 18px;border-bottom:1px solid rgba(127,127,127,.22);background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas))}
 .cnd .tabs>.tr{position:absolute;left:0;top:0;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
-.cnd .tbar .tl{padding:8px 14px 9px;margin-bottom:-1px;border-bottom:2px solid transparent;font-size:14.5px;font-weight:650;cursor:pointer;opacity:.58;user-select:none;-webkit-user-select:none;transition:opacity .15s,border-color .15s}
-.cnd .tbar .tl small{margin-left:7px;font-size:12px;font-weight:500;opacity:.75}
+.cnd .tbar .tl{padding:9px 14px 10px;margin-bottom:-1px;border-bottom:2px solid transparent;font-size:14px;font-weight:600;cursor:pointer;opacity:.55;user-select:none;-webkit-user-select:none;transition:opacity .15s,border-color .15s}
+.cnd .tbar .tl:first-of-type{padding-left:2px}
+.cnd .tbar .tl small{margin-left:7px;font-size:12px;font-weight:450;opacity:.7;font-variant-numeric:tabular-nums}
 .cnd .tbar .tl:hover{opacity:.85}
+.cnd .tbar .tcap{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:flex-end;gap:2px 10px;margin-left:auto;padding:0 2px 11px;min-width:0}
+.cnd .tbar .tcap code{font:600 12.5px var(--mono);background:none;padding:0;overflow-wrap:anywhere}
+.cnd .tbar .tcap small{font-size:12px;opacity:.55}
 .cnd .tabs>.tp{display:none;animation:cnd-in .2s ease}
-.cnd .tabs>.tp>h4:first-child{margin-top:4px}
+.cnd .tabs>.tp>h4{margin:30px 0 8px;font-size:14px;font-weight:600}
+.cnd .tabs>.tp>h4:first-child{margin-top:2px}
+.cnd .tabs>.tp details.sec{margin:14px 0 4px}
+.cnd .tabs>.tp details.sec>summary{font-size:13px;font-weight:550;opacity:.7}
+.cnd .tabs>.tp details.sec>summary:hover,.cnd .tabs>.tp details.sec[open]>summary{opacity:1}
+.cnd .tabs>.tp .note{border-radius:0 8px 8px 0;padding:10px 14px;max-width:1000px}
+.cnd .tfoot{max-width:900px;margin:36px 0 0;padding-top:14px;border-top:1px solid rgba(127,127,127,.15);font-size:12px;line-height:1.55;opacity:.55}
 @keyframes cnd-in{from{opacity:0;transform:translateY(4px)}}
 .cnd .wsub{font-size:12.5px;opacity:.65;margin:-2px 0 8px;max-width:900px}
 .cnd .wsub kbd{display:inline-block;min-width:14px;padding:0 3px;border:1px solid rgba(127,127,127,.4);border-bottom-width:2px;border-radius:4px;font:10.5px/14px var(--mono);text-align:center}

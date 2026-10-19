@@ -92,6 +92,10 @@ def test_the_command_saves_a_page(tmp_path: Path, capsys) -> None:
     assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
     page = out.read_text()
     assert "How app.lambda_handler works" in page and "<svg" in page
+    # the page is its tabs, the entry point beside them, with no cards or findings
+    assert '<div class="cnd"><div class="tabs">' in page and '<code>app.lambda_handler</code>' in page
+    assert all(f">{tab}<small>" in page for tab in ("Graph", "Step by step"))
+    assert 'class="cards"' not in page and 'class="fd"' not in page and ">Findings<" not in page and 'class="t"' not in page
     assert main([str(tmp_path / "code"), "--mermaid"]) == 0
     assert "flowchart LR" in capsys.readouterr().out
 

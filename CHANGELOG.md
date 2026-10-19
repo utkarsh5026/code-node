@@ -7,6 +7,10 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- The page is only two tabs now, Graph and Step by step. The title, the cards of numbers, the findings and the tables
+  under the graph (AWS calls and their IAM policy, environment variables, the event, functions, imports, HTTP
+  requests) are gone. The entry point and the folder sit at the right of the tab bar, which stays at the top as you
+  scroll. The graph still marks a warning on a box, such as an HTTP request with no timeout.
 - The graph and the steps are in tabs, Graph and Step by step, instead of one under the other.
 - Step by step is now a walk through the code in the order it runs, as a debugger steps: every step in a list, and
   beside it the function the current step is in, its line lit, with a card saying what the line does and which calls

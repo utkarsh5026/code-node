@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from code_node.analysis.mapping import map_code
-from code_node.kit.blocks import _Cards, _Findings
 from code_node.project import entry_points, read_project
 from code_node.report.build import page_blocks
 from code_node.report.graph import _Graph
@@ -48,10 +47,9 @@ def _inside(blocks: list[Any]) -> list[Any]:
 
 
 FIGURES: dict[str, Callable[[list[Any]], list[Any]]] = {
-    "page": lambda blocks: blocks[:4],
+    "page": lambda blocks: blocks,
     "graph": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],
     "steps": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Walk)],
-    "summary": lambda blocks: [b for b in blocks if isinstance(b, (_Cards, _Findings))],
 }
 
 STEP_SHOWN = 14  # the step the steps figure has open: inside read_orders(), its S3 call lit
@@ -93,6 +91,8 @@ def _trim(path: Path) -> tuple[int, int]:
 def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     page = work / f"{name}.html"
     html = render_page(blocks, f"code-node: {name}")
+    # headless Chrome can take the picture mid fade-in: show the open tab at once
+    html = html.replace("</head>", "<style>.cnd *{animation:none!important}</style>\n</head>", 1)
     if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
         html = html.replace('id="cw0" checked', 'id="cw0"').replace(f'id="cw{STEP_SHOWN}"',
                                                                     f'id="cw{STEP_SHOWN}" checked')
@@ -102,7 +102,7 @@ def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
         flags = ["--force-dark-mode"] if theme == "dark" else []
         subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
                         f"--force-device-scale-factor={SCALE}", f"--window-size={WIDTH},4000", *flags,
-                        "--virtual-time-budget=2000",  # let the tabs fade in before the picture
+                        "--virtual-time-budget=2000",
                         f"--screenshot={out}", page.as_uri()], check=True, capture_output=True)
         width, height = _trim(out)
         print(f"{out.with_suffix('.webp').relative_to(ROOT)}  {width} x {height}")

@@ -28,14 +28,11 @@ models on disk. No module is imported and no request is made.
   debugger steps: every line that does something in a list, and the function it's in with that line lit. Next goes
   into each function it calls, Step over and Step out skip them, and once you've clicked a step the arrow keys move
   through the rest.
-- **What's worth fixing.** HTTP requests with no timeout, AWS list calls that only read the first page, errors that
-  get dropped, secrets written in the code, AWS calls in a loop that a batch call would do in fewer requests.
-- **The AWS side.** Every boto3 call it can follow with the IAM permission it needs, and a policy to start from.
-- **Tables** of environment variables (names only), functions, and imports, plus the graph as Mermaid.
+- **The graph as Mermaid**, to paste in a Markdown file, a wiki or a pull request.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/summary-dark.webp">
-  <img alt="The top of a page: cards with the numbers that matter, and the findings" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/summary-light.webp">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/page-dark.webp">
+  <img alt="A code-node page: the graph in its tab, with Step by step beside it" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/page-light.webp">
 </picture>
 
 ## Pick where to start
