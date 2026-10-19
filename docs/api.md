@@ -1,6 +1,6 @@
 # Python API
 
-Everything the command does, from your own code.
+The functions behind the command, for your own scripts.
 { .gist }
 
 ```python

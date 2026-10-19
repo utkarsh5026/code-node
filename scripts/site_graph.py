@@ -1,17 +1,13 @@
 """
-Writes the animated graphs on the docs site's home page (docs/snippets/graph-*.svg): the graph code-node draws for
-examples/orders-service, redrawn as inline SVG the site's CSS can animate. Edges draw themselves in, pulses run along
-them from what comes in to what it reaches, and pointing at a box dims what it isn't joined to, like the real page.
+Writes the graph on the docs site's home page (docs/snippets/graph-trace.svg): the graph code-node draws for
+examples/orders-service, redrawn as inline SVG the site's CSS can style. Pointing at a box dims what it isn't joined
+to, like the real page, and docs/javascripts/graph.js lights up the path each line of lambda_handler takes.
 
     python scripts/site_graph.py
-
-The hero copy has pulses; the trace copy (the "follow a path" section) has none, and docs/javascripts/graph.js lights
-its edges up one code line at a time.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,9 +29,6 @@ ICONS = {  # 16 x 16 line drawings, the same as code-node's graph (src/code_node
 COLUMNS = [(20, "COMES IN"), (226, "ENTRY"), (432, "CALLS"), (638, "REACHES")]
 WIDTH, HEIGHT = 810, 418
 BOX_W = 152
-CYCLE = 3.2  # seconds a pulse takes to come round again
-STEP = 0.5  # seconds between one column's pulses and the next's
-DRAW_START = 0.35  # seconds before the first edge starts drawing in
 
 
 @dataclass
@@ -60,15 +53,14 @@ class Edge:
     source: str
     target: str
     kind: str  # call, event, env, reads, writes, sends, http
-    depth: int  # which wave of pulses it's in: 0 from the event, 1 from the handler, ...
 
 
 NODES = [
     Node("event", "event", "An S3 event", "Records[] · key", 0, 70, "event"),
-    Node("env", "env", "Environment", "2 variables", 0, 262, "env"),
+    Node("env", "env", "Environment", "4 variables", 0, 262, "env"),
     Node("handler", "handler", "lambda_handler()", "handler.py line 30", 1, 166, "handler", h=62),
     Node("read", "function", "read_orders()", "handler.py line 19", 2, 32, "function"),
-    Node("save", "function", "Store.save()", "store.py line 16", 2, 126, "function"),
+    Node("save", "function", "OrderStore.save()", "store.py line 16", 2, 126, "function"),
     Node("announce", "function", "announce()", "notify.py line 14", 2, 220, "function"),
     Node("chat", "function", "post_to_chat()", "notify.py line 20", 2, 326, "function", "warn"),
     Node("s3", "aws", "S3", "reads · writes", 3, 32, "bucket"),
@@ -78,18 +70,19 @@ NODES = [
 ]
 
 EDGES = [
-    Edge("event", "handler", "event", 0),
-    Edge("env", "save", "env", 1),
-    Edge("env", "chat", "env", 1),
-    Edge("handler", "read", "call", 1),
-    Edge("handler", "save", "call", 1),
-    Edge("handler", "announce", "call", 1),
-    Edge("announce", "chat", "call", 2),
-    Edge("read", "s3", "reads", 2),
-    Edge("save", "ddb", "writes", 2),
-    Edge("save", "s3", "writes", 2),
-    Edge("announce", "sns", "sends", 2),
-    Edge("chat", "web", "http", 3),
+    Edge("event", "handler", "event"),
+    Edge("env", "save", "env"),
+    Edge("env", "announce", "env"),
+    Edge("env", "chat", "env"),
+    Edge("handler", "read", "call"),
+    Edge("handler", "save", "call"),
+    Edge("handler", "announce", "call"),
+    Edge("announce", "chat", "call"),
+    Edge("read", "s3", "reads"),
+    Edge("save", "ddb", "writes"),
+    Edge("save", "s3", "writes"),
+    Edge("announce", "sns", "sends"),
+    Edge("chat", "web", "http"),
 ]
 
 BY_ID = {node.id: node for node in NODES}
@@ -109,9 +102,9 @@ def _anchors(edge: Edge) -> tuple[tuple[float, float], tuple[float, float], bool
     return start, end, False
 
 
-def _curve(edge: Edge) -> tuple[str, float, tuple[float, float], tuple[int, int]]:
+def _curve(edge: Edge) -> tuple[str, tuple[float, float], tuple[int, int]]:
     """
-    The edge's path, its length, where it ends and which way it points there.
+    The edge's path, where it ends and which way it points there.
     """
     (x1, y1), (x2, y2), down = _anchors(edge)
     if down:
@@ -119,15 +112,8 @@ def _curve(edge: Edge) -> tuple[str, float, tuple[float, float], tuple[int, int]
     else:
         bend = (x2 - x1) * 0.5
         c1, c2 = (x1 + bend, y1), (x2 - bend, y2)
-    points = []
-    for i in range(41):
-        t = i / 40
-        x = (1 - t) ** 3 * x1 + 3 * (1 - t) ** 2 * t * c1[0] + 3 * (1 - t) * t ** 2 * c2[0] + t ** 3 * x2
-        y = (1 - t) ** 3 * y1 + 3 * (1 - t) ** 2 * t * c1[1] + 3 * (1 - t) * t ** 2 * c2[1] + t ** 3 * y2
-        points.append((x, y))
-    length = sum(math.dist(p, q) for p, q in zip(points, points[1:]))
     d = f"M{x1:.1f},{y1:.1f}C{c1[0]:.1f},{c1[1]:.1f} {c2[0]:.1f},{c2[1]:.1f} {x2:.1f},{y2:.1f}"
-    return d, length, (x2, y2), (0, 1) if down else (1, 0)
+    return d, (x2, y2), (0, 1) if down else (1, 0)
 
 
 def _head(end: tuple[float, float], direction: tuple[int, int]) -> str:
@@ -142,9 +128,8 @@ def _node_svg(node: Node) -> str:
     mono = node.kind in ("handler", "function")
     joined = [e for e in EDGES if node.id in (e.source, e.target)]
     neighbours = " ".join(f"a-{e.target if e.source == node.id else e.source}" for e in joined)
-    delay = DRAW_START + node.column * 0.28
     return (f'<g class="n k-{node.kind} n-{node.id} {neighbours}{" warn" if node.tone else ""}" '
-            f'data-node="{node.id}" style="--d:{delay:.2f}s">'
+            f'data-node="{node.id}">'
             f'<rect class="bg" x="{x}" y="{y}" width="{BOX_W}" height="{node.h}" rx="12"/>'
             f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
             f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>'
@@ -156,25 +141,13 @@ def _node_svg(node: Node) -> str:
             + "</g>")
 
 
-def _edge_svg(edge: Edge, index: int, prefix: str, pulses: bool) -> str:
-    d, length, end, direction = _curve(edge)
-    delay = DRAW_START + 0.2 + edge.depth * 0.32
-    path_id = f"{prefix}-e{index}"
-    body = (f'<g class="e k-{edge.kind} s-{edge.source} t-{edge.target}" data-edge="{edge.source}>{edge.target}" '
-            f'style="--len:{length:.0f};--d:{delay:.2f}s">'
-            f'<path class="ln" id="{path_id}" d="{d}"/><path class="ah" d="{_head(end, direction)}"/>')
-    if pulses:
-        begin = 1.6 + edge.depth * STEP
-        travel = 0.62  # share of the cycle a pulse spends travelling; it's hidden for the rest
-        body += (f'<circle class="pl" r="3.2"><animateMotion dur="{CYCLE}s" begin="{begin:.2f}s" '
-                 f'repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;{travel};1" calcMode="linear">'
-                 f'<mpath href="#{path_id}"/></animateMotion>'
-                 f'<animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;.08;{travel - 0.04:.2f};{travel};1" '
-                 f'dur="{CYCLE}s" begin="{begin:.2f}s" repeatCount="indefinite"/></circle>')
-    return body + "</g>"
+def _edge_svg(edge: Edge) -> str:
+    d, end, direction = _curve(edge)
+    return (f'<g class="e k-{edge.kind} s-{edge.source} t-{edge.target}" data-edge="{edge.source}>{edge.target}">'
+            f'<path class="ln" d="{d}"/><path class="ah" d="{_head(end, direction)}"/></g>')
 
 
-def graph_svg(prefix: str, *, pulses: bool, label: str) -> str:
+def graph_svg(label: str) -> str:
     """
     The whole graph as one line of inline SVG (a blank line would end the Markdown HTML block it sits in).
     """
@@ -183,7 +156,7 @@ def graph_svg(prefix: str, *, pulses: bool, label: str) -> str:
         rules.append(f".cn-graph:has(.n-{node.id}:hover) .e:not(.s-{node.id}):not(.t-{node.id}){{opacity:.08}}")
         rules.append(f".cn-graph:has(.n-{node.id}:hover) .n:not(.n-{node.id}):not(.a-{node.id}){{opacity:.3}}")
     captions = "".join(f'<text class="cap" x="{x + 2}" y="14">{text}</text>' for x, text in COLUMNS)
-    edges = "".join(_edge_svg(edge, i, prefix, pulses) for i, edge in enumerate(EDGES))
+    edges = "".join(_edge_svg(edge) for edge in EDGES)
     nodes = "".join(_node_svg(node) for node in NODES)
     return (f'<svg class="cn-graph" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{label}">'
             f'<style>{"".join(rules)}</style>{captions}{edges}{nodes}</svg>')
@@ -191,13 +164,11 @@ def graph_svg(prefix: str, *, pulses: bool, label: str) -> str:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    hero = graph_svg("hero", pulses=True, label=(
-        "A code graph: an S3 event comes in, lambda_handler calls read_orders, Store.save and announce, and they reach "
-        "S3, DynamoDB, SNS and the web"))
-    trace = graph_svg("trace", pulses=False, label="The same graph, lit up one line of code at a time")
-    (OUT / "graph-hero.svg").write_text(hero + "\n", "utf-8")
-    (OUT / "graph-trace.svg").write_text(trace + "\n", "utf-8")
-    print(f"wrote {OUT / 'graph-hero.svg'} and graph-trace.svg")
+    graph = graph_svg(
+        "A code graph: an S3 event comes in, lambda_handler calls read_orders, OrderStore.save and announce, and they "
+        "reach S3, DynamoDB, SNS and the web")
+    (OUT / "graph-trace.svg").write_text(graph + "\n", "utf-8")
+    print(f"wrote {OUT / 'graph-trace.svg'}")
 
 
 if __name__ == "__main__":

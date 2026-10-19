@@ -42,7 +42,7 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/kit/` | Report blocks (`_Title`, `_Cards`, `_Table`, `_Findings`, ...) and the HTML/text renderer, copied from aws-analyzer's `_kit` |
 | `examples/orders-service/` | A small Lambda service the screenshots and the CI smoke test run on. Never run |
 | `scripts/shots.py` | Makes `docs/images/<figure>-{light,dark}.webp` |
-| `scripts/site_graph.py` | Makes the home page's animated graphs (`docs/snippets/`) |
+| `scripts/site_graph.py` | Makes the home page's graph (`docs/snippets/graph-trace.svg`) |
 | `docs/`, `mkdocs.yml` | The docs site (MkDocs Material), published by `.github/workflows/pages.yml` |
 
 The two contracts are `CodeMap` (what the code does) and `CodeGraph` (boxes and arrows). Keep `analysis/` free of
@@ -68,22 +68,24 @@ rendering and I/O so another front end only needs those two.
 
 ## The docs site
 
-`docs/` is MkDocs Material (`mkdocs.yml`). Its personality is the graph itself:
+`docs/` is MkDocs Material (`mkdocs.yml`). It is plain on purpose, and it sells the tool by showing its real output:
 
-- **Look**: ink header with a blue → violet → pink "edge" line under it, a dotted canvas like the graph's, Space
-  Grotesk headings over Inter, JetBrains Mono for code. The accents are the graph's edge colours (calls grey, reads
-  blue, writes orange, sends pink). Amber is only for warnings. No green or teal in the chrome. All of it is in
-  `docs/stylesheets/extra.css`.
-- **Home page** (`docs/index.md`): sections named after the graph's columns (COMES IN, ENTRY → CALLS, REACHES, LIVE).
-  The two graphs are inline SVG from `scripts/site_graph.py` (`docs/snippets/graph-hero.svg`, `graph-trace.svg`,
-  included with `--8<--`). Rerun it after changing the example's shape.
-- **Motion** (`docs/javascripts/graph.js`): it puts `.cn-motion` on `<html>`. Without that class, or with
-  `prefers-reduced-motion`, nothing animates and nothing is hidden. Graphs draw in and pulses flow (SMIL
-  `animateMotion`), the terminal types, and the trace steps through the code lines (`data-on="a>b c>d"` names the
-  edges each line lights). Sections rise in on scroll, and a progress "edge" runs along the top.
-- **Copy**: short and simple, for someone skimming on a phone. One idea per line, no paragraph over about two
-  sentences. Every page opens with a one-line `{ .gist }` (on its own line, under the sentence). Tables beat prose.
-  Detail goes in `??? more "..."` folds, and the one thing worth knowing goes in `!!! tip "Worth knowing"`.
+- **Look**: white paper (dark slate in dark mode), black type, one link blue, IBM Plex Sans and IBM Plex Mono. The
+  only colour is the graph's, where it means something (calls grey, reads blue, writes orange, sends pink); amber
+  is for warnings and the lit code line. No gradients, glows, shadows, pills, eyebrow labels or numbered sections.
+  All of it is in `docs/stylesheets/extra.css`.
+- **Home page** (`docs/index.md`): one figure, `orders/handler.py`'s `lambda_handler` next to its graph. Then the
+  example's real output: AWS calls with permissions, findings, the page screenshot, a terminal transcript. Keep
+  every line number, count and output on it true to `examples/orders-service` and the command. The graph is inline
+  SVG from `scripts/site_graph.py` (`docs/snippets/graph-trace.svg`, included with `--8<--`). Rerun it after
+  changing the example's shape.
+- **Motion** (`docs/javascripts/graph.js`): only the figure. Selecting a code line (`data-on="a>b c>d"` names the
+  edges it lights) shows its path; until someone does, it steps through the lines, unless the reader asked for
+  less motion. Nothing else animates or hides on scroll.
+- **Copy**: plain, specific sentences, as a person would write a README. Say what it does with real names, not
+  slogans or fragments ("Point. Run. Look."). Every page opens with a one-line `{ .gist }` (on its own line, under
+  the sentence) saying what the page covers. Tables beat prose. Detail goes in `??? more "..."` folds, and the one
+  thing worth knowing goes in `!!! tip "Worth knowing"`.
 
 ## Tests
 

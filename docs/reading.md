@@ -1,6 +1,6 @@
 # Read the map
 
-The answer is at the top. The details are below it.
+What each part of the page shows. The summary is at the top and the detail is below it.
 { .gist }
 
 ![The top of a page: numbers, a summary, the findings](images/summary-light.webp#only-light){ loading=lazy }
@@ -43,20 +43,20 @@ Read it left to right.
 | ↻ | happens in a loop |
 | <span style="color:#f59e0b">●</span> amber | a finding is about it |
 
-!!! tip "Try this"
-    Point at a box. Everything it isn't connected to fades out.
+!!! tip "Worth knowing"
+    Point at a box and everything it isn't connected to fades out.
 
 ## Step by step { #outline }
 
-The entry point's code, showing only the lines that do something. Click a function to open it. Tags say what each
-line does.
+The entry point's code, with only the lines that do something. Click a function to open it. The tag on each line
+says what it does.
 
 ![The step-by-step list](images/outline-light.webp#only-light){ loading=lazy }
 ![The step-by-step list](images/outline-dark.webp#only-dark){ loading=lazy }
 
 ## Findings { #findings }
 
-| Finding | Why care |
+| Finding | Why it matters |
 | --- | --- |
 | No timeout | The call can hang forever |
 | First page only | `Scan`, `Query`, `ListObjectsV2` quietly stop at 1 MB or 1,000 keys |

@@ -1,9 +1,9 @@
 # Under the hood
 
-It reads your code like a person would, one line at a time. It never runs it.
+How code-node follows your code without running it, and what it can't see.
 { .gist }
 
-## The trick { #reader }
+## How it reads { #reader }
 
 1. **Load** the entry point's file, the way Python imports it.
 2. **Read** each line with Python's `ast` module.
@@ -24,7 +24,7 @@ So `self.store.save()` opens `Store.save`. And `s3.get_object(...)` becomes **S3
 | Dynamic tricks | `getattr(obj, name)`, `exec` |
 
 !!! tip "Worth knowing"
-    A map can miss a call. But everything on it really is in your code. The note at the bottom of each page says
+    A map can miss a call, but everything on it is really in your code. The note at the bottom of each page says
     when the map was cut short.
 
 ## The pieces { #layers }
