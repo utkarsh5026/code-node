@@ -42,40 +42,14 @@ code-node path/to/your/repo
 Select a highlighted line to see the path it takes, or point at a box.</figcaption>
 </figure>
 
-## Every AWS call, with the permission it needs
-
-The same example, as the page lists it. The page also writes these up as a starter IAM policy.
-
-| Call | Permission | Where |
-| --- | --- | --- |
-| S3 GetObject | `s3:GetObject` | `orders/handler.py` line 21 |
-| DynamoDB PutItem | `dynamodb:PutItem` | `orders/store.py` line 18 |
-| S3 PutObject | `s3:PutObject` | `orders/store.py` line 23 |
-| SNS Publish | `sns:Publish` | `orders/notify.py` line 16 |
-
-Environment variables get the same treatment: `ORDERS_TABLE`, `ARCHIVE_BUCKET` and `ORDERS_TOPIC` must be set, and
-`CHAT_WEBHOOK` falls back to a default.
-
-## Problems it points out
-
-For this example it found three:
-
-- `requests.post` in `notify.py` has no timeout. If the chat server doesn't answer, the call waits as long as the
-  connection stays open.
-- `put_item` runs once per order. `table.batch_writer()` would send up to 25 at a time.
-- `sns.publish` runs once per order. `publish_batch` would send up to 10 at a time.
-
-It also catches list calls that only read the first page, `except: pass`, and secrets written into the code.
-[All of them](reading.md#findings).
-
 ## The page
 
-Everything above is on one HTML page, along with the findings and each call step by step. It works offline, and it has
-no JavaScript.
+The graph is one of two tabs on an HTML page. The other walks through each call step by step. It works offline, and
+it has no JavaScript.
 
 <figure class="cn-shot" markdown>
-![A code-node page: cards, findings and the graph](images/page-light.webp#only-light){ loading=lazy }
-![A code-node page: cards, findings and the graph](images/page-dark.webp#only-dark){ loading=lazy }
+![A code-node page: the graph in its tab](images/page-light.webp#only-light){ loading=lazy }
+![A code-node page: the graph in its tab](images/page-dark.webp#only-dark){ loading=lazy }
 </figure>
 
 ## Running it
@@ -96,8 +70,8 @@ the page open and redraws it each time you save a file.
 
 ## What it won't do
 
-It never imports your modules, runs them, or calls AWS, and nothing leaves your machine. To name AWS operations and
-their permissions, it reads botocore's service files from disk.
+It never imports your modules, runs them, or calls AWS, and nothing leaves your machine. To name AWS operations, it
+reads botocore's service files from disk.
 
 Some calls can't be known without running the code, like a function picked out of a dict or a client a library hands
 back. Those are left off the graph, and the page says where it stopped following.

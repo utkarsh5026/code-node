@@ -1,20 +1,14 @@
 # Read the map
 
-What each part of the page shows. The numbers and findings are at the top and the detail is below them.
+What each tab of the page shows. The page is two tabs, with the entry point and the folder at the right of them.
 { .gist }
 
-![The top of a page: the numbers and the findings](images/summary-light.webp#only-light){ loading=lazy }
-![The top of a page: the numbers and the findings](images/summary-dark.webp#only-dark){ loading=lazy }
+## The tabs { #order }
 
-## Top to bottom { #order }
-
-| Part | Tells you |
+| Tab | Tells you |
 | --- | --- |
-| Cards | Where it starts, how many functions, which AWS services |
-| Findings | What's worth fixing |
-| Graph | The paths (a tab) |
-| Step by step | Every line that matters, in the order it runs (the tab beside the graph) |
-| Tables | AWS calls, env vars, functions, imports |
+| Graph | The paths: what comes in, who calls whom, and what it reaches |
+| Step by step | Every line that matters, in the order it runs |
 
 ## The graph { #graph }
 
@@ -40,7 +34,7 @@ Read it left to right.
 | <span style="color:#db2777">━━</span> pink | sends, or an HTTP call (dashed) |
 | <span style="color:#6b7cff">╍╍</span> dashed | an env var |
 | ↻ | happens in a loop |
-| <span style="color:#f59e0b">●</span> amber | a finding is about it |
+| <span style="color:#f59e0b">●</span> amber | a warning is about it, such as an HTTP request with no timeout |
 
 !!! tip "Worth knowing"
     Point at a box and everything it isn't connected to fades out.
@@ -77,27 +71,3 @@ current step is in, with that line lit, and a card saying what the line does and
     Each step is a radio button and the buttons are its labels, so the arrow keys move between them as they do in any
     radio group. The CSS shows the card of the checked step and the code of the function it's in, and moves the lit
     line there, which slides when the next step is in the same function.
-
-## Findings { #findings }
-
-| Finding | Why it matters |
-| --- | --- |
-| No timeout | The call can hang forever |
-| First page only | `Scan`, `Query`, `ListObjectsV2` quietly stop at 1 MB or 1,000 keys |
-| Errors dropped | `except: pass` hides real failures |
-| Secret in code | Anyone with the code has it |
-| AWS call in a loop | A batch call does it in fewer requests |
-| File won't parse | Imports of it fail |
-
-??? more "Lambda-only checks"
-    These come from the Lambda platform, so they run for a found Lambda handler, or any entry point with
-    `--platform lambda`. Plain Python never gets them:
-
-    - the handler can't take `(event, context)`
-    - an `async def` handler
-    - writing outside `/tmp`
-    - a new client made on every call
-    - sleeping, which Lambda bills for
-
-    The other findings are worded for where the code runs: an HTTP request without a timeout "hangs" in plain Python,
-    and on Lambda "waits until Lambda stops it at its timeout".
