@@ -5,13 +5,15 @@ _Graph: a CodeGraph drawn as an SVG of cards in columns, with arrows routed betw
 from __future__ import annotations
 
 import math
+import re
 import unicodedata
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..kit.blocks import _Report, _draws
 from ..kit.fmt import _plural
+from ..kit.highlight import _python_lines
 from ..kit.render import _prose
 from ..kit.text import _esc
 
@@ -23,12 +25,14 @@ from .style import _ROOT
 class _Graph:
     """
     how_it_works()'s graph: a CodeGraph drawn as boxes in columns joined by arrows. In HTML an SVG, where pointing
-    at a box leaves only what it's joined to in sight; in text each box with the arrows that leave it.
+    at a box leaves only what it's joined to in sight, and clicking one opens its code in a panel on the right (from
+    `sources`, {file: its text}; without them the boxes aren't links); in text each box with the arrows that leave it.
     """
 
     graph: CodeGraph
     title: str = ""
     empty: str = "(nothing to draw)"
+    sources: dict[str, str] = field(default_factory=dict)
 
 
 _EDGE_WORDS = {"call": "calls", "event": "passes its input to", "env": "configures", "client": "makes the client for",
@@ -672,6 +676,71 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
             f'<rect class="fg" x=".5" y=".5" width="{w - 1:.0f}" height="{h - 1:.0f}" rx="10.5"/>{"".join(parts)}</g>')
 
 
+_G_PANEL_LINES = 400  # lines of one function a box's panel shows, at most
+
+_G_PANEL_SPANS = 12  # places a box's panel shows, at most
+
+_G_PANEL_KINDS = {"event": "What comes in", "env": "Environment", "start": "At import", "handler": "Entry point",
+                  "function": "Function", "aws": "AWS service", "http": "HTTP"}
+
+
+def _g_panel_id(n: GraphNode) -> str:
+    return f"cn-code-{n.id}"
+
+
+def _g_filled(line: str) -> bool:
+    """
+    Whether a coloured line has anything on it.
+    """
+    return bool(re.sub(r"<[^>]*>", "", line).strip())
+
+
+def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]]) -> str:
+    """
+    A box's code, in a panel that slides in from the right when the box is clicked (its id is the link's target, so
+    it's CSS's :target that opens it): what the box is, then each place it's about with its lines numbered, the lines
+    worth pointing at lit. '' when none of its code is in the files read.
+    """
+    shown, lit_any = [], False
+    for span in n.code[:_G_PANEL_SPANS]:
+        lines = lines_of(span.file)
+        start, end = max(1, span.start), min(len(lines), span.end)
+        if n.kind in ("handler", "function"):  # its decorators, over its def
+            while start > 1 and lines[start - 2].lstrip().startswith("@"):
+                start -= 1
+        while start < end and start not in span.lit and not _g_filled(lines[start - 1]):
+            start += 1
+        while end > start and end not in span.lit and not _g_filled(lines[end - 1]):
+            end -= 1
+        if start > end:
+            continue
+        more = end - start + 1 - _G_PANEL_LINES
+        end = min(end, start + _G_PANEL_LINES - 1)
+        lit_any |= any(start <= k <= end for k in span.lit)
+        rows = "".join(f'<span class="sl{" lit" if k in span.lit else ""}"><span class="sn">{k}</span>'
+                       f"{lines[k - 1]}</span>" for k in range(start, end + 1))
+        where = f"line {start}" if start == end else f"lines {start}–{end}"
+        shown.append(f'<div class="csw">{_esc(span.file)} <span>{where}</span></div><pre class="csc">{rows}</pre>'
+                     + (f'<div class="csm">+{_plural(more, "more line")}</div>' if more > 0 else ""))
+    if not shown:
+        return ""
+    rest = len(n.code) - _G_PANEL_SPANS
+    if rest > 0:
+        shown.append(f'<div class="csm">+{_plural(rest, "more place")}: the tables below list them all</div>')
+    said = "".join(f'<p class="csd">{_prose(line)}</p>' for line in (n.tip or "").split("\n") if line)
+    if lit_any:
+        said += ('<p class="csd csl">The lit lines are where it calls, reads or sends what its arrows show.</p>'
+                 if n.kind in ("handler", "function", "start") else
+                 '<p class="csd csl">The lit lines are where the code uses it.</p>')
+    mono = " mono" if n.kind in ("handler", "function") else ""
+    return (f'<aside class="cside" id="{_esc(_g_panel_id(n))}" aria-label="{_esc("The code of " + n.label)}">'
+            f'<div class="csh"><div class="cst"><span class="csk">{_esc(_G_PANEL_KINDS.get(n.kind, n.kind))}</span>'
+            f'<b class="csn{mono}">{_esc(n.label)}</b>'
+            + (f'<span class="css">{_esc(n.sub)}</span>' if n.sub else "")
+            + '</div><a class="csx" href="#cn-closed" aria-label="Close" title="Close">×</a></div>'
+            f'{said}{"".join(shown)}</aside>')
+
+
 def _g_captions(graph: CodeGraph, xs: dict[int, float], widths: dict[int, float], column_of: dict[str, int]) -> str:
     """
     The words over the columns: COMES IN, HANDLER, CALLS, REACHES, each over the columns it covers.
@@ -725,6 +794,18 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             for name in _g_names(e):
                 access[e.target].setdefault(name, e.kind)
     root = report.root or _ROOT
+    highlighted: dict[str, list[str]] = {}
+
+    def lines_of(file: str) -> list[str]:  # a file's lines in colour, each file coloured once
+        if file not in highlighted:
+            highlighted[file] = _python_lines(block.sources[file]) if file in block.sources else []
+        return highlighted[file]
+
+    panels = {n.id: _g_panel(n, lines_of) for n in graph.nodes} if block.sources else {}
+    for n in graph.nodes:
+        if panels.get(n.id):  # the box whose code is open, outlined
+            report.rules.add(f".{root}:has(#{_g_panel_id(n)}:target) .cg .n-{n.id} .fg"
+                             "{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}")
     for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
@@ -750,8 +831,11 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             marked.add((e.source, e.target))
     edges = "".join(body for body, _ in drawn)
     ports = "".join(dots for _, dots in drawn)
-    nodes = "".join(_node_svg(cards[n.id], boxes[n.id], list(dict.fromkeys(near[n.id])), access[n.id])
-                    for n in graph.nodes)
+    nodes = "".join(
+        (f'<a class="cl" href="#{_esc(_g_panel_id(n))}" aria-label="{_esc("Show the code of " + n.label)}">{box}</a>'
+         if panels.get(n.id) else box)
+        for n in graph.nodes
+        for box in [_node_svg(cards[n.id], boxes[n.id], list(dict.fromkeys(near[n.id])), access[n.id])])
     kinds = {e.kind for e in graph.edges}
     pills = [f'<span class="kp">{_g_swatch(k)}{_esc(word)}</span>' for k, word in _G_LEGEND if k in kinds]
     if any(e.guessed for e in graph.edges):
@@ -768,12 +852,13 @@ def _graph_html(block: _Graph, report: _Report) -> str:
                      "</svg>in a loop: once per item</span>")
     hidden = (f'<span class="kp kh"><b>+{graph.hidden}</b>{"more function" if graph.hidden == 1 else "more functions"} '
               "not drawn (too deep or too many): the steps below have them all</span>") if graph.hidden else ""
-    hint = '<span class="kt">Point at a box to see only what it\'s joined to</span>'
+    hint = ('<span class="kt">Point at a box to see only what it\'s joined to'
+            + ("; click it to read its code" if any(panels.values()) else "") + "</span>")
     return (f'{title}<div class="cgb"><div class="cg"><svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" '
             f'height="{tall:.0f}" style="min-width:{width * 0.72:.0f}px" role="img" '
             f'aria-label="{_esc(block.title or "How the code fits together")}">'
             f'{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}</svg></div>'
-            f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>')
+            f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}')
 
 
 @_draws(_Graph, "text")

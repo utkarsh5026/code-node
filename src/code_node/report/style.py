@@ -74,12 +74,12 @@ _EXTRA_CSS = """\
 .cnd .flow .oq{font-style:italic}
 .cnd .flow .os{display:inline-flex;flex-wrap:wrap;gap:3px 5px}
 .cnd .flow .ob{margin-left:22px}
-.cnd .flow .pk{color:var(--jp-mirror-editor-keyword-color,light-dark(#7c3aed,#c792ea))}
-.cnd .flow .pf{color:var(--jp-mirror-editor-def-color,light-dark(#2563eb,#82aaff))}
-.cnd .flow .js,.cnd .flow .jk{color:var(--jp-mirror-editor-string-color,light-dark(#047857,#a5d6a7))}
-.cnd .flow .jn,.cnd .flow .jl{color:var(--jp-mirror-editor-number-color,light-dark(#c2410c,#f78c6c))}
-.cnd .flow .pa{font-style:italic}
-.cnd .flow .pc{opacity:.6;font-style:italic}
+.cnd :is(.flow,.cside) .pk{color:var(--jp-mirror-editor-keyword-color,light-dark(#7c3aed,#c792ea))}
+.cnd :is(.flow,.cside) .pf{color:var(--jp-mirror-editor-def-color,light-dark(#2563eb,#82aaff))}
+.cnd :is(.flow,.cside) :is(.js,.jk){color:var(--jp-mirror-editor-string-color,light-dark(#047857,#a5d6a7))}
+.cnd :is(.flow,.cside) :is(.jn,.jl){color:var(--jp-mirror-editor-number-color,light-dark(#c2410c,#f78c6c))}
+.cnd :is(.flow,.cside) .pa{font-style:italic}
+.cnd :is(.flow,.cside) .pc{opacity:.6;font-style:italic}
 .cnd .cgb{width:fit-content;max-width:min(100%,1180px)}
 .cnd .cg{border:1px solid rgba(127,127,127,.2);border-radius:14px;margin:6px 0 8px;overflow:auto;background-color:rgba(127,127,127,.035);background-attachment:local;background-size:18px 18px;
  background-image:radial-gradient(circle at 1px 1px,rgba(127,127,127,.3) 1px,transparent 0);background-position:9px 9px}
@@ -168,7 +168,30 @@ _EXTRA_CSS = """\
 .cnd .cgk .kw circle{fill:#f59e0b}
 .cnd .cgk .kw path{stroke:var(--jp-layout-color0,var(--vscode-editor-background,Canvas));stroke-width:1.8;stroke-linecap:round;fill:none}
 .cnd .cgk .kl circle{fill:none;stroke:currentColor;stroke-opacity:.55;stroke-width:1.2}
-.cnd .cgk .kl path{fill:none;stroke:currentColor;stroke-opacity:.8;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}"""
+.cnd .cgk .kl path{fill:none;stroke:currentColor;stroke-opacity:.8;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.cnd .cg a.cl{cursor:pointer;outline:none}
+.cnd .cg a.cl:focus-visible .fg{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}
+.cnd .cside{position:fixed;top:0;right:0;bottom:0;z-index:30;box-sizing:border-box;width:min(660px,94vw);overflow:auto;padding:0 20px 28px;background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas));color:CanvasText;border-left:1px solid rgba(127,127,127,.3);box-shadow:-14px 0 36px rgba(15,23,42,.14);transform:translateX(104%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s}
+.cnd .cside:target{transform:none;visibility:visible;transition:transform .22s ease}
+.cnd .cside .csh{display:flex;align-items:flex-start;gap:12px;position:sticky;top:0;z-index:1;margin:0 -20px 12px;padding:16px 20px 12px;background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas));border-bottom:1px solid rgba(127,127,127,.2)}
+.cnd .cside .cst{flex:1;min-width:0}
+.cnd .cside .csk{display:block;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
+.cnd .cside .csn{display:block;font-size:17px;font-weight:650;overflow-wrap:anywhere;margin:2px 0 1px}
+.cnd .cside .csn.mono{font:650 16px ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.cnd .cside .css{font-size:12.5px;opacity:.65;overflow-wrap:anywhere}
+.cnd .cside a.csx{flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;font-size:22px;line-height:1;color:inherit;text-decoration:none;opacity:.6}
+.cnd .cside a.csx:hover,.cnd .cside a.csx:focus-visible{opacity:1;background:rgba(127,127,127,.14)}
+.cnd .cside .csd{font-size:13px;line-height:1.5;margin:0 0 6px;opacity:.82;overflow-wrap:anywhere}
+.cnd .cside .csl{font-size:12px;opacity:.6}
+.cnd .cside .csw{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;margin:16px 0 5px;overflow-wrap:anywhere}
+.cnd .cside .csw span{opacity:.55}
+.cnd .cside pre.csc{margin:0;padding:8px 0;border:1px solid rgba(127,127,127,.22);border-radius:8px;overflow:auto;background:rgba(127,127,127,.04);font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.cnd .cside .sl{display:block;width:max-content;min-width:100%;box-sizing:border-box;padding-right:14px;white-space:pre}
+.cnd .cside .sl.lit{background:rgba(245,158,11,.16);box-shadow:inset 3px 0 #f59e0b}
+.cnd .cside .sn{display:inline-block;width:3.2em;padding-right:14px;text-align:right;opacity:.42;user-select:none;-webkit-user-select:none}
+.cnd .cside .csm{font-size:12px;font-style:italic;opacity:.6;margin:6px 2px 0}
+@media (min-width:1100px){.cnd:has(.cside:target){margin-right:min(660px,94vw)}}
+@media (prefers-reduced-motion:reduce){.cnd .cside,.cnd .cside:target{transition:none}}"""
 
 _CSS = _base_css(_ROOT, _EXTRA_CSS)
 

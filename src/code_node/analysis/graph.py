@@ -14,9 +14,22 @@ from ..kit.text import _clip
 
 from .syntax import _a
 from .aws_model import _service_name
-from .model import AwsCall, CodeMap, CodeSpot
+from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep
 from .findings import _listed, _short_name
 from ..platforms import get_platform
+
+
+@dataclass
+class CodeSpan:
+    """
+    Lines of the code a box in how_it_works()'s graph is about, for a front end to show beside it: a function whole,
+    or a few lines around each place it's called with, read or reached from.
+    """
+
+    file: str
+    start: int
+    end: int
+    lit: list[int] = field(default_factory=list)  # the lines in it worth pointing at: where it calls, reads or sends
 
 
 @dataclass
@@ -35,9 +48,8 @@ class GraphNode:
     tip: str = ""  # said on hover
     column: int = 0  # left to right: 0 what comes in, 1 the handler, then its functions by depth, last what it reaches
     flags: dict[str, str] = field(default_factory=dict)  # a listed line a warning is about -> a word or two:
-
-
     # {'TEAM_TOPIC': 'not set'}, {'Query': 'first page only'}, {'GET https://...': 'no timeout'}
+    code: list[CodeSpan] = field(default_factory=list)  # the lines of code it's about
 
 
 @dataclass
@@ -121,6 +133,45 @@ _GRAPH_FUNCTIONS = 24  # functions code_graph() draws, at most (the shallowest f
 _GRAPH_DEPTH = 5  # ...and how deep below the handler
 
 _GRAPH_LINES = 5  # lines a box lists before "+3 more"
+
+
+_SPAN_BEFORE, _SPAN_AFTER = 2, 3  # lines shown around each place a box is about
+
+
+def _around(places: list[tuple[str, int, str]], functions: dict[str, CodeFunction]) -> list[CodeSpan]:
+    """
+    A few lines around each place (file, line, the function it's in), kept within that function when it's one of
+    `functions`, the places lit, in the order their files first come; places close together share their lines.
+    """
+    files = list(dict.fromkeys(file for file, _, _ in places))
+    spans: list[CodeSpan] = []
+    for file, line, function in sorted(set(places), key=lambda place: (files.index(place[0]), place[1])):
+        if line < 1:
+            continue
+        start, end = max(1, line - _SPAN_BEFORE), line + _SPAN_AFTER
+        f = functions.get(function)
+        if f is not None and f.file == file and f.line <= line < f.line + f.lines:
+            start, end = max(start, f.line), min(end, f.line + f.lines - 1)
+        if spans and spans[-1].file == file and start <= spans[-1].end + 1:
+            spans[-1].end = max(spans[-1].end, end)
+            spans[-1].lit.append(line)
+        else:
+            spans.append(CodeSpan(file, start, end, [line]))
+    return spans
+
+
+def _start_places(steps: list[CodeStep]) -> list[tuple[str, int, str]]:
+    """
+    The lines that run when the code is imported, its modules' own (a function they call has its own box).
+    """
+    places = []
+    for step in steps:
+        if step.kind == "module":
+            places += _start_places(step.steps)
+        elif step.kind != "def":
+            places.append((step.file, step.line, ""))
+            places += _start_places(step.steps)
+    return places
 
 
 def _listed_lines(items: list[str], most: int = _GRAPH_LINES) -> list[str]:
@@ -217,6 +268,14 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     handler_reasons = [m.split(":")[0] for level_, m in platform.entry_findings(cmap) if level_ == "warn"]
     unset = platform.unset_env(cmap)
 
+    # the lines in each function worth pointing at: where it calls, reads or sends what the graph draws
+    lit: dict[str, set[int]] = defaultdict(set)
+    for caller, called in children.items():
+        lit[caller] |= {int(line) for _, line in called if line.isdigit()}
+    for function, line in ([(c.function, c.line) for c in cmap.aws] + [(e.function, e.line) for e in cmap.env]
+                           + [(s.function, s.line) for s in cmap.spots if s.kind == "http"]):
+        lit[function].add(line)
+
     def warned_tip(tip: str, why: list[str]) -> str:
         return tip + ("\nA warning is about it: " + "; ".join(why) if why else "")
 
@@ -270,7 +329,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         reach.append(GraphNode(node_id, "aws", _service_name(service), " · ".join(does), _listed_lines(ops),
                                "warn" if why else "", warned_tip(tip, why), flags={
                                    c.operation: "first page only" for c in calls if c.pages == "one" and not c.guessed
-                                   and c.operation.startswith(("List", "Scan", "Query"))}))
+                                   and c.operation.startswith(("List", "Scan", "Query"))},
+                               code=_around([(c.file, c.line, c.function) for c in calls], by_name)))
         grouped: dict[tuple[str, str, bool], list[AwsCall]] = {}
         for call in calls:
             source, indirect = owner(call.function)
@@ -306,7 +366,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             "http", "http", "The web", "HTTP requests", _listed_lines(list(dict.fromkeys(s.detail for s in http))),
             "warn" if slow else "", warned_tip("HTTP requests it sends", [
                 f"{s.detail} has no timeout ({s.file} line {s.line})" for s in slow]),
-            flags={s.detail: "no timeout" for s in slow}))
+            flags={s.detail: "no timeout" for s in slow},
+            code=_around([(s.file, s.line, s.function) for s in http], by_name)))
         by_source: dict[tuple[str, bool], list[CodeSpot]] = {}
         for spot in http:
             source, indirect = owner(spot.function)
@@ -328,25 +389,29 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             "event", "event", kind[0].upper() + kind[1:] if kind else "Its input", "what it's called with",
             _listed_lines(leaves) or ["(no fields read)"],
             tip="The first argument the entry point is called with"
-            + (f": the code reads {', '.join(leaves)}" if leaves else "")))
+            + (f": the code reads {', '.join(leaves)}" if leaves else ""),
+            code=_around([(f.file, f.line, "") for f in cmap.event], by_name)))
     if names:
         graph.nodes.append(GraphNode(
             "env", "env", "Environment", "variables it reads", _listed_lines(names), "warn" if unset else "",
             warned_tip("Environment variables it reads (names only)",
                        [f"{name} isn't set where it runs" for name in names if name in unset]),
-            flags={name: "not set" for name in names if name in unset}))
+            flags={name: "not set" for name in names if name in unset},
+            code=_around([(e.file, e.line, e.function) for e in cmap.env], by_name)))
     if uses_start:
         services_made = list(dict.fromkeys(made))
         graph.nodes.append(GraphNode(
             "start", "start", "At import", "once, when it loads",
             [f"makes {_a(services_made[0])} {services_made[0]} client" if len(services_made) == 1 else
              f"makes {_listed(services_made)} clients"] if services_made else [],
-            tip="What runs when Python imports the code, before the first call", column=1))
+            tip="What runs when Python imports the code, before the first call", column=1,
+            code=_around(_start_places(cmap.startup), by_name)))
     entry_file = cmap.handler_file or ""
     if not entry_is_function:
         graph.nodes.append(GraphNode(
             "f-entry", "handler", entry.rsplit(".", 1)[-1], f"{entry_file} line {cmap.entry_line}",
-            ["an object, not a function"], tip=f"{entry} is called with its input", column=1))
+            ["an object, not a function"], tip=f"{entry} is called with its input", column=1,
+            code=_around([(entry_file, cmap.entry_line, "")], by_name)))
     for f in shown:
         is_entry = f.name == entry
         why = reasons.get(f.name, []) + (handler_reasons if is_entry else [])
@@ -355,7 +420,9 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             f"{f.file} line {f.line}", [f.doc] if f.doc else [], "warn" if why else "",
             warned_tip(f"{f.name}({f.args}) in {f.file}, {_plural(f.lines, 'line')}" + (f": {f.doc}" if f.doc else ""),
                        why),
-            column=1 + level.get(f.name, f.depth)))
+            column=1 + level.get(f.name, f.depth),
+            code=[CodeSpan(f.file, f.line, f.line + f.lines - 1,
+                           sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))]))
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
     for node in reach:
         node.column = out_column

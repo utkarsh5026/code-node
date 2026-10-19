@@ -101,3 +101,29 @@ def _python_html(code: str) -> str:
         out.append(f'<span class="{css}">{piece}</span>' if css else piece)
         last = end
     return "".join(out) + _esc(code[last:])
+
+
+_HTML_PIECE_RE = re.compile(r'<span class="[^"]*">|</span>|\n|[^<\n]+')
+
+
+def _python_lines(code: str) -> list[str]:
+    """
+    Python as HTML, a line each: the whole source in colour (so a docstring or a call over several lines is coloured
+    as it should be), cut at each line end, with a colour that runs on past one opened again on the next.
+    """
+    lines: list[str] = []
+    line: list[str] = []
+    opened = ""  # the colour's <span> that's open, if one is
+    for match in _HTML_PIECE_RE.finditer(_python_html(code)):
+        piece = match.group(0)
+        if piece == "\n":
+            lines.append("".join(line) + ("</span>" if opened else ""))
+            line = [opened] if opened else []
+            continue
+        if piece.startswith("<span"):
+            opened = piece
+        elif piece == "</span>":
+            opened = ""
+        line.append(piece)
+    lines.append("".join(line))
+    return lines
