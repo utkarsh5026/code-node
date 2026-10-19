@@ -53,7 +53,8 @@ code-node --serve
 ```
 
 This serves the page at `localhost:8765` and redraws it whenever a `.py` file changes. You keep your place on the
-page.
+page. Serve another folder at the same time and it takes the next free port (8766, 8767, ...); the tab's title starts
+with the folder's name, so you can tell them apart.
 
 !!! tip "Worth knowing"
     If a save leaves a file that won't parse, the page shows the error, and the map comes back on the next good save.
@@ -87,7 +88,7 @@ Without `-o`, pages are saved in `~/.cache/code-node/`. On WSL they open in your
 | `path` | A folder, or a file to start from |
 | `-e`, `--entry` | Where to start |
 | `-l`, `--list` | List the starts |
-| `--serve`, `--port` | Live page (8765) |
+| `--serve`, `--port` | Live page (8765, or the next free port) |
 | `--all` | Draw every function |
 | `--depth`, `--functions` | Graph limits (5, 24) |
 | `--mermaid` | Print Mermaid |

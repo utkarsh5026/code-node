@@ -20,6 +20,11 @@ from typing import Callable
 
 from .pages import PageOptions, make_page
 from .project import _SKIPPED_FOLDERS, EntryPoint
+from .report.style import FAVICON_LINK, FAVICON_SVG
+
+DEFAULT_PORT = 8765  # without --port, the first free port from here on is used, so several folders can be served
+
+PORTS_TRIED = 20  # how many ports from DEFAULT_PORT are tried before letting the system pick any free one
 
 POLL_SECONDS = 0.5  # how often the folder is checked for changes
 
@@ -80,7 +85,7 @@ def changed_files(before: dict[str, tuple[int, int]], after: dict[str, tuple[int
 
 
 def _error_page(message: str, entry: EntryPoint) -> str:
-    return (f"<!doctype html><meta charset='utf-8'><title>code-node</title><body style='font:15px system-ui;"
+    return (f"<!doctype html><meta charset='utf-8'>{FAVICON_LINK}<title>code-node</title><body style='font:15px system-ui;"
             f"margin:40px;color-scheme:light dark'><h2>Couldn't draw {html.escape(entry.name)}</h2>"
             f"<p>{html.escape(message)}</p><p>Fix it and save: the page comes back by itself.</p></body>")
 
@@ -110,6 +115,8 @@ class LivePage:
             said = f"{len(cmap.functions)} functions, {len(cmap.aws)} AWS calls"
         except Exception as exc:  # noqa: BLE001  any failure becomes the page, never a dead server
             page, said = _error_page(f"{type(exc).__name__}: {exc}", self.entry), f"failed: {type(exc).__name__}"
+        # the folder's name leads the tab title, to tell apart the tabs of several servers
+        page = page.replace("<title>", f"<title>{html.escape(self.root.name)} · ", 1)
         page = page.replace("</body>", _LIVE_SCRIPT + "</body>", 1) if "</body>" in page else page + _LIVE_SCRIPT
         with self.changed:
             self.page = page
@@ -162,6 +169,14 @@ def _handler(live: LivePage) -> type[BaseHTTPRequestHandler]:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif self.path.split("?")[0] in ("/favicon.ico", "/favicon.svg"):
+                body = FAVICON_SVG.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Cache-Control", "max-age=86400")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
             else:
                 self.send_error(404)
 
@@ -189,19 +204,41 @@ def _handler(live: LivePage) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def serve(root: Path, entry: EntryPoint, options: PageOptions, *, port: int = 8765,
+class _Server(ThreadingHTTPServer):
+    daemon_threads = True
+    # on Windows, SO_REUSEADDR lets a second server take a port that's in use, so one folder would hide another
+    allow_reuse_address = os.name != "nt"
+
+
+def listen(handler: type[BaseHTTPRequestHandler], port: int | None = None) -> ThreadingHTTPServer:
+    """
+    A server on 127.0.0.1: on `port` when one is given (0 is any free port), or else the first free port from
+    DEFAULT_PORT, so another code-node --serve already running elsewhere doesn't stop this one.
+    """
+    if port is not None:
+        return _Server(("127.0.0.1", port), handler)
+    for candidate in range(DEFAULT_PORT, DEFAULT_PORT + PORTS_TRIED):
+        try:
+            return _Server(("127.0.0.1", candidate), handler)
+        except OSError:
+            continue
+    return _Server(("127.0.0.1", 0), handler)
+
+
+def serve(root: Path, entry: EntryPoint, options: PageOptions, *, port: int | None = None,
           open_page: Callable[[str], None] | None = None) -> int:
     """
-    Serves the page on http://localhost:<port> until Ctrl-C, drawing it again on every change under root.
+    Serves the page on http://localhost:<port> until Ctrl-C, drawing it again on every change under root. Without a
+    port, it's the first free one from DEFAULT_PORT.
     """
     live = LivePage(root, entry, options)
     live.build()
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", port), _handler(live))
+        server = listen(_handler(live), port)
     except OSError as exc:
-        print(f"Can't listen on port {port} ({exc.strerror}): pick another with --port.")
+        print(f"Can't listen on port {port if port is not None else DEFAULT_PORT} ({exc.strerror}): pick another with "
+              "--port.")
         return 1
-    server.daemon_threads = True
     url = f"http://localhost:{server.server_address[1]}/"
     watcher = threading.Thread(target=live.watch, name="code-node-watch", daemon=True)
     watcher.start()

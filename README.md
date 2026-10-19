@@ -63,7 +63,7 @@ command), what runs under `if __name__ == "__main__":`, and functions named `mai
 ## Keep it open while you work
 
 ```bash
-code-node --serve                      # http://localhost:8765, redrawn every time you save a .py file
+code-node --serve                      # http://localhost:8765 (or the next free port), redrawn on every save
 code-node src/app/main.py --serve --port 9000
 ```
 
@@ -79,7 +79,7 @@ at the same scroll position. If the code can't be drawn, the page says why and c
 | `-l`, `--list` | List the entry points, then stop |
 | `--all` | Draw every function, however deep (by default the graph shows the nearest 24, 5 calls deep) |
 | `--depth N`, `--functions N` | Your own limits |
-| `--serve`, `--port N` | Serve the page on localhost (8765) and redraw it whenever a `.py` file changes |
+| `--serve`, `--port N` | Serve the page on localhost (8765, or the next free port) and redraw it whenever a `.py` file changes |
 | `--mermaid` | Print the graph as Mermaid |
 | `-o`, `--out`, `--no-open` | Where to save the page (default `~/.cache/code-node/`), and whether to open it |
 | `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler sets it; anything else is plain Python |

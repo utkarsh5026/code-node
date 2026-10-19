@@ -158,10 +158,27 @@ def test_the_live_server_redraws_when_the_code_changes(tmp_path: Path, monkeypat
         assert live.wait_for_change(1, timeout=5) == 2
         page = urllib.request.urlopen(url).read().decode()
         assert "HeadObject" in page  # its IAM permission is still s3:GetObject
+        assert f"<title>{root.name} · " in page and 'rel="icon"' in page
+        icon = urllib.request.urlopen(url + "/favicon.ico")
+        assert icon.headers["Content-Type"] == "image/svg+xml" and b"<svg" in icon.read()
     finally:
         live.stop()
         server.shutdown()
         server.server_close()
+
+
+def test_a_second_server_takes_the_next_free_port() -> None:
+    from code_node import serve as servemod
+
+    first = servemod.listen(servemod.BaseHTTPRequestHandler)
+    try:
+        second = servemod.listen(servemod.BaseHTTPRequestHandler)
+        try:
+            assert second.server_address[1] != first.server_address[1]
+        finally:
+            second.server_close()
+    finally:
+        first.server_close()
 
 
 def test_a_broken_build_shows_in_the_page(tmp_path: Path, monkeypatch) -> None:
