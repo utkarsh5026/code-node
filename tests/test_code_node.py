@@ -94,6 +94,22 @@ def test_the_command_saves_a_page(tmp_path: Path, capsys) -> None:
     assert "flowchart LR" in capsys.readouterr().out
 
 
+def test_clicking_a_box_shows_its_code(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path / "code", {"app.py": HANDLER}))
+    cmap = map_code(project.files, "app.lambda_handler", libraries=project.libraries(), platform="lambda")
+    graph = code_graph(cmap)
+    load = next(n for n in graph.nodes if n.label == "load()")
+    assert [(s.file, s.start, s.end, s.lit) for s in load.code] == [("app.py", 9, 10, [10])]
+    s3 = next(n for n in graph.nodes if n.kind == "aws")
+    assert [(s.start, s.end, s.lit) for s in s3.code] == [(9, 10, [10])]  # kept within load()
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    page = out.read_text()
+    assert f'<a class="cl" href="#cn-code-{load.id}"' in page and f'id="cn-code-{load.id}"' in page
+    assert '<span class="sl lit"><span class="sn">10</span>' in page
+    assert "<script" not in page
+
+
 def test_starting_from_a_file(tmp_path: Path, capsys) -> None:
     root = write(tmp_path / "repo", {**PACKAGE, ".git/HEAD": "ref: main\n"})
     out = tmp_path / "page.html"

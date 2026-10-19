@@ -130,9 +130,11 @@ def _closing_note(cmap: CodeMap, graph: CodeGraph) -> _Note:
     return _Note(" ".join(said))
 
 
-def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: int) -> list[Any]:
+def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: int,
+                sources: dict[str, str] | None = None) -> list[Any]:
     """
-    The whole page for one entry point, as report blocks.
+    The whole page for one entry point, as report blocks. sources is the code read, {file: its text}: with it, a box
+    of the graph clicked shows its code.
     """
     read = (f"{_plural(cmap.files, 'Python file')} ({cmap.lines:,} lines) read with ast, nothing run"
             if cmap.files else "")
@@ -150,7 +152,8 @@ def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: i
         "Nothing in the code stands out: what it imports is there, and its HTTP and list calls look complete.")))
     graph = code_graph(cmap, max_functions=max_functions, max_depth=max_depth)
     if graph.nodes:
-        blocks.append(_Graph(graph, "How it fits together: what comes in, who calls whom, and what it reaches"))
+        blocks.append(_Graph(graph, "How it fits together: what comes in, who calls whom, and what it reaches",
+                             sources=sources or {}))
         blocks.append(_Text(graph.mermaid(), code=True, collapsed=True, title=(
             "The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request")))
     if cmap.startup:

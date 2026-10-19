@@ -11,7 +11,7 @@ from pathlib import Path
 from .analysis.graph import code_graph
 from .analysis.mapping import map_code
 from .analysis.model import CodeMap
-from .project import EntryPoint, read_project
+from .project import EntryPoint, Project, read_project
 from .report.build import page_blocks
 from .report.style import render_page
 
@@ -43,24 +43,25 @@ class PageOptions:
         return (_ALL, _ALL) if self.draw_all else (self.functions, self.depth)
 
 
-def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[CodeMap, str]:
+def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[CodeMap, Project]:
     """
-    The folder read as it is now, and the code followed from the entry point: the CodeMap, and the folder's name.
+    The folder read as it is now, and the code followed from the entry point: the CodeMap, and the folder.
     """
     project = read_project(root)
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file or None,
                     max_depth=_ALL_READ_DEPTH if options.draw_all else None,
                     platform=options.platform or entry.platform)
-    return cmap, project.root.name
+    return cmap, project
 
 
 def make_page(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[str, CodeMap]:
     """
     The whole HTML page for an entry point, and the CodeMap it was drawn from.
     """
-    cmap, name = map_entry(root, entry, options)
+    cmap, project = map_entry(root, entry, options)
     max_functions, max_depth = options.limits
-    blocks = page_blocks(cmap, project=name, max_functions=max_functions, max_depth=max_depth)
+    blocks = page_blocks(cmap, project=project.root.name, max_functions=max_functions, max_depth=max_depth,
+                         sources=project.files)
     return render_page(blocks, f"How {entry.name} works"), cmap
 
 

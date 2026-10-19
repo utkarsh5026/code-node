@@ -46,6 +46,12 @@ Read it left to right.
 !!! tip "Worth knowing"
     Point at a box and everything it isn't connected to fades out.
 
+??? more "Click a box to read its code"
+    A panel slides in from the right with the code the box is about, its lines numbered. A function shows whole,
+    with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the
+    input and *At import* show a few lines around each place the code uses them. Close it with × or the browser's
+    Back button. Like the rest of the page, it works without JavaScript.
+
 ## Step by step { #outline }
 
 The entry point's code, with only the lines that do something. Click a function to open it. The tag on each line

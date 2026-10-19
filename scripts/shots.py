@@ -57,7 +57,7 @@ def _blocks() -> list[Any]:
     project = read_project(EXAMPLE)
     entry = entry_points(project)[0]
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file, platform="lambda")
-    return page_blocks(cmap, project="orders-service", max_functions=24, max_depth=5)
+    return page_blocks(cmap, project="orders-service", max_functions=24, max_depth=5, sources=project.files)
 
 
 def _trim(path: Path) -> tuple[int, int]:

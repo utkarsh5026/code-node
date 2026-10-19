@@ -15,6 +15,10 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Added
 
+- Click a box in the graph to read its code in a panel on the right: a function whole, with the lines that make
+  its calls lit, or a few lines around each place the code uses a service, a variable or its input. No JavaScript:
+  the panel opens with CSS (`:target`), and Back closes it. `GraphNode.code` lists the lines (`CodeSpan`), and
+  `page_blocks(..., sources=...)` takes the files to show them from.
 - Platforms: subclass `code_node.Platform` to say what another place code runs adds (its entry points, what
   they're called with, its findings and wording), and add it with `register_platform` or a `code_node.platforms`
   entry point in a package's `pyproject.toml`.

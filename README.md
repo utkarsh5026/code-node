@@ -23,7 +23,7 @@ models on disk. No module is imported and no request is made.
 
 - **A graph of the paths.** What comes in, who calls whom, and what each path reaches, arranged left to right. AWS
   calls are coloured by what they do (reads, writes, sends, runs) and a ↻ marks calls made in a loop. Point at a box
-  to see only what it's joined to.
+  to see only what it's joined to; click it to read its code in a panel on the right.
 - **Every call, step by step.** The entry point's code line by line, with each function it calls folded under the
   line that calls it, and every line tagged with what it does.
 - **What's worth fixing.** HTTP requests with no timeout, AWS list calls that only read the first page, errors that
