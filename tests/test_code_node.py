@@ -10,6 +10,8 @@ from code_node.analysis.graph import code_graph
 from code_node.analysis.mapping import map_code
 from code_node.cli import main
 from code_node.project import entry_points, read_project
+from code_node.report.style import render_page
+from code_node.report.walk import _Walk, walk_stops
 
 HANDLER = '''
 import os
@@ -108,6 +110,32 @@ def test_clicking_a_box_shows_its_code(tmp_path: Path) -> None:
     assert f'<a class="cl" href="#cn-code-{load.id}"' in page and f'id="cn-code-{load.id}"' in page
     assert '<span class="sl lit"><span class="sn">10</span>' in page
     assert "<script" not in page
+
+
+def test_the_steps_are_walked_in_the_order_the_code_runs(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path / "code", {"app.py": HANDLER}))
+    cmap = map_code(project.files, "app.lambda_handler", libraries=project.libraries(), platform="lambda")
+    walk = _Walk(cmap.startup, cmap.steps, functions=cmap.functions, sources=project.files)
+    assert [(line, stack) for line, _, stack in walk_stops(walk)] == [
+        (6, ["app.py, imported"]),  # s3 = boto3.client("s3"), when it's imported
+        (13, ["lambda_handler()"]),
+        (14, ["lambda_handler()"]),  # for record in event["Records"]:
+        (15, ["lambda_handler()"]),  # load(...)
+        (9, ["lambda_handler()", "load()"]),  # into load()
+        (10, ["lambda_handler()", "load()"]),
+        (16, ["lambda_handler()"]),  # back out: requests.post(...)
+    ]
+    html = render_page([walk], "walk")
+    assert 'id="cw0" checked' in html and html.count('name="cnd-walk"') == 7
+    assert '<label class="wbt" for="cw6" title="Run the call and stop at the next line here">Step over' in html
+    assert '<label class="wbt" for="cw6" title="Finish this function">Step out' in html  # from inside load()
+    assert '<label class="sl" for="cw5"><span class="sn">10</span>' in html  # load()'s line 10 jumps to its step
+    assert ".cnd #cw5:checked~.wf2{--k:1}" in html  # and lights the second line of load()
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    page = out.read_text()
+    assert '<input type="radio" class="tr" name="cnd-tab0" id="cnd-tab0-0" checked>' in page
+    assert "Step by step<small>7 steps</small>" in page and "<script" not in page
 
 
 def test_starting_from_a_file(tmp_path: Path, capsys) -> None:

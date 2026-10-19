@@ -1,6 +1,6 @@
 """
-The page code-node draws for one entry point: what it is in a few numbers and sentences, the findings, the graph,
-the step-by-step outline, and the tables of what it reaches.
+The page code-node draws for one entry point: what it is in a few numbers, the findings, the graph,
+and the walk through its steps (in tabs), and the tables of what it reaches.
 """
 
 from __future__ import annotations
@@ -12,12 +12,13 @@ from ..kit.blocks import _Cards, _Findings, _Note, _Table, _Text, _Title, _Tone
 from ..kit.fmt import _plural
 
 from ..analysis.aws_model import _service_name
-from ..analysis.findings import _code_summary, _short_name, _where, code_map_findings
+from ..analysis.findings import _short_name, _where, code_map_findings
 from ..analysis.graph import CodeGraph, code_graph
 from ..analysis.model import AwsCall, CodeMap, ImportUse
 from ..platforms import get_platform
 from .graph import _Graph
-from .outline import _Outline
+from .tabs import _Tabs
+from .walk import _Walk, walk_stops
 
 _IMPORT_ORDER = ("missing", "removed", "layer", "package", "runtime", "stdlib")
 
@@ -145,22 +146,23 @@ def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: i
         blocks.append(_Note(f"{cmap.handler} isn't a function in {cmap.handler_file}. Its functions that look like "
                             f"entry points: {', '.join(cmap.handlers)}."))
     blocks.append(_cards(cmap))
-    summary = _code_summary(cmap)
-    if summary:
-        blocks.append(_Note(" ".join(summary)))
     blocks.append(_Findings(code_map_findings(cmap), empty=(
         "Nothing in the code stands out: what it imports is there, and its HTTP and list calls look complete.")))
     graph = code_graph(cmap, max_functions=max_functions, max_depth=max_depth)
-    if graph.nodes:
-        blocks.append(_Graph(graph, "How it fits together: what comes in, who calls whom, and what it reaches",
-                             sources=sources or {}))
-        blocks.append(_Text(graph.mermaid(), code=True, collapsed=True, title=(
-            "The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request")))
-    if cmap.startup:
-        blocks.append(_Outline(cmap.startup, "When Python imports it (once, before the first call)"))
     entry = _short_name(cmap.entry) if cmap.entry else None
-    blocks.append(_Outline(cmap.steps, f"What each call does, step by step from {entry}()" if entry
-                           else "What each call does", empty="(nothing it can follow)"))
+    walk = _Walk(cmap.startup, cmap.steps, f"What each call does, step by step from {entry}()" if entry
+                 else "What each call does", calls_title=f"Each call, from {entry}()" if entry else "Each call",
+                 functions=cmap.functions, sources=sources or {})
+    stops = len(walk_stops(walk))
+    if graph.nodes:
+        drawn = [_Graph(graph, "How it fits together: what comes in, who calls whom, and what it reaches",
+                        sources=sources or {}),
+                 _Text(graph.mermaid(), code=True, collapsed=True, title=(
+                     "The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request"))]
+        blocks.append(_Tabs([("Graph", f"{len(graph.nodes)} box{'' if len(graph.nodes) == 1 else 'es'}", drawn),
+                             ("Step by step", _plural(stops, "step"), [walk])]))
+    else:
+        blocks.append(walk)
     if cmap.aws:
         blocks += _aws_blocks(cmap)
     if cmap.env:

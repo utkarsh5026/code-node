@@ -24,8 +24,10 @@ models on disk. No module is imported and no request is made.
 - **A graph of the paths.** What comes in, who calls whom, and what each path reaches, arranged left to right. AWS
   calls are coloured by what they do (reads, writes, sends, runs) and a ↻ marks calls made in a loop. Point at a box
   to see only what it's joined to; click it to read its code in a panel on the right.
-- **Every call, step by step.** The entry point's code line by line, with each function it calls folded under the
-  line that calls it, and every line tagged with what it does.
+- **Every call, step by step.** In a tab beside the graph, walk through the code in the order it runs, as a
+  debugger steps: every line that does something in a list, and the function it's in with that line lit. Next goes
+  into each function it calls, Step over and Step out skip them, and once you've clicked a step the arrow keys move
+  through the rest.
 - **What's worth fixing.** HTTP requests with no timeout, AWS list calls that only read the first page, errors that
   get dropped, secrets written in the code, AWS calls in a loop that a batch call would do in fewer requests.
 - **The AWS side.** Every boto3 call it can follow with the IAM permission it needs, and a policy to start from.
@@ -33,7 +35,7 @@ models on disk. No module is imported and no request is made.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/summary-dark.webp">
-  <img alt="The top of a page: cards with the numbers that matter, a summary in sentences, and the findings" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/summary-light.webp">
+  <img alt="The top of a page: cards with the numbers that matter, and the findings" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/summary-light.webp">
 </picture>
 
 ## Pick where to start
@@ -56,8 +58,8 @@ It finds `pyproject.toml` console scripts, Lambda handlers, FastAPI / Flask apps
 command), what runs under `if __name__ == "__main__":`, and functions named `main`. Test files are skipped.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/outline-dark.webp">
-  <img alt="The step-by-step outline: the handler's lines, each tagged with what it does, with the functions it calls folded under them" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/outline-light.webp">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-dark.webp">
+  <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit, with Back, Next and Step out" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
 </picture>
 
 ## Keep it open while you work
