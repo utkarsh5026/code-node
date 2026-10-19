@@ -76,7 +76,7 @@ flowchart LR
   classDef warn stroke:#f59e0b,stroke-width:2px
   class f7,http warn
 
--- When Python imports it (once, before the first call) --
+-- When Python imports it, once, before the first call --
    12  from .notify import announce
            ↳ orders/notify.py, run when it's imported
    11          sns = boto3.client('sns')   # makes an SNS client

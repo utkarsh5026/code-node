@@ -25,9 +25,9 @@ models on disk. No module is imported and no request is made.
   calls are coloured by what they do (reads, writes, sends, runs) and a ↻ marks calls made in a loop. Point at a box
   to see only what it's joined to; click it to read its code in a panel on the right.
 - **Every call, step by step.** In a tab beside the graph, walk through the code in the order it runs, as a
-  debugger steps: every line that does something in a list, and the function it's in with that line lit. Next goes
-  into each function it calls, Step over and Step out skip them, and once you've clicked a step the arrow keys move
-  through the rest.
+  debugger steps: every line that does something in a list, said in plain words, and the function it's in with that
+  line lit. Next goes into each function it calls, Skip call and Finish skip past them, and once you've clicked a
+  step the arrow keys move through the rest.
 - **The graph as Mermaid**, to paste in a Markdown file, a wiki or a pull request.
 
 <picture>
@@ -56,7 +56,7 @@ command), what runs under `if __name__ == "__main__":`, and functions named `mai
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-dark.webp">
-  <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit, with Back, Next and Step out" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
+  <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit, with Back, Next and Finish" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
 </picture>
 
 ## Keep it open while you work

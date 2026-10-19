@@ -7,6 +7,12 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- Step by step is easier to read. Each step in the list says what it does in plain words ("Takes `bucket` from the
+  event", "Reads from S3 (GetObject)", "Goes into `read_orders()`") instead of a cut-off line of code, with step
+  numbers in place of line numbers that jumped between files, and each function as a heading over its steps. A dot
+  marks the steps that reach AWS or the web. The card is roomier: that sentence as its headline, then where it is
+  and what it touches. Next is the one filled button, and Step over and Step out are now Skip call and Finish
+  `read_orders()`.
 - The graph picks its boxes by how much code each one leads to, not by how near it is: from the entry point it
   keeps taking the function that leads to the most lines (and AWS calls, HTTP requests and environment variables)
   below it. On code-node's own command it now draws `make_page`, `map_code`, `page_blocks` and `render_page`
