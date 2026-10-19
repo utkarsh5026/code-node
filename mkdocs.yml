@@ -1,0 +1,75 @@
+site_name: code-node
+site_description: Your code is a graph. See it. Point code-node at a Python repo and get a map of what calls what, and everything it touches.
+site_url: https://utkarsh5026.github.io/code-node/
+repo_url: https://github.com/utkarsh5026/code-node
+repo_name: utkarsh5026/code-node
+edit_uri: edit/main/docs/
+use_directory_urls: false
+
+theme:
+  name: material
+  logo: images/logo.svg
+  favicon: images/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - content.code.copy
+    - navigation.tabs
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Follow the system
+
+extra_css:
+  - stylesheets/extra.css
+extra_javascript:
+  - javascripts/graph.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.blocks.caption
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: [docs/snippets]
+      check_paths: true
+  - pymdownx.tabbed:
+      alternate_style: true
+
+exclude_docs: |
+  snippets/
+
+nav:
+  - Home: index.md
+  - Start: usage.md
+  - Read the map: reading.md
+  - Under the hood: how-it-works.md
+  - Python API: api.md

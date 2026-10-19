@@ -1,0 +1,47 @@
+# Under the hood
+
+It reads your code like a person would, one line at a time. It never runs it.
+{ .gist }
+
+## The trick { #reader }
+
+1. **Load** the entry point's file, the way Python imports it.
+2. **Read** each line with Python's `ast` module.
+3. **Remember** what each name holds: a boto3 client, one of your classes, an env var.
+4. **Follow** calls into your own functions, up to 8 deep.
+5. **Name** each AWS call from botocore's files on disk. No request is made.
+
+So `self.store.save()` opens `Store.save`. And `s3.get_object(...)` becomes **S3 GetObject**, which needs
+`s3:GetObject`.
+
+## What it can't see { #limits }
+
+| Blind spot | Example |
+| --- | --- |
+| Values from outside | a client a library hands back |
+| Run-time choices | a function picked from a dict |
+| Library code | only your folder is read |
+| Dynamic tricks | `getattr(obj, name)`, `exec` |
+
+!!! tip "Worth knowing"
+    A map can miss a call. But everything on it really is in your code. The note at the bottom of each page says
+    when the map was cut short.
+
+## The pieces { #layers }
+
+| Step | Module | In → out |
+| --- | --- | --- |
+| Folder | `project` | path → files, starts |
+| Reader | `analysis.reader` | files → `CodeMap` |
+| Graph | `analysis.graph` | `CodeMap` → `CodeGraph` |
+| Drawing | `report.graph` | `CodeGraph` → SVG |
+| Page | `report.build` | everything → HTML |
+
+??? more "Why two data types?"
+    `CodeMap` is what the code does. `CodeGraph` is boxes and arrows. A new view (an editor panel, an interactive
+    canvas) only needs a `CodeGraph`.
+
+## Where it came from { #origin }
+
+It started as `how_it_works()` in [aws-analyzer](https://github.com/utkarsh5026/aws-analyzer), which maps deployed
+Lambda functions. code-node does the same for any Python repo.
