@@ -5,5 +5,7 @@ ruff==0.17.1
 build==1.6.1
 twine==7.0.0
 readme-renderer[md]==46.0
+# makefile.py's colours and tables
+rich==15.0.0
 # scripts/shots.py only (it also needs Chrome)
 pillow==12.3.0
