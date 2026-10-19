@@ -23,6 +23,7 @@ import webbrowser
 from pathlib import Path
 
 from .pages import GRAPH_DEPTH, GRAPH_FUNCTIONS, PageOptions, make_mermaid, make_page
+from .platforms import platforms
 from .project import (
     EntryPoint, Project, entries_in_file, entry_in_files, entry_points, functions_matching, project_root, read_project,
 )
@@ -48,8 +49,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--serve", action="store_true",
                         help="serve the page on localhost and redraw it whenever a .py file changes")
     parser.add_argument("--port", type=int, default=8765, help="the --serve port (default 8765; 0 picks a free one)")
-    parser.add_argument("--lambda", dest="is_lambda", action="store_true",
-                        help="check what a Lambda handler needs too (found handlers turn this on)")
+    names = [p.name for p in platforms()]
+    parser.add_argument("--platform", choices=names, default="",
+                        help="where the code runs, for that platform's checks (found entry points set it: a Lambda "
+                             "handler is lambda; default plain Python)")
+    parser.add_argument("--lambda", dest="platform", action="store_const", const="lambda",
+                        help="the same as --platform lambda")
     return parser.parse_args(argv)
 
 
@@ -95,8 +100,9 @@ def _pick_entry(project: Project, given: str | None) -> EntryPoint | None:
         return _ask(matches[:30])
     found = entry_points(project)
     if not found:
-        print(f"Found no entry point in {project.root}: no console script, Lambda handler, web app or main(). "
-              "Name one with -e module.function.", file=sys.stderr)
+        kinds = ["console script", "web app", "main()", *(f"{p.title} handler" for p in platforms())]
+        print(f"Found no entry point in {project.root}: no {', '.join(kinds[:-1])} or {kinds[-1]}. Name one with -e "
+              "module.function.", file=sys.stderr)
         return None
     return _ask(found[:30])
 
@@ -191,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     entry = _from_file(project, *in_file) if in_file else _pick_entry(project, args.entry)
     if entry is None:
         return 1
-    options = PageOptions(draw_all=args.all, functions=args.functions, depth=args.depth, is_lambda=args.is_lambda)
+    options = PageOptions(draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform)
     if args.mermaid:
         print(make_mermaid(project.root, entry, options))
         return 0

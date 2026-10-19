@@ -12,5 +12,5 @@ Run these from the repo root and report each result. Fix failures in the code (n
 5. `rm -rf dist && .venv/bin/python -m build -q && .venv/bin/twine check --strict dist/*`
 
 Also check by reading the diff: nothing in `src/code_node/analysis/` does I/O or imports from `report/`, nothing runs
-or imports the code being read, Lambda-only wording stays behind `cmap.platform == "lambda"`, and a user-visible change
+or imports the code being read, Lambda-only wording stays in `src/code_node/platforms/aws_lambda.py`, and a user-visible change
 has a `CHANGELOG.md` bullet under `## [Unreleased]`.

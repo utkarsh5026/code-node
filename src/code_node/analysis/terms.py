@@ -481,41 +481,6 @@ _PLACEHOLDERS = {
 
 _AWS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 
-_LAMBDA_ENV = {  # environment variables Lambda sets itself: reading one needs no setting
-    "AWS_REGION",
-    "AWS_DEFAULT_REGION",
-    "AWS_EXECUTION_ENV",
-    "AWS_LAMBDA_FUNCTION_NAME",
-    "AWS_LAMBDA_FUNCTION_MEMORY_SIZE",
-    "AWS_LAMBDA_FUNCTION_VERSION",
-    "AWS_LAMBDA_INITIALIZATION_TYPE",
-    "AWS_LAMBDA_LOG_GROUP_NAME",
-    "AWS_LAMBDA_LOG_STREAM_NAME",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_SESSION_TOKEN",
-    "AWS_LAMBDA_RUNTIME_API",
-    "LAMBDA_TASK_ROOT",
-    "LAMBDA_RUNTIME_DIR",
-    "_HANDLER",
-    "_X_AMZN_TRACE_ID",
-    "TZ",
-    "LANG",
-    "PATH",
-    "LD_LIBRARY_PATH",
-    "PYTHONPATH",
-    "AWS_XRAY_CONTEXT_MISSING",
-    "AWS_XRAY_DAEMON_ADDRESS",
-    "AWS_LAMBDA_LOG_FORMAT",
-    "AWS_LAMBDA_LOG_LEVEL",
-    "AWS_LAMBDA_MAX_CONCURRENCY",
-    "HOME",
-    "PWD",
-    "_AWS_XRAY_DAEMON_ADDRESS",
-    "_AWS_XRAY_DAEMON_PORT",
-    "AWS_LAMBDA_EXEC_WRAPPER",
-}
-
 LATEST_RUNTIMES = {
     "python": "python3.14"
 }  # the newest Python findings suggest moving to

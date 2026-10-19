@@ -11,10 +11,11 @@ from typing import Any
 from ..kit.blocks import _Cards, _Findings, _Note, _Table, _Text, _Title, _Tone
 from ..kit.fmt import _plural
 
-from ..analysis.aws_model import _event_kind, _service_name
+from ..analysis.aws_model import _service_name
 from ..analysis.findings import _code_summary, _short_name, _where, code_map_findings
 from ..analysis.graph import CodeGraph, code_graph
 from ..analysis.model import AwsCall, CodeMap, ImportUse
+from ..platforms import get_platform
 from .graph import _Graph
 from .outline import _Outline
 
@@ -162,12 +163,14 @@ def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: i
     if cmap.env:
         blocks.append(_Table(["Variable", "Read with", "Where"], _env_rows(cmap), max_rows=0,
                              title="The environment variables it reads (their names: values are never read)"))
-    if cmap.event and cmap.platform == "lambda":
-        kind = _event_kind(cmap.event)
+    if cmap.event:
+        platform = get_platform(cmap.platform)
+        kind = platform.input_kind(cmap.event)
         blocks.append(_Table(["Field", "Read with", "Where"],
                              [[f.label, "needed" if f.required else ".get(...)", f"{f.file} line {f.line}"]
                               for f in cmap.event],
-                             title="What it reads from the event" + (f", which looks like {kind}" if kind else "")))
+                             title=f"What it reads from {platform.input_name}"
+                             + (f", which looks like {kind}" if kind else "")))
     if cmap.functions:
         rows = [[f"{_short_name(f.name)}()", f"{f.file} line {f.line}", f"{f.lines:,}",
                  "\n".join(_called_text(c) for c in f.called_from[:3]) + (

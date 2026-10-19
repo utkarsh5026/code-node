@@ -1,6 +1,6 @@
 """
-The code reader: loads the handler's module the way Python imports it and follows the
-handler, keeping what each name holds, into a CodeMap.
+The code reader: loads the entry point's module the way Python imports it and follows the
+entry point, keeping what each name holds, into a CodeMap.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from .syntax import (
 )
 from .aws_model import _access, _aws_model, _event_label, _iam_action, _service_name
 from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, EnvRead, EventField, ImportUse
+from ..platforms import get_platform
 
 
 _CLI_COMMANDS = ("command", "callback")  # @app.command(): a Typer or click command, run like a route
@@ -98,8 +99,8 @@ class _Collect:
 
 class _CodeReader:
     """
-    Follows a Python function's code from its handler with the ast module, never running it. It keeps track of what
-    each name holds (a boto3 client, part of the event, one of its own functions, an environment variable...) as far
+    Follows a Python function's code from its entry point with the ast module, never running it. It keeps track of what
+    each name holds (a boto3 client, part of its input, one of its own functions, an environment variable...) as far
     as it can tell, so it knows what each line calls, and fills a CodeMap. One per map_code().
     """
 
@@ -138,7 +139,7 @@ class _CodeReader:
         self.event_reads: dict[tuple[str, ...], EventField] = {}
         self.seen: set[Any] = set()
         self.target: set[str] = set()  # the names the statement being read assigns to
-        self.loading = 0  # modules being loaded: what runs now runs when Lambda starts the code
+        self.loading = 0  # modules being loaded: what runs now runs when Python imports the code
         self.runs = 0  # function bodies read
         self.max_depth = _MAP_DEPTH  # calls followed from the entry point
 
@@ -180,7 +181,7 @@ class _CodeReader:
             cmap.params += ["*" + node.args.vararg.arg] if node.args.vararg else []
             cmap.is_async = isinstance(node, ast.AsyncFunctionDef)
             with self._collecting() as got:
-                given = [_Sym("event"), _Sym("context")] if cmap.platform == "lambda" else []
+                given = [_Sym(kind) for kind in get_platform(cmap.platform).inputs]
                 self._run(key, given, {}, None, None, bound=bound)
             cmap.steps = got.calls
         elif not cls_name and (name in mod.scope or self.routes):
@@ -199,8 +200,9 @@ class _CodeReader:
                 step.notes.append(("more", "an object this can't follow, not a function"))
             cmap.steps = [step]
         if cmap.entry is None and mod.tree is not None:
+            takes = len(get_platform(cmap.platform).inputs)
             cmap.handlers = [f"{n.name}()" for n in mod.tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-                             and len(n.args.posonlyargs + n.args.args) == 2]
+                             and (not takes or len(n.args.posonlyargs + n.args.args) == takes)]
         cmap.functions = list(self.reached.values())
         cmap.event = list(self.event_reads.values())
         cmap.routes = [(method, path, key) for method, path, key, _ in self.routes]
@@ -359,7 +361,7 @@ class _CodeReader:
 
     def _if(self, stmt: ast.If, frame: _Frame) -> list[CodeStep]:
         if frame.top and _is_main_guard(stmt.test):
-            return []  # runs only when the file is run as a script, never in Lambda
+            return []  # runs only when the file is run as a script, never when it's imported
         with self._collecting() as head:
             self._eval(stmt.test, frame)
         test = _unparse(stmt.test, 110)
@@ -907,7 +909,7 @@ class _CodeReader:
 
     def _write(self, path_node: Any, node: ast.Call, frame: _Frame) -> None:
         """
-        A file the code writes: on Lambda's disk only /tmp (and a file system mounted under /mnt) can be.
+        A file the code writes, and where: its platform says whether it can be written there.
         """
         prefix = None
         if isinstance(_const(path_node), str):
@@ -921,8 +923,7 @@ class _CodeReader:
         if prefix.startswith("s3://"):
             self._aws("s3", "PutObject", node, frame)
             return
-        ok = prefix.startswith(("/tmp", "/mnt/"))
-        self._spot("write", frame.file, node.lineno, frame.function, _unparse(node, 80), prefix, ok=ok)
+        self._spot("write", frame.file, node.lineno, frame.function, _unparse(node, 80), prefix)
         self.cur.note("file", f"writes {_clip(prefix, 40)}")
 
     def _make_client(self, kind: str, node: ast.Call, frame: _Frame) -> _Sym:

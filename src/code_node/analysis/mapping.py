@@ -70,8 +70,8 @@ def map_code(
     its own functions and modules, keeping track of what each name holds (a boto3 client, part of its input, an
     environment variable...), and returns a CodeMap: what runs at import and on each call, step by step, its AWS calls
     with the IAM permission each needs, the environment variables it reads, the libraries it imports. file is the
-    entry point's file when it's known (else the first file whose path matches its module); platform='lambda' adds
-    the checks only a Lambda handler needs.
+    entry point's file when it's known (else the first file whose path matches its module); platform names where it
+    runs (a code_node.platforms name: 'lambda' adds the checks only a Lambda handler needs), '' for plain Python.
 
         map_code({"app.py": open("app.py").read()}, "app.handler")
     """

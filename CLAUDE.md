@@ -36,6 +36,7 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/cli.py` | The command: argument parsing, picking the entry point (asking on a TTY), saving and opening the page (WSL-aware) |
 | `src/code_node/project.py` | A folder: `read_project` (files, module names Python would use, trees parsed lazily), `entry_points`, `entries_in_file`, `project_root`, `Project.libraries()` |
 | `src/code_node/analysis/` | **Pure, no I/O.** `reader.py` (`_CodeReader`, follows code from the entry point, tracking what each name holds as a `_Sym`), `mapping.py` (`map_code`), `model.py` (`CodeMap` and its dataclasses), `graph.py` (`code_graph` → `CodeGraph`), `findings.py`, `aws_model.py` (botocore service models), `syntax.py`, `terms.py` (constants and limits) |
+| `src/code_node/platforms/` | **Pure, no I/O.** `Platform` (plain Python: the base a plugin overrides), the registry (`register_platform`, `get_platform`, the `code_node.platforms` entry point group), and `aws_lambda.py` (`LambdaPlatform`: handlers, the event, its findings and wording) |
 | `src/code_node/pages.py` | `PageOptions`, `make_page` / `make_mermaid`: read the folder, map, draw (what the command and the server share) |
 | `src/code_node/serve.py` | `--serve`: `LivePage` (the latest page, a version, a Condition), a polling watcher thread, `ThreadingHTTPServer` with `/` and `/events` (Server-Sent Events) |
 | `src/code_node/report/` | Drawing: `graph.py` (the SVG layout), `outline.py` (the step tree), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
@@ -46,15 +47,17 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `docs/`, `mkdocs.yml` | The docs site (MkDocs Material), published by `.github/workflows/pages.yml` |
 
 The two contracts are `CodeMap` (what the code does) and `CodeGraph` (boxes and arrows). Keep `analysis/` free of
-rendering and I/O so another front end only needs those two.
+rendering and I/O (it uses `platforms/`, which is pure too) so another front end only needs those two.
 
 ## Rules
 
 - **Never run the code being read.** No `import`, `exec` or subprocess on it. botocore is read for its service models
   only, and it stays optional at run time (`_aws_model` returns None without it).
-- **The entry point decides the platform.** Lambda-only findings and the event box are gated on
-  `cmap.platform == "lambda"`, set when the entry point is a found Lambda handler or with `--lambda`. Write new
-  wording for any code, and keep Lambda wording behind that gate.
+- **Generic first, platforms as plugins.** The reader, findings, graph and page are for any Python. What's
+  different where the code runs (entry points, what they're called with, findings, wording) is a `Platform` in
+  `platforms/`, looked up with `get_platform(cmap.platform)`. `cmap.platform` comes from the entry point a platform
+  found (`EntryPoint.platform`), or `--platform` / `--lambda`. Never test `cmap.platform == "lambda"` outside
+  `platforms/aws_lambda.py`: add a hook to `Platform` instead, with plain-Python wording as its default.
 - **Partial, never a traceback.** `map_code` catches what the reader can't follow and records it in `cmap.limited`.
   The page says what was cut short.
 - **No JavaScript in the page.** Interactivity is CSS (`:has()`, `<details>`), as in aws-analyzer. The one exception
@@ -90,7 +93,8 @@ rendering and I/O so another front end only needs those two.
 ## Tests
 
 `tests/test_code_node.py` writes small projects into `tmp_path` and checks entry point discovery, the map (functions,
-AWS calls, imports), the graph's limits, and the command end to end (`main([...])` with `--no-open -o`). Add a test
+AWS calls, imports), the graph's limits, plain Python against `platform="lambda"`, a plugin platform, and the
+command end to end (`main([...])` with `--no-open -o`). Add a test
 there for each new kind of entry point or anything new the reader follows.
 
 ## Releasing

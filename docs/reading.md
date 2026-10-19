@@ -66,9 +66,14 @@ says what it does.
 | File won't parse | Imports of it fail |
 
 ??? more "Lambda-only checks"
-    These only run for Lambda handlers:
+    These come from the Lambda platform, so they run for a found Lambda handler, or any entry point with
+    `--platform lambda`. Plain Python never gets them:
 
     - the handler can't take `(event, context)`
     - an `async def` handler
     - writing outside `/tmp`
     - a new client made on every call
+    - sleeping, which Lambda bills for
+
+    The other findings are worded for where the code runs: an HTTP request without a timeout "hangs" in plain Python,
+    and on Lambda "waits until Lambda stops it at its timeout".

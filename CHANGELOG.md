@@ -5,6 +5,20 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ## [Unreleased]
 
+### Changed
+
+- Lambda is now a platform plugin on top of a generic reader. Plain Python code no longer gets any Lambda check or
+  wording (a file written outside `/tmp` used to be marked amber in the graph), and Lambda handlers get the same
+  page as before.
+- `--platform NAME` runs a platform's checks whatever the entry point is; `--lambda` is short for
+  `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
+
+### Added
+
+- Platforms: subclass `code_node.Platform` to say what another place code runs adds (its entry points, what
+  they're called with, its findings and wording), and add it with `register_platform` or a `code_node.platforms`
+  entry point in a package's `pyproject.toml`.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added

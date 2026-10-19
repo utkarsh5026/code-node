@@ -1,5 +1,5 @@
 """
-The code map as a CodeGraph: its inputs, the handler and its functions, and what it
+The code map as a CodeGraph: its inputs, the entry point and its functions, and what it
 reaches, with .mermaid().
 """
 
@@ -12,11 +12,11 @@ from dataclasses import dataclass, field
 from ..kit.fmt import _plural
 from ..kit.text import _clip
 
-from .terms import _LAMBDA_ENV
 from .syntax import _a
-from .aws_model import _event_kind, _service_name
+from .aws_model import _service_name
 from .model import AwsCall, CodeMap, CodeSpot
-from .findings import _listed, _short_name, code_map_findings
+from .findings import _listed, _short_name
+from ..platforms import get_platform
 
 
 @dataclass
@@ -139,12 +139,11 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     graph = CodeGraph()
     if cmap.note or cmap.entry is None:
         return graph
-    fn = cmap.function
+    platform = get_platform(cmap.platform)
     entry = cmap.entry
-    found = code_map_findings(cmap)
     by_name = {f.name: f for f in cmap.functions}
     entry_is_function = entry in by_name
-    start_key = "<start>"  # a module's top level: what runs when Lambda loads the code
+    start_key = "<start>"  # a module's top level: what runs when Python imports the code
 
     # who calls whom; a caller that isn't one of its functions is a module's top level, which runs at start-up
     parents: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -207,18 +206,16 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     for spot in cmap.spots:
         line = f" (line {spot.line})"
         why = ("an HTTP request without a timeout" if spot.kind == "http" and not spot.ok else
-               "drops every error" if spot.kind == "swallow" else
-               f"writes {spot.detail} outside /tmp" if spot.kind == "write" and not spot.ok else "")
+               "drops every error" if spot.kind == "swallow" else "")
         if why:
             reasons[spot.function].append(why + line)
     for call in cmap.aws:
         if call.pages == "one" and call.operation.startswith(("List", "Scan", "Query")) and not call.guessed:
             reasons[call.function].append(f"{call.label} reads only its first page (line {call.line})")
-    handler_reasons = [m.split(":")[0] for level_, m in found if level_ == "warn" and (
-        "is async def" in m or "Lambda passes two" in m)]
-    unset = set()
-    if fn is not None and fn.env_error is None:
-        unset = {e.name for e in cmap.env if e.required and e.name not in fn.env_names and e.name not in _LAMBDA_ENV}
+    for function, why in platform.marks(cmap).items():
+        reasons[function] += why
+    handler_reasons = [m.split(":")[0] for level_, m in platform.entry_findings(cmap) if level_ == "warn"]
+    unset = platform.unset_env(cmap)
 
     def warned_tip(tip: str, why: list[str]) -> str:
         return tip + ("\nA warning is about it: " + "; ".join(why) if why else "")
@@ -239,7 +236,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             label = ("; ".join(routes[f.name]) if caller == entry and f.name in routes else
                      "line " + ", ".join(lines[:3]) + (" …" if len(lines) > 3 else "") if lines else "")
             edges.append(GraphEdge(source, ids[f.name], "call", label))
-    has_input = bool(cmap.event) or cmap.platform == "lambda"
+    has_input = bool(cmap.event) or platform.draws_input
     if has_input:
         edges.insert(0, GraphEdge("event", entry_id, "event", "its input"))
 
@@ -325,7 +322,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     labels = [f.label for f in cmap.event]
     leaves = [label for label in labels if not any(
         other.startswith((label + "[", label + ".", label + " (")) for other in labels)]
-    kind = _event_kind(cmap.event)
+    kind = platform.input_kind(cmap.event)
     if has_input:
         graph.nodes.append(GraphNode(
             "event", "event", kind[0].upper() + kind[1:] if kind else "Its input", "what it's called with",
@@ -336,7 +333,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         graph.nodes.append(GraphNode(
             "env", "env", "Environment", "variables it reads", _listed_lines(names), "warn" if unset else "",
             warned_tip("Environment variables it reads (names only)",
-                       [f"{name} isn't set on the function" for name in names if name in unset]),
+                       [f"{name} isn't set where it runs" for name in names if name in unset]),
             flags={name: "not set" for name in names if name in unset}))
     if uses_start:
         services_made = list(dict.fromkeys(made))

@@ -93,4 +93,4 @@ Without `-o`, pages are saved in `~/.cache/code-node/`. On WSL they open in your
 | `--mermaid` | Print Mermaid |
 | `-o`, `--out` | Where to save |
 | `--no-open` | Don't open a browser |
-| `--lambda` | Run the Lambda checks |
+| `--platform`, `--lambda` | Run a platform's checks |

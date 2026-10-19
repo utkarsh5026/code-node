@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .platforms import platforms
+
 _SKIPPED_FOLDERS = frozenset({
     ".git", ".hg", ".svn", ".venv", "venv", "env", ".env", "node_modules", "__pycache__", ".tox", ".nox",
     ".mypy_cache", ".pytest_cache", ".ruff_cache", "build", "dist", "site-packages", ".eggs", ".idea", ".vscode",
@@ -20,16 +22,13 @@ _MAX_FILES = 5_000  # Python files read from one folder, at most
 
 _MAX_FILE_BYTES = 2 * 1024 * 1024  # a bigger .py file is generated code: skipped
 
-_LAMBDA_HANDLERS = ("lambda_handler", "handler")
-
 _MAIN_NAMES = ("main", "run", "cli", "app")
 
 _IMPORT_RE = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import|import[ \t]+([\w., \t]+))", re.M)
 
 _CLI_APPS = ("Typer",)
 
-_WEB_APPS = ("FastAPI", "Flask", "APIRouter", "Blueprint", "Chalice", "APIGatewayRestResolver",
-             "APIGatewayHttpResolver", "ALBResolver", "LambdaFunctionUrlResolver")
+_WEB_APPS = ("FastAPI", "Flask", "APIRouter", "Blueprint")  # and those a platform adds (Chalice for Lambda)
 
 
 @dataclass
@@ -42,7 +41,7 @@ class EntryPoint:
     why: str  # 'a console script (code-node)', 'runs under if __name__ == "__main__"', 'a Lambda handler'
     file: str
     line: int
-    is_lambda: bool = False
+    platform: str = ""  # the platform that found it ('lambda' for a Lambda handler): its checks run on the code
 
 
 @dataclass
@@ -185,7 +184,8 @@ def _web_apps(tree: ast.Module) -> list[tuple[str, int, str]]:
             continue
         func = node.value.func
         made = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
-        if made in _WEB_APPS or made in _CLI_APPS:
+        web = made in _WEB_APPS or any(made in platform.web_apps for platform in platforms())
+        if web or made in _CLI_APPS:
             kind = "a CLI app: each command" if made in _CLI_APPS else "a web app: each route"
             found += [(t.id, node.lineno, kind) for t in node.targets if isinstance(t, ast.Name)]
     return found
@@ -209,8 +209,8 @@ def _is_test(rel: str) -> bool:
 
 def entry_points(project: Project) -> list[EntryPoint]:
     """
-    Where the code starts, best first: console scripts, Lambda handlers, web apps, then what runs under
-    `if __name__ == "__main__":` and functions named main.
+    Where the code starts, best first: console scripts, the entry points platforms find (Lambda handlers), web apps,
+    then what runs under `if __name__ == "__main__":` and functions named main.
     """
     found: dict[str, EntryPoint] = {}
     by_module = {module: rel for rel, module in project.modules.items()}
@@ -234,11 +234,9 @@ def entry_points(project: Project) -> list[EntryPoint]:
     code = {rel: tree for rel, tree in project.trees.items() if not _is_test(rel)}
     for rel, tree in code.items():
         module = project.modules[rel]
-        functions = _module_functions(tree)
-        for name in _LAMBDA_HANDLERS:
-            node = functions.get(name)
-            if node is not None and len(node.args.posonlyargs + node.args.args) == 2:
-                add(EntryPoint(f"{module}.{name}", "a Lambda handler (event, context)", rel, node.lineno, True))
+        for platform in platforms():
+            for name, line, why in platform.find_entries(module, tree):
+                add(EntryPoint(f"{module}.{name}", why, rel, line, platform.name))
         for name, line, kind in _web_apps(tree):
             add(EntryPoint(f"{module}.{name}", kind, rel, line))
     for rel, tree in code.items():
@@ -299,16 +297,17 @@ def project_root(file: Path) -> Path:
 def entries_in_file(project: Project, rel: str, function: str = "") -> list[EntryPoint]:
     """
     Where to start in one file, best first: the function named (function or Class.method), else what its
-    `if __name__ == "__main__":` block calls, its Lambda handlers and apps, functions named main, then every other
-    function in it from the top.
+    `if __name__ == "__main__":` block calls, its platforms' entry points (Lambda handlers) and apps, functions named
+    main, then every other function in it from the top.
     """
     module = project.modules.get(rel)
     tree = project.trees.get(rel)
     if module is None or tree is None:
         return []
-    if function:
-        return [EntryPoint(f"{module}.{function}", "named", rel, 0)]
     found = [e for e in entry_points(project) if e.file == rel]
+    if function:
+        known = next((e for e in found if e.name == f"{module}.{function}"), None)  # a handler keeps its platform
+        return [EntryPoint(f"{module}.{function}", "named", rel, 0, known.platform if known else "")]
     named = {e.name for e in found}
     functions = _module_functions(tree)
     for name in _main_guard_calls(tree):
