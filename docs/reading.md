@@ -50,9 +50,11 @@ Read it left to right.
 The tab beside the graph walks through the code in the order it runs, as a debugger steps through it.
 { .gist }
 
-The list on the left has every line that does something: what runs when Python imports the code, then each call
-from the entry point, with each of its own functions under the line that calls it. On the right is the function the
-current step is in, with that line lit, and a card saying what the line does and which calls it's inside.
+The list on the left has every line that does something, each said in a few plain words ("Takes `bucket` from the
+event", "Reads from S3 (GetObject)"): what runs when Python imports the code, then each call from the entry point,
+with each of its own functions as a heading over its steps. A dot marks the steps that reach AWS or the web, in the
+graph's colours. On the right is a card saying what the current step does and which calls it's inside, and under it
+the function's code with that line lit.
 
 ![The Step by step tab](images/steps-light.webp#only-light){ loading=lazy }
 ![The Step by step tab](images/steps-dark.webp#only-dark){ loading=lazy }
@@ -61,8 +63,8 @@ current step is in, with that line lit, and a card saying what the line does and
 | --- | --- |
 | Next | The next line that runs, into a function when the line calls one |
 | Back | The step before |
-| Step over | The next line in the same function, past what the line calls |
-| Step out | Where the function returns to |
+| Skip call | The next line in the same function, past what the line calls (a debugger's step over) |
+| Finish | Where the function returns to (step out) |
 
 !!! tip "Worth knowing"
     Click a step, in the list or a numbered line in the code, then use the arrow keys to step through the rest.

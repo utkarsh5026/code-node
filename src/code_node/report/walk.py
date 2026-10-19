@@ -1,6 +1,7 @@
 """
 _Walk: the steps as a walk through the code, one line at a time, as a debugger steps: a list of every step on the left,
-and on the right the function the current step is in, its line lit, with Back, Next, Step over and Step out.
+each said in a few plain words, and on the right what the current one does and the function it's in, its line lit,
+with Back, Next, Skip call (step over) and Finish (step out).
 
 No JavaScript: each step is a radio button (one group, so once one has focus the arrow keys step through them).
 Each function's steps sit in a box of their own, with the function's code drawn once at the end of it; the CSS shows
@@ -10,6 +11,7 @@ line as you step, and a step costs the same however many there are.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from ..kit.blocks import _Report, _draws
 from ..kit.fmt import _plural
@@ -19,13 +21,12 @@ from ..kit.text import _esc
 
 from ..analysis.findings import _short_name
 from ..analysis.model import CodeFunction, CodeStep
+from ..analysis.syntax import _a
 from .editor import editor_name, open_at
 from .outline import _NOTE_TIPS, _Outline, _chips_html, _outline_lines
 from .style import _ROOT
 
 _GROUP = "cnd-walk"  # the radio buttons' name: one group, so the arrow keys move through every step
-
-_LIST_CHIPS = 2  # tags a step shows in the list; its card shows them all
 
 _FRAME_LINES = 160  # a function or file longer than this shows only the lines around its steps
 _FRAME_AROUND = 4  # lines kept above and below each step then
@@ -39,6 +40,31 @@ _KIND_SAYS = {  # what a line of each kind means, said once on its card
     "raise": "Raises an error: the function stops here, and so does each caller that doesn't catch it.",
 }
 
+_AWS_DOES = {  # an AWS call, by what it does, as a sentence: 'Reads from S3 (GetObject)'
+    "reads": "Reads from {}", "writes": "Writes to {}", "sends": "Sends a message with {}",
+    "runs": "Starts something in {}", "signs": "Makes a signed link for {}",
+}
+
+_SAID_FIRST = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "http", "command", "file", "sleep",
+               "client")  # the tags that say what a line is for, before the calls and names in it
+
+_DOTS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "http")  # what's marked in the list
+
+_HEADERS = [  # a block's first line -> what it does: (pattern, sentence with {} for what it matched)
+    (r"(?:async )?for (.+?) in (.+):", "Goes through each {} in {}"),
+    (r"while (.+):", "Repeats while {}"),
+    (r"(?:el)?if (.+):", "If {}"),
+    (r"match (.+):", "Picks a case for {}"),
+    (r"case (.+):", "Case {}"),
+    (r"(?:async )?with (.+):", "With {}"),
+    (r"except (.+?)(?: as \w+)?:", "If it fails with {}"),
+    (r"return (.+)", "Returns {}"),
+    (r"raise (.+)", "Raises {}"),
+]
+
+_BARE = {"try:": "Tries the lines under it", "except:": "If anything under the try fails", "else:": "Otherwise",
+         "finally:": "Finally, whatever happened above", "return": "Returns", "raise": "Raises the error again"}
+
 
 @dataclass
 class _Walk:
@@ -51,7 +77,7 @@ class _Walk:
     startup: list[CodeStep]
     steps: list[CodeStep]
     title: str = ""
-    startup_title: str = "When Python imports it (once, before the first call)"
+    startup_title: str = "When Python imports it, once, before the first call"
     calls_title: str = "Each call"
     functions: list[CodeFunction] = field(default_factory=list)
     sources: dict[str, str] = field(default_factory=dict)
@@ -158,7 +184,7 @@ class _Walker:
 
 def _after(stops: list[_Stop], i: int, deeper_than: int) -> int | None:
     """
-    The first stop after i in no more than deeper_than calls: where Step over and Step out go.
+    The first stop after i in no more than deeper_than calls: where Skip call and Finish go.
     """
     return next((j for j in range(i + 1, len(stops)) if len(stops[j].stack) <= deeper_than), None)
 
@@ -167,25 +193,92 @@ def _name_of(step: CodeStep) -> str:
     return f"{_short_name(step.name)}()" if step.kind == "def" else step.file
 
 
-def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str]) -> str:
+def _code(text: str) -> str:
+    return f"<code>{_esc(text)}</code>"
+
+
+def _note_said(kind: str, text: str) -> str:
     """
-    What the stop's line does, in a sentence or two (HTML).
+    One of a line's tags as the start of a sentence (HTML): 'Reads from S3 (GetObject)', 'Sends an HTTP POST request'.
+    """
+    if kind.startswith("aws-"):
+        service, _, operation = text.rpartition(" ")
+        if " waiter" in service:
+            return f"Waits for {_esc(text)}"
+        return _esc(_AWS_DOES.get(kind[4:], "Calls {}").format(service or text)) + (
+            f" ({_esc(operation)})" if service else "")
+    if kind == "http":
+        verb, _, where = text.removeprefix("HTTP ").partition(" ")
+        return f"Sends an HTTP {_esc(verb)} request" + (f" to {_code(where)}" if where else "")
+    if kind == "env":
+        return f"Reads the environment variable {_code(text)}"
+    if kind == "event":
+        return f"Reads {_code(text)} from the event"
+    return _esc(text[:1].upper() + text[1:])
+
+
+def _headline(stop: _Stop) -> tuple[str, str]:
+    """
+    What the stop does, in a few plain words (HTML), and the tag it's about, if any: 'Reads from S3 (GetObject)',
+    'Goes through each record in event['Records']', 'Takes bucket from the event'.
+    """
+    step = stop.step
+    if step.kind == "module":
+        return f"Runs {_code(step.file)}, once", ""
+    if step.kind == "def":
+        name = _code(_name_of(step))
+        if stop.caller is None:
+            return (f"Each call starts in {name}" if stop.chapter else f"Runs {name}"), ""
+        return (f"Calls {name} again" if step.seen else f"Goes into {name}"), ""
+    if step.kind != "do":
+        bare = _BARE.get(step.code.strip())
+        if bare:
+            return bare, ""
+        for pattern, sentence in _HEADERS:
+            found = re.fullmatch(pattern, step.code.strip())
+            if found:
+                return sentence.format(*(_code(part) for part in found.groups())), ""
+        return f"Runs {_code(step.code)}", ""
+    for kind, text in step.notes:
+        if kind in _SAID_FIRST:
+            return _note_said(kind, text), kind
+    modules = [call for call in step.calls if call.kind == "module"]
+    if modules:
+        return "Imports " + ", ".join(_code(call.file) for call in modules), ""
+    if len(step.calls) == 1 and step.calls[0].name.endswith(".__init__"):
+        made = _short_name(step.calls[0].name)
+        return f"Makes {_a(made)} {_code(made)}", ""
+    if step.calls:
+        return "Calls " + ", ".join(_code(_name_of(call)) for call in step.calls), ""
+    for kind, text in step.notes:
+        if kind in ("log", "warn"):
+            return _note_said(kind, text), kind
+    for name, what in step.holds:
+        if what.startswith("event "):
+            return f"Takes {_code(name)} from the event", ""
+        if what.startswith("env "):
+            return f"Takes {_code(name)} from the environment", ""
+        return f"Sets {_code(name)} to {_esc(what)}", ""
+    if step.notes:
+        return _note_said(*step.notes[0]), step.notes[0][0]
+    return f"Runs {_code(step.code)}", ""
+
+
+def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], over: bool) -> str:
+    """
+    What the stop's line does, in a sentence or two (HTML), under its headline. over: it has a Skip call button.
     """
     stop = stops[i]
     step = stop.step
     if step.kind == "module":
-        return f"<p>Python runs <b>{_esc(step.file)}</b> from the top, once, the first time it's imported.</p>"
+        return "<p>Python runs this file from the top, once, the first time something imports it.</p>"
     if step.kind == "def":
-        name = f"<code>{_esc(_name_of(step))}</code>"
-        if stop.caller is None:
-            said = f"Each call starts here, in {name}." if stop.chapter else f"Python runs {name} here."
-        else:
-            calling = stops[stop.caller]
-            when = (f", only when <code>{_esc(' and '.join(step.when))}</code>" if step.when else "")
-            said = (f"<code>{_esc(stop.stack[-2][0])}</code> calls {name} on line {calling.step.line}{when}"
-                    + (": its steps follow." if step.steps and not step.seen else "."))
+        said = []
+        if stop.caller is not None:
+            when = f", only when {_code(' and '.join(step.when))}" if step.when else ""
+            said.append(f"Called from {_code(stop.stack[-2][0])}, line {stops[stop.caller].step.line}{when}.")
         doc = docs.get(step.name, "")
-        out = f"<p>{said}</p>" + (f'<p class="wdoc">{_esc(doc)}</p>' if doc else "")
+        out = "".join(f"<p>{line}</p>" for line in said) + (f'<p class="wdoc">{_esc(doc)}</p>' if doc else "")
         if step.seen and step.name in first:
             out += (f'<p>Its steps are shown where it\'s first called: <label class="wjump" for="cw{first[step.name]}">'
                     f"step {first[step.name] + 1}</label>.</p>")
@@ -193,45 +286,45 @@ def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str
             out += "<p>There's nothing in it to follow.</p>"
         return out
     said = []
+    headline_tag = next((kind for kind, _ in step.notes if kind in _DOTS), "")
+    if headline_tag and step.kind == "do":  # what it reaches outside the code: 'An AWS call that reads.'
+        tip = _NOTE_TIPS[headline_tag]
+        said.append(_esc(tip[:1].upper() + tip[1:]) + ".")
     if step.kind == "return":
-        here = f"<code>{_esc(stop.stack[-1][0])}</code>" if stop.stack else "The function"
         entered = stops[stop.stack[-1][1]] if stop.stack else None
         if entered is not None and entered.caller is not None and len(stop.stack) > 1:
-            said.append(f"{here} ends here and hands this back to <code>{_esc(stop.stack[-2][0])}</code>, "
+            said.append(f"{_code(stop.stack[-1][0])} ends here and hands this back to {_code(stop.stack[-2][0])}, "
                         f"line {stops[entered.caller].step.line}.")
         else:
-            said.append(f"{here} ends here: this is what the call returns.")
+            said.append("The function ends here: this is what the call returns.")
     elif step.kind == "else":
         said.append("Runs last, whether or not a line above it raised." if step.code.startswith("finally")
-                    else "The other way: runs when the branch or loop above it doesn't.")
+                    else "Runs when the branch or loop above it doesn't.")
     elif step.kind in _KIND_SAYS:
         said.append(_KIND_SAYS[step.kind])
-    if step.calls:
-        names = ", ".join(f"<code>{_esc(_name_of(call))}</code>" for call in step.calls)
-        said.append(f"Calls {names}: Next goes into it, Step over runs it and stops at the next line here."
-                    if len(step.calls) == 1 else
-                    f"Calls {names}: Next goes into each, Step over runs them and stops at the next line here.")
+    own = [call for call in step.calls if call.kind == "def"]
+    if own:
+        it = "it" if len(own) == 1 else "each"
+        said.append(f"Next goes into {it} to show its steps"
+                    + ("; Skip call runs it without going in." if over and len(own) == 1 else
+                       "; Skip call runs them without going in." if over else "."))
     return "".join(f"<p>{line}</p>" for line in said)
 
 
-def _notes_html(step: CodeStep) -> str:
+def _facts_html(step: CodeStep, said: str) -> str:
     """
-    Each tag on the line with what it means: 'S3 GetObject reads · an AWS call that reads'.
+    What else the line touches, beyond its headline, and what it knows of values, a row each:
+    'env ORDERS_TABLE  an environment variable it reads', 'bucket  holds  event Records[].s3.bucket.name',
+    'Bucket  comes from  event Records[].s3.bucket.name'.
     """
-    rows = [f"<li>{_chips_html([note])}<span>{_esc(_NOTE_TIPS.get(note[0], ''))}</span></li>" for note in step.notes]
-    return f'<ul class="wnotes">{"".join(rows)}</ul>' if rows else ""
-
-
-def _values_html(step: CodeStep) -> str:
-    """
-    What the line's names now hold and where its AWS calls' arguments come from, as the reader worked them out:
-    'bucket  holds  event Records[].s3.bucket.name', 'S3 PutObject Bucket  ←  env ARCHIVE_BUCKET'.
-    """
-    rows = [f"<li><code>{_esc(name)}</code><span>holds</span>{_esc(what)}</li>" for name, what in step.holds]
-    one_call = len({arg.rsplit(" ", 1)[0] for arg, _ in step.given}) == 1  # its tag says which: just 'Bucket'
-    rows += [f"<li><code>{_esc(arg.rsplit(' ', 1)[-1] if one_call else arg)}</code><span>←</span>{_esc(source)}</li>"
-             for arg, source in step.given]
-    return f'<ul class="wvals">{"".join(rows)}</ul>' if rows else ""
+    rows = [f'<li>{_chips_html([note])}<span class="wfm">{_esc(_NOTE_TIPS.get(note[0], ""))}</span></li>'
+            for note in step.notes if note[0] != said and note[0] != "more"]
+    rows += [f'<li><span class="wfm">{_esc(text)}</span></li>' for kind, text in step.notes if kind == "more"]
+    rows += [f'<li>{_code(name)}<span class="wfv">holds</span>{_esc(what)}</li>' for name, what in step.holds]
+    one_call = len({arg.rsplit(" ", 1)[0] for arg, _ in step.given}) == 1  # its headline says which: just 'Bucket'
+    rows += [f'<li>{_code(arg.rsplit(" ", 1)[-1] if one_call else arg)}<span class="wfv">comes from</span>'
+             f"{_esc(source)}</li>" for arg, source in step.given]
+    return f'<ul class="wfacts">{"".join(rows)}</ul>' if rows else ""
 
 
 def _button(target: int | None, text: str, css: str = "", tip: str = "") -> str:
@@ -247,30 +340,37 @@ def _button(target: int | None, text: str, css: str = "", tip: str = "") -> str:
 
 def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], editor: str = "") -> str:
     """
-    The current stop's card: Back and Next, where it is (the calls it's inside, each a link back to its start) and
-    what its line does.
+    The current stop's card: Back and Next (and Skip call and Finish, past what a line calls), what the line does in
+    plain words, the calls it's inside (each a link back to its start), and what it touches.
     """
     stop, total = stops[i], len(stops)
     depth = len(stop.stack)
     over = _after(stops, i, depth) if stop.step.calls else None
+    over = over if over != i + 1 else None
     out = _after(stops, i, depth - 1) if depth > 1 else None
-    nav = [_button(i - 1 if i else None, "‹ Back"),
-           f'<span class="wpos">Step <b>{i + 1}</b> of {total}</span>',
-           _button(i + 1 if i + 1 < total else None, "Next ›", "go")]
-    if over is not None and over != i + 1:
-        nav.append(_button(over, "Step over", tip="Run the call and stop at the next line here"))
+    nav = [_button(i - 1 if i else None, "← Back"),
+           _button(i + 1 if i + 1 < total else None, "Next →", "go"),
+           f'<span class="wpos">Step <b>{i + 1}</b> of {total}</span><span class="wgap"></span>']
+    if over is not None:
+        nav.append(_button(over, "Skip call", tip="Run what this line calls without going in, and stop at the next "
+                                                  "line here"))
     if out is not None:
-        nav.append(_button(out, "Step out", tip="Finish this function"))
-    href = open_at(editor, stop.step.file, stop.step.line) if stop.step.file else ""
-    if href:
-        line = f"line {stop.step.line}" if stop.step.line else stop.step.file
-        nav.append(f'<a class="wed" href="{_esc(href)}" title="Open {_esc(stop.step.file)} at this line in '
-                   f'{_esc(editor_name(editor))}">{line} ↗</a>')
+        name = stop.stack[-1][0]
+        nav.append(_button(out, f"Finish <code>{_esc(name)}</code>",
+                           tip=f"Run the rest of {name} and go back to where it was called"))
+    headline, said = _headline(stop)
     trail = []
     for k, (name, at) in enumerate(stop.stack):
         css = ' class="here"' if k == depth - 1 else ""
         trail.append(f'<label for="cw{at}"{css}>{_esc(name)}</label>')
-    stack = '<span class="wsep">›</span>'.join(trail)
+    where = '<span class="wsep">›</span>'.join(trail)
+    href = open_at(editor, stop.step.file, stop.step.line) if stop.step.file else ""
+    line = f"line {stop.step.line}" if stop.step.line else stop.step.file
+    if href:
+        line = (f'<a class="wed" href="{_esc(href)}" title="Open {_esc(stop.step.file)} at this line in '
+                f'{_esc(editor_name(editor))}">{line} ↗</a>')
+    elif line:
+        line = f'<span class="wln">{_esc(line)}</span>'
     then = ""
     if i + 1 < total:
         nxt = stops[i + 1]
@@ -282,8 +382,9 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
     else:
         then = "That's the last step."
     return (f'<div class="wc"><div class="wnav">{"".join(nav)}</div>'
-            f'<div class="wstk">{stack}</div><div class="wsay">{_says(stops, i, first, docs)}'
-            f"{_notes_html(stop.step)}{_values_html(stop.step)}</div>"
+            f'<div class="whead">{headline}</div>'
+            f'<div class="wstk"><span class="win">In</span>{where}{line}</div>'
+            f'<div class="wsay">{_says(stops, i, first, docs, over is not None)}{_facts_html(stop.step, said)}</div>'
             + (f'<div class="wthen">{_esc(then)}</div>' if then else "") + "</div>")
 
 
@@ -338,26 +439,24 @@ def _frame_html(index: int, frame: _Frame, rows: list[tuple[int, str]]) -> str:
 
 def _item_html(stops: list[_Stop], i: int, card: str) -> str:
     """
-    A step in the list: its radio button, then its line number and code (or the function it enters) and its first tags
-    as the button's label, then its card, which shows (beside the list) while the button is checked.
+    A step in the list: its radio button, then its number and what it does in a few words (or, for a function it goes
+    into, the function's name and file, as a heading over its steps) as the button's label, then its card, which shows
+    (beside the list) while the button is checked.
     """
     stop = stops[i]
     step = stop.step
-    if step.kind == "module":
-        text = f'<span class="won">↳ <b>{_esc(step.file)}</b> <span class="wof">runs when it\'s imported</span></span>'
-    elif step.kind == "def" and stop.caller is not None:
-        text = (f'<span class="won">↳ <b>{_esc(_name_of(step))}</b> <span class="wof">{_esc(step.file)}'
-                + (", shown before" if step.seen else "") + "</span></span>")
+    if step.kind in ("def", "module"):
+        name = step.file if step.kind == "module" else _name_of(step)
+        where = "runs when it's imported" if step.kind == "module" else step.file
+        text = (f'<span class="wtx"><b>{_esc(name)}</b><span class="wof">'
+                f'{_esc("again, shown before" if step.seen else where)}</span></span>')
     else:
-        text = f'<code class="wcd">{_python_html(step.code)}</code>'
-    notes = step.notes if step.kind != "def" or stop.caller is None else []
-    chips = _chips_html(notes[:_LIST_CHIPS]) + (
-        f'<span class="wmore">+{len(notes) - _LIST_CHIPS}</span>' if len(notes) > _LIST_CHIPS else "")
+        headline, said = _headline(stop)
+        dot = f'<span class="wdot d-{said}" title="{_esc(_NOTE_TIPS.get(said, ""))}"></span>' if said in _DOTS else ""
+        text = f'<span class="wtx">{headline}</span>{dot}'
     checked = " checked" if i == 0 else ""
-    tags = f'<span class="wtags">{chips}</span>' if chips else ""
-    line = "" if step.kind == "module" else step.line or ""
     return (f'<input type="radio" class="wr" name="{_GROUP}" id="cw{i}"{checked}><label class="wil k-{_esc(step.kind)}" '
-            f'for="cw{i}" style="--d:{stop.depth}"><span class="ln">{line}</span><span class="wx">{text}{tags}</span>'
+            f'for="cw{i}" style="--d:{stop.depth}"><span class="wno">{i + 1}</span><span class="wx">{text}</span>'
             f"</label>{card}")
 
 
@@ -410,9 +509,8 @@ def _walk_html(block: _Walk, report: _Report) -> str:
             report.rules.add(f".{root} #cw{i}:checked~.wf{stop.frame}{{--k:{at}}}")
     while opened:
         out.append(drawn[opened.pop()] + "</div>")
-    sub = (f'<div class="wsub">{_plural(len(stops), "step")} in the order the code runs. Next goes into each of its '
-           "own functions it calls, Step over runs one without going in. Click a step (in the list or in the code), "
-           "then <kbd>↑</kbd> <kbd>↓</kbd> step through.</div>")
+    sub = (f'<div class="wsub">{_plural(len(stops), "step")}, in the order the code runs. Press Next or click a step to '
+           "light its line in the code; after a click, <kbd>↑</kbd> <kbd>↓</kbd> move through them.</div>")
     return (f'{title}{sub}<div class="walk"><div class="wl" role="radiogroup" aria-label="The steps">{"".join(out)}'
             '</div><div class="ws"></div></div>')
 
