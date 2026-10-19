@@ -981,14 +981,15 @@ body{margin:0;padding:24px clamp(16px,4vw,48px) 48px;background:Canvas;color:Can
 """
 
 
-def _page_document(report_html: str, title: str) -> str:
+def _page_document(report_html: str, title: str, head: str = "") -> str:
     """
     A report's HTML as a page of its own, to open in a browser tab: a whole HTML document with the report in it, in
-    the browser's own light or dark colours. Still no JavaScript.
+    the browser's own light or dark colours. Still no JavaScript. `head` is added to the <head> (a favicon, say).
     """
     return "".join([
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n',
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
+        head,
         f"<title>{_esc(title)}</title>\n<style>\n{_PAGE_CSS}</style>\n</head>\n<body>\n",
         report_html,
         "\n</body>\n</html>\n",

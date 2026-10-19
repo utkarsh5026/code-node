@@ -7,6 +7,10 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- `code-node --serve` without `--port` takes the first free port from 8765, so you can serve several folders at
+  once instead of the second one failing. The served tab's title starts with the folder's name. `--port N` still
+  means exactly that port.
+
 - Lambda is now a platform plugin on top of a generic reader. Plain Python code no longer gets any Lambda check or
   wording (a file written outside `/tmp` used to be marked amber in the graph), and Lambda handlers get the same
   page as before.
@@ -14,6 +18,8 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
 ### Added
+
+- The pages have a tab icon (code-node's logo), saved and served.
 
 - Click a box in the graph to read its code in a panel on the right: a function whole, with the lines that make
   its calls lit, or a few lines around each place the code uses a service, a variable or its input. No JavaScript:

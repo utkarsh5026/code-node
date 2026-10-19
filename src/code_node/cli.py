@@ -48,7 +48,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--mermaid", action="store_true", help="print the graph as Mermaid instead of a page")
     parser.add_argument("--serve", action="store_true",
                         help="serve the page on localhost and redraw it whenever a .py file changes")
-    parser.add_argument("--port", type=int, default=8765, help="the --serve port (default 8765; 0 picks a free one)")
+    parser.add_argument("--port", type=int, default=None,
+                        help="the --serve port (default: the first free one from 8765; 0 picks any free one)")
     names = [p.name for p in platforms()]
     parser.add_argument("--platform", choices=names, default="",
                         help="where the code runs, for that platform's checks (found entry points set it: a Lambda "

@@ -5,9 +5,28 @@ The look of code-node's pages: their CSS root class, stylesheet and badge.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from ..kit.render import _base_css, _page_document, _report_html
 
+
+# code-node's logo (docs/images/logo.svg): the tab icon of every page, and the served page's /favicon.ico
+FAVICON_SVG = """\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+<path d="M8 16C12 16 12 8 16.5 8" stroke="#60a5fa" stroke-width="2.2" stroke-linecap="round"/>
+<path d="M8 16C12 16 12 24 16.5 24" stroke="#f472b6" stroke-width="2.2" stroke-linecap="round"/>
+<path d="M19.5 8H24" stroke="#60a5fa" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0.1 3.2"/>
+<path d="M19.5 24H24" stroke="#f472b6" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0.1 3.2"/>
+<rect x="2.5" y="11.5" width="9" height="9" rx="2.6" fill="#9097a3"/>
+<circle cx="18" cy="8" r="3.4" fill="#60a5fa"/>
+<circle cx="18" cy="24" r="3.4" fill="#f472b6"/>
+<circle cx="27" cy="16" r="2.6" fill="#fbbf24"/>
+<path d="M21 9.5C24 11 25 13 25.5 14" stroke="#fbbf24" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
+"""
+
+# inline, so a saved page has its icon too, with nothing beside it
+FAVICON_LINK = f'<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,{quote(FAVICON_SVG)}">\n'
 
 _ROOT = "cnd"  # the class around each page's HTML: its stylesheet's rules are scoped to it
 
@@ -210,4 +229,4 @@ def render_page(blocks: list[Any], title: str) -> str:
     A report as a whole HTML document to open in a browser tab, with no row cap: the outline and the graph are as
     wide and tall as they are instead of scrolling in a box.
     """
-    return _page_document(_report_html(blocks, 0, _CSS + _WIDE_CSS, _ROOT, _BADGE), title)
+    return _page_document(_report_html(blocks, 0, _CSS + _WIDE_CSS, _ROOT, _BADGE), title, FAVICON_LINK)
