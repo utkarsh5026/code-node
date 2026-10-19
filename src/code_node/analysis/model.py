@@ -29,6 +29,12 @@ class CodeStep:
     calls: list[CodeStep] = field(default_factory=list)  # 'def' steps: its own functions this line calls
     name: str = ""  # a 'def' step: the function ('db.connect'); a 'module' step: the module ('db')
     seen: bool = False  # a 'def' step whose steps are shown where it was first called, not again here
+    holds: list[tuple[str, str]] = field(default_factory=list)  # the names it sets and what they hold, in words:
+    # [('bucket', 'event Records[].s3.bucket.name'), ('self.table', 'a DynamoDB Table')]
+    given: list[tuple[str, str]] = field(default_factory=list)  # what goes into its AWS calls, by call and argument:
+    # [('S3 PutObject Bucket', 'env ARCHIVE_BUCKET')]
+    when: list[str] = field(default_factory=list)  # a 'def' step: the tests of the ifs around the line calling it,
+    # outermost first: ['args.command == "init"'], ['check(order)'] after `if not check(order): continue`
 
     def walk(self) -> Iterable[CodeStep]:
         """
@@ -58,6 +64,8 @@ class AwsCall:
     pages: str = ""  # a list call: 'all' (a paginator, or it follows the next-page token), 'one' (its first page only)
     guessed: bool = False  # from the method's name alone: its client couldn't be followed
     startup: bool = False  # made when the code is imported (on Lambda, once per cold start), not on each call
+    args: list[tuple[str, str]] = field(default_factory=list)  # where its arguments come from, the ones that can be
+    # told: [('Bucket', 'env ARCHIVE_BUCKET'), ('Key', "'orders.json'")]
 
     @property
     def label(self) -> str:
@@ -114,6 +122,8 @@ class CodeFunction:
     args: str  # 'host, password'
     doc: str = ""  # its docstring's first line
     called_from: list[str] = field(default_factory=list)  # 'etl.handler line 19'
+    when: dict[str, str] = field(default_factory=dict)  # a place in called_from -> the test it's called under: the if
+    # nearest around the call, else the nearest `if x: return` above it ('args.serve', not every check before it)
     depth: int = 0  # calls from the entry point (the entry point is 0)
 
 

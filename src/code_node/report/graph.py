@@ -18,6 +18,7 @@ from ..kit.render import _prose
 from ..kit.text import _esc
 
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode
+from .editor import editor_name, open_at
 from .style import _ROOT
 
 
@@ -33,6 +34,7 @@ class _Graph:
     title: str = ""
     empty: str = "(nothing to draw)"
     sources: dict[str, str] = field(default_factory=dict)
+    editor: str = ""  # a link to open a line in an editor, from editor_link(): each place in a panel links to it
 
 
 _EDGE_WORDS = {"call": "calls", "event": "passes its input to", "env": "configures", "client": "makes the client for",
@@ -262,7 +264,7 @@ def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[
         else:
             card.label = _g_wrap(n.label, room, lambda t: _g_measure_label(n, t))
         card.head = (_GRAPH_HEAD if n.sub else _GRAPH_HEAD_BARE) + _GRAPH_LABEL_LINE * (len(card.label) - 1)
-        top = card.head + (_GRAPH_ROUTE if card.route else 0)
+        top = card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if n.when else 0)
         card.body = top
         if n.kind in _GRAPH_LISTS and card.rows:
             card.height = top + 6 + _GRAPH_ROW * len(card.rows) + 8
@@ -270,6 +272,8 @@ def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[
             card.prose = [part for line in n.lines for part in
                           _g_wrap(line, card.width - 30, lambda t: _g_sans(t, 12.5))][:3]
             card.height = top + (_GRAPH_PROSE * len(card.prose) + 10 if card.prose else 4)
+            if n.more:
+                card.height += _GRAPH_PROSE + (0 if card.prose else 8)
             card.height = max(card.height, 24 + 12 * card.arrows)
 
 
@@ -512,7 +516,7 @@ def _g_edge_tip(e: GraphEdge, graph: CodeGraph) -> str:
     elif e.kind == "env":
         said = f"{dst} reads {e.label} from its environment"
     elif e.kind == "call":
-        said = f"{src} calls {dst}" + (f" ({e.label})" if e.label else "")
+        said = f"{src} calls {dst}" + (f" ({e.label})" if e.label else "") + (f", only when {e.when}" if e.when else "")
     elif e.kind == "client":
         said = f"{src} makes the {dst} client"
     elif e.kind == "http":
@@ -620,6 +624,10 @@ def _g_sub_svg(n: GraphNode, room: float) -> str:
     return _esc(_g_fit(n.sub, room, lambda t: _g_sans(t, 12.5)))
 
 
+def _g_calls(count: int) -> str:
+    return f"{count} call" if count == 1 else f"{count} calls"
+
+
 def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: list[str], access: dict[str, str]
               ) -> str:
     """
@@ -648,6 +656,12 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
                      f'<text x="24" y="{top + 14.8:.1f}"><tspan class="mt">{_esc(method)}</tspan> {_esc(shown)}'
                      f'{_esc(more)}</text></g>')
         top += _GRAPH_ROUTE
+    if n.when:  # called only under an if: its test, in a pill like a route's
+        test = _g_fit(n.when, w - 28 - 20 - _g_mono("when ", 12.5), lambda t: _g_mono(t, 12.5))
+        pill_w = _g_mono("when " + test, 12.5) + 20
+        parts.append(f'<g class="rt wh"><rect x="14" y="{top:.0f}" width="{pill_w:.0f}" height="21" rx="10.5"/>'
+                     f'<text x="24" y="{top + 14.8:.1f}"><tspan class="ww">when </tspan>{_esc(test)}</text></g>')
+        top += _GRAPH_ROUTE
     if n.kind in _GRAPH_LISTS and card.rows:
         parts.append(f'<path class="dv" d="M1,{card.body:.0f}H{w - 1:.0f}"/>')
         for row in card.rows:
@@ -667,6 +681,15 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
                 parts.append(f'<text class="ns" x="{w - 14:.0f}" y="{ry + 4.3:.1f}" text-anchor="end">{_esc(flag)}</text>')
     for k, line in enumerate(card.prose):
         parts.append(f'<text class="pr" x="14" y="{top + 13 + _GRAPH_PROSE * k:.1f}">{_esc(line)}</text>')
+    if n.more:
+        said = f"+{_g_calls(len(n.more))} not drawn"
+        for k in range(len(n.more), 0, -1):  # as many of their names as fit whole, the rest as …
+            names = ", ".join(n.more[:k]) + (", …" if k < len(n.more) else "")
+            if _g_sans(f"{said}: {names}", 12.5) <= w - 28:
+                said = f"{said}: {names}"
+                break
+        parts.append(f'<text class="pr mo" x="14" y="{top + 13 + _GRAPH_PROSE * len(card.prose):.1f}">'
+                     f"{_esc(said)}</text>")
     if warn:
         parts.append(f'<g class="wb" transform="translate({w - 21:.0f},{badge_y + 14})"><circle r="8.5"/>'
                      '<path d="M0,-4.2V.6M0,3.9V4"/></g>')
@@ -695,7 +718,7 @@ def _g_filled(line: str) -> bool:
     return bool(re.sub(r"<[^>]*>", "", line).strip())
 
 
-def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]]) -> str:
+def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "") -> str:
     """
     A box's code, in a panel that slides in from the right when the box is clicked (its id is the link's target, so
     it's CSS's :target that opens it): what the box is, then each place it's about with its lines numbered, the lines
@@ -720,7 +743,11 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]]) -> str:
         rows = "".join(f'<span class="sl{" lit" if k in span.lit else ""}"><span class="sn">{k}</span>'
                        f"{lines[k - 1]}</span>" for k in range(start, end + 1))
         where = f"line {start}" if start == end else f"lines {start}–{end}"
-        shown.append(f'<div class="csw">{_esc(span.file)} <span>{where}</span></div><pre class="csc">{rows}</pre>'
+        href = open_at(editor, span.file, min(span.lit, default=start))
+        link = (f' <a class="ced" href="{_esc(href)}" title="Open it in {_esc(editor_name(editor))}">open ↗</a>'
+                if href else "")
+        shown.append(f'<div class="csw">{_esc(span.file)} <span>{where}</span>{link}</div>'
+                     f'<pre class="csc">{rows}</pre>'
                      + (f'<div class="csm">+{_plural(more, "more line")}</div>' if more > 0 else ""))
     if not shown:
         return ""
@@ -801,7 +828,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             highlighted[file] = _python_lines(block.sources[file]) if file in block.sources else []
         return highlighted[file]
 
-    panels = {n.id: _g_panel(n, lines_of) for n in graph.nodes} if block.sources else {}
+    panels = {n.id: _g_panel(n, lines_of, block.editor) for n in graph.nodes} if block.sources else {}
     for n in graph.nodes:
         if panels.get(n.id):  # the box whose code is open, outlined
             report.rules.add(f".{root} .cgw:has(#{_g_panel_id(n)}:target) .cg .n-{n.id} .fg"
@@ -882,13 +909,16 @@ def _graph_lines(block: _Graph, report: _Report) -> list[str]:
         for e in leaving.get(n.id, []):
             target = graph.node(e.target)
             name = target.label if target else e.target
-            said = {"call": f"calls {name}" + (f" ({e.label})" if e.label else ""), "event": f"→ {name}",
+            said = {"call": f"calls {name}" + (f" ({e.label})" if e.label else "") + (f" when {e.when}" if e.when else ""),
+                    "event": f"→ {name}",
                     "env": f"→ {name} reads {e.label}", "client": f"makes the {name} client",
                     "http": f"sends {e.label}"}.get(e.kind) or f"{_EDGE_WORDS.get(e.kind, e.kind)} {name}: {e.label}"
             said += "".join([", in a loop" if e.loop else "", ", guessed from a method's name" if e.guessed else "",
                              ", through functions not drawn" if e.indirect else ""])
             out.append(f"      {said}" + (" (!)" if e.tone == "warn" else ""))
-        if n.kind in ("handler", "function", "start") and not leaving.get(n.id):
+        if n.more:
+            out.append(f"      +{_g_calls(len(n.more))} not drawn: {', '.join(n.more)}")
+        elif n.kind in ("handler", "function", "start") and not leaving.get(n.id):
             out.append("      (does nothing this follows: no AWS calls, own functions or HTTP)")
     if graph.hidden:
         out.append(f"  ({_plural(graph.hidden, 'more function')} not drawn: the steps below have them all)")

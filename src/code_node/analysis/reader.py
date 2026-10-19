@@ -20,7 +20,8 @@ from .terms import (
     _MAP_RUNS, _MAP_STEPS, _REMOVED_MODULES, _RESOURCE_ACTIONS, _ROUTE_METHODS, _RUNTIME_MODULES, _TRANSFERS,
 )
 from .syntax import (
-    _a, _const, _def_line, _doc_line, _is_main_guard, _names_in, _secret_spots, _swallows, _target, _unparse,
+    _a, _const, _def_line, _doc_line, _ends_early, _is_main_guard, _names_in, _negated, _parse, _secret_spots,
+    _swallows, _target, _unparse,
 )
 from .aws_model import _access, _aws_model, _event_label, _iam_action, _service_name
 from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, EnvRead, EventField, ImportUse
@@ -28,6 +29,10 @@ from ..platforms import get_platform
 
 
 _CLI_COMMANDS = ("command", "callback")  # @app.command(): a Typer or click command, run like a route
+
+_PROPERTIES = ("property", "cached_property")  # a method run when its attribute is read: obj.size
+
+_ACCESSORS = ("setter", "deleter", "getter")  # @size.setter: another method by the property's name, not its getter
 
 
 @dataclass(frozen=True)
@@ -40,7 +45,7 @@ class _Sym:
     # instance of one of its classes), 'bound' (one's method), 'client', 'resource', 'res' (a resource object: a
     # Table), 'coll' (a resource collection), 'paginator', 'batch', 'method' (one of theirs), 'meta', 'event',
     # 'evmethod', 'context', 'env' (os.environ), 'envget', 'envval', 'logger', 'log', 'http', 'httpcall', 'builtin',
-    # 'enumerate'
+    # 'enumerate', 'session' (a boto3 Session), 'super' (super() in a method of class `name`, its self or cls as inner)
     name: str = ""
     sub: str = ""
     path: tuple[str, ...] = ()
@@ -61,6 +66,7 @@ class _Frame:
     outers: list[dict[str, _Sym | None]] = field(default_factory=list)  # the functions around it (closures)
     loops: list[str] = field(default_factory=list)  # the loops it's in, its callers' first
     guards: list[str] = field(default_factory=list)  # the tests of the ifs it's in
+    early: set[int] = field(default_factory=set)  # which of guards come from an `if x: return` above, not around it
     globals: set[str] = field(default_factory=set)
     optional: int = 0  # inside a try that catches ImportError
     cached: bool = False  # @lru_cache and the like: it runs once
@@ -91,6 +97,8 @@ class _Collect:
 
     notes: list[tuple[str, str]] = field(default_factory=list)
     calls: list[CodeStep] = field(default_factory=list)
+    holds: list[tuple[str, str]] = field(default_factory=list)  # a name it sets -> what that holds, in words
+    given: list[tuple[str, str]] = field(default_factory=list)  # an AWS call's argument -> where it comes from
 
     def note(self, kind: str, text: str) -> None:
         if (kind, text) not in self.notes:
@@ -142,6 +150,7 @@ class _CodeReader:
         self.loading = 0  # modules being loaded: what runs now runs when Python imports the code
         self.runs = 0  # function bodies read
         self.max_depth = _MAP_DEPTH  # calls followed from the entry point
+        self.keywords: tuple[Any, dict[str, _Sym | None]] = (None, {})  # the call being read, and its keywords' values
 
     # ---------------------------------------------------------------- reading
 
@@ -252,7 +261,7 @@ class _CodeReader:
             self.cmap.limited = f"read the first {_MAP_FILES} of its modules"
             return mod
         try:
-            mod.tree = ast.parse(text, filename=mod.file)
+            mod.tree = _parse(text, mod.file)
         except (SyntaxError, ValueError) as exc:
             where = f"line {exc.lineno}: " if isinstance(exc, SyntaxError) and exc.lineno else ""
             why = f"{where}{getattr(exc, 'msg', None) or exc}"
@@ -274,9 +283,20 @@ class _CodeReader:
     # ---------------------------------------------------------------- statements
 
     def _block(self, stmts: list[Any], frame: _Frame) -> list[CodeStep]:
+        """
+        A block's lines. After `if x: ... continue` (or return, raise, break) with no else, the lines below it run only
+        when x isn't so: that's a guard on them too.
+        """
         out: list[CodeStep] = []
+        guards = len(frame.guards)
         for stmt in stmts:
             out.extend(self._stmt(stmt, frame))
+            if isinstance(stmt, ast.If) and not stmt.orelse and _ends_early(stmt.body) and not (
+                    frame.top and _is_main_guard(stmt.test)):
+                frame.early.add(len(frame.guards))
+                frame.guards.append(_negated(stmt.test))
+        del frame.guards[guards:]
+        frame.early = {i for i in frame.early if i < guards}
         return out
 
     def _step(self, node: Any, frame: _Frame, code: str, kind: str, got: _Collect | None = None,
@@ -287,7 +307,7 @@ class _CodeReader:
         notes = [(k, text) for k, text in notes if k != "event" or not any(
             other.startswith((text + "[", text + ".", text + " (")) for other in events)]
         return CodeStep(frame.file, getattr(node, "lineno", 0), code, kind, notes, list(steps),
-                        got.calls if got else [])
+                        got.calls if got else [], holds=got.holds if got else [], given=got.given if got else [])
 
     def _stmt(self, stmt: Any, frame: _Frame) -> list[CodeStep]:
         if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -332,6 +352,7 @@ class _CodeReader:
                 if stmt.value is not None:
                     for target in targets:
                         self._bind(target, value, frame)
+                        self._holds(target, value)
             else:
                 for child in ast.iter_child_nodes(stmt):
                     if isinstance(child, ast.expr):
@@ -348,6 +369,8 @@ class _CodeReader:
             else:
                 items = self._eval(stmt.iter, frame)
                 self._bind_loop(stmt.target, items, frame)
+                if not (items is not None and items.kind == "enumerate"):
+                    self._holds(stmt.target, self._item(items), each=True)
                 prefix = "async for" if isinstance(stmt, ast.AsyncFor) else "for"
                 header = f"{prefix} {_target(stmt.target)} in {_unparse(stmt.iter, 100)}:"
         frame.loops.append(header)
@@ -374,7 +397,7 @@ class _CodeReader:
             if rest and rest[0].kind == "if" and rest[0].line == stmt.orelse[0].lineno:
                 rest[0].code = "el" + rest[0].code
         elif stmt.orelse:
-            frame.guards.append(f"not ({test})")
+            frame.guards.append(_negated(stmt.test))
             orelse = self._block(stmt.orelse, frame)
             frame.guards.pop()
             if orelse:
@@ -384,17 +407,49 @@ class _CodeReader:
         return []
 
     def _with(self, stmt: Any, frame: _Frame) -> list[CodeStep]:
+        """
+        A with block: each of its own classes' __enter__ runs first (`as` takes what it returns), then the lines in it,
+        then each __exit__, last in first out, shown as a step of their own after the lines.
+        """
+        enter, leave = ("__aenter__", "__aexit__") if isinstance(stmt, ast.AsyncWith) else ("__enter__", "__exit__")
+        entered: list[_Sym] = []
         with self._collecting() as head:
             parts = []
             for item in stmt.items:
                 value = self._eval(item.context_expr, frame)
+                ran, given = self._dunder(value, enter, stmt, frame)
+                if value is not None and self._dunder_of(value, leave):
+                    entered.append(value)
                 if item.optional_vars is not None:
-                    self._bind(item.optional_vars, value, frame)
+                    self._bind(item.optional_vars, given if ran else value, frame)
+                    self._holds(item.optional_vars, given if ran else value)
                 parts.append(_unparse(item.context_expr, 100) + (
                     f" as {_unparse(item.optional_vars, 30)}" if item.optional_vars is not None else ""))
         body = self._block(stmt.body, frame)
+        with self._collecting() as leaving:
+            for value in reversed(entered):
+                self._dunder(value, leave, stmt, frame)
+        if leaving.calls:
+            body.append(self._step(stmt, frame, f"# leaving the with block: {leave} runs", "do", leaving))
         header = f"{'async with' if isinstance(stmt, ast.AsyncWith) else 'with'} {', '.join(parts)}:"
         return [self._step(stmt, frame, header, "with", head, body)] if head.notes or head.calls or body else []
+
+    def _dunder_of(self, value: _Sym, name: str) -> str | None:
+        """
+        The method one of its own objects has by a name Python calls for it ('__enter__'), or None.
+        """
+        found = self._member(value.name, name) if value.kind == "obj" else None
+        return found[1] if found and found[0] == "method" else None
+
+    def _dunder(self, value: _Sym | None, name: str, node: Any, frame: _Frame) -> tuple[bool, _Sym | None]:
+        """
+        Runs a method Python calls by itself (__enter__, __exit__) on one of its own objects: whether there was one,
+        and what it returned.
+        """
+        key = self._dunder_of(value, name) if value is not None else None
+        if key is None:
+            return False, None
+        return True, self._run(key, [], {}, frame, node, bound=value)
 
     def _try(self, stmt: Any, frame: _Frame) -> list[CodeStep]:
         optional = any(h.type is None or _names_in(h.type, ("ImportError", "ModuleNotFoundError", "Exception"))
@@ -487,6 +542,8 @@ class _CodeReader:
         steps = []
         for stmt in node.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if any(isinstance(d, ast.Attribute) and d.attr in _ACCESSORS for d in stmt.decorator_list):
+                    continue  # @size.setter: reading obj.size still runs the getter
                 info["methods"][stmt.name] = self._define(stmt, frame, cls=key)
             elif isinstance(stmt, (ast.Assign, ast.AnnAssign)) and stmt.value is not None:
                 with self._collecting() as got:
@@ -619,6 +676,37 @@ class _CodeReader:
             for elt in target.elts:
                 self._bind(elt.value if isinstance(elt, ast.Starred) else elt, None, frame)
 
+    def _holds(self, target: Any, value: _Sym | None, each: bool = False) -> None:
+        """
+        Notes what a name (or self.name) set on this line holds, when that can be said: shown beside the line.
+        """
+        said = self._describe(value)
+        if said and isinstance(target, (ast.Name, ast.Attribute)):
+            self.cur.holds.append((_unparse(target, 40), f"each {said}" if each else said))
+
+    def _describe(self, value: _Sym | None) -> str:
+        """
+        What a value is, in a few words: 'event Records[].s3.bucket.name', 'env ARCHIVE_BUCKET', 'an S3 client',
+        'a DynamoDB Table', 'an OrderStore'. '' for what it can't say.
+        """
+        if value is None:
+            return ""
+        kind, name = value.kind, value.name
+        service = _service_name(name) if name and name != "?" else "boto3"
+        last = name.rsplit(".", 1)[-1]
+        said = {
+            "event": f"event {_event_label(value.path)}" if value.path else "the event",
+            "envval": f"env {name}", "env": "os.environ", "context": "its context",
+            "client": f"{_a(service)} {service} client", "resource": f"{_a(service)} {service} resource",
+            "res": f"{_a(service)} {service} {value.sub or 'resource object'}",
+            "coll": f"{_a(service)} {service} collection", "batch": f"{_a(service)} {service} batch writer",
+            "paginator": f"{_a(service)} {service} {value.sub} paginator",
+            "obj": f"{_a(last)} {last}", "class": f"the class {last}", "func": f"{last}()", "bound": f"{last}()",
+            "logger": "a logger", "http": f"{_a(name)} {name} session" if name else "an HTTP session",
+            "own": f"the module {name}",
+        }
+        return said.get(kind, "")
+
     def _item(self, items: _Sym | None) -> _Sym | None:
         """
         What a loop over `items` gets each time round.
@@ -703,19 +791,24 @@ class _CodeReader:
                 self._load_chain(sub)
                 return _Sym("own", sub)
             return self._load(base.name).scope.get(attr)
-        if kind in ("obj", "class"):
-            found = self._member(base.name, attr)
+        if kind in ("obj", "class", "super"):
+            if kind == "super":  # looked up in the classes it's made from, and bound to the same self
+                found = next((m for b in self.classes[base.name]["bases"] for m in [self._member(b, attr)] if m), None)
+                owner = base.inner or _Sym("obj", base.name)
+            else:
+                found, owner = self._member(base.name, attr), base
             if found is None:
                 return None
             what, value = found
             if what == "attr":
                 return value
-            node_ = self.defs[value][1]
-            static = any(getattr(d, "id", "") == "staticmethod" for d in node_.decorator_list)
-            classmethod_ = any(getattr(d, "id", "") == "classmethod" for d in node_.decorator_list)
-            if static or (kind == "class" and not classmethod_):
+            decorators = {getattr(d, "id", "") or getattr(d, "attr", "") for d in self.defs[value][1].decorator_list}
+            if decorators & set(_PROPERTIES) and owner.kind != "class":  # obj.size runs its getter
+                return self._run(value, [], {}, frame, node, bound=owner)
+            classmethod_ = "classmethod" in decorators
+            if "staticmethod" in decorators or (owner.kind == "class" and not classmethod_):
                 return _Sym("func", value)
-            return _Sym("bound", value, inner=_Sym("class", base.name) if classmethod_ else base)
+            return _Sym("bound", value, inner=_Sym("class", owner.name) if classmethod_ else owner)
         if kind == "event":
             if attr in _DICT_METHODS:
                 return _Sym("evmethod", attr, path=base.path)
@@ -762,6 +855,8 @@ class _CodeReader:
         return None
 
     def _call(self, node: ast.Call, frame: _Frame) -> _Sym | None:
+        if isinstance(node.func, ast.Name) and node.func.id == "super" and self._lookup("super", frame) is None:
+            return self._super(node, frame)
         func = self._eval(node.func, frame)
         args = [self._eval(a, frame) for a in node.args]
         kwargs = {}
@@ -769,6 +864,7 @@ class _CodeReader:
             value = self._eval(kw.value, frame)
             if kw.arg:
                 kwargs[kw.arg] = value
+        self.keywords = (node, kwargs)
         if func is None:
             return self._unknown_call(node, frame)
         kind = func.kind
@@ -813,6 +909,20 @@ class _CodeReader:
                 self._http(func.name, func.sub, node, frame, given="timeout" in (func.inner.path if func.inner else ()))
             return None
         return None
+
+    def _super(self, node: ast.Call, frame: _Frame) -> _Sym | None:
+        """
+        super() in a method (or super(Class, self)): the class it's in and its self (or cls), so what's read from it
+        is looked for in the classes that class is made from.
+        """
+        if len(node.args) == 2:
+            cls, owner = self._eval(node.args[0], frame), self._eval(node.args[1], frame)
+            key = cls.name if cls is not None and cls.kind == "class" else None
+        else:
+            _, function, key = self.defs.get(frame.function, (None, None, None))
+            params = function.args.posonlyargs + function.args.args if function is not None else []
+            owner = frame.scope.get(params[0].arg) if params else None
+        return _Sym("super", key, inner=owner) if key in self.classes else None
 
     def _unknown_call(self, node: ast.Call, frame: _Frame) -> _Sym | None:
         """
@@ -1020,7 +1130,11 @@ class _CodeReader:
             where = f"{caller.function} line {call.lineno}"
             if where not in info.called_from:
                 info.called_from.append(where)
-        step = CodeStep(file, node.lineno, _def_line(node), "def", name=key)
+                if caller.guards:  # the if nearest around the call, else the early exit above it nearest
+                    around = [g for i, g in enumerate(caller.guards) if i not in caller.early]
+                    info.when[where] = (around or caller.guards)[-1]
+        step = CodeStep(file, node.lineno, _def_line(node), "def", name=key,
+                        when=list(caller.guards) if caller is not None else [])
         if label:
             step.notes.append(("route", label))
         self.cur.calls.append(step)
@@ -1093,12 +1207,33 @@ class _CodeReader:
         if pages is None:
             pages = self._pages(service, op, node, frame)
         key = (service, op, frame.file, node.lineno)
+        args = self._sources(node)
         if key not in self.seen:
             self.seen.add(key)
             self.cmap.aws.append(AwsCall(service, op, access, _iam_action(service, op), frame.file, node.lineno,
                                          frame.function, _unparse(node, 120), self._loop_of(frame), pages, guessed,
-                                         self.loading > 0))
+                                         self.loading > 0, args))
         self.cur.note(f"aws-{access}", f"{_service_name(service)} {op}")
+        for arg, source in args:
+            if (f"{_service_name(service)} {op} {arg}", source) not in self.cur.given:
+                self.cur.given.append((f"{_service_name(service)} {op} {arg}", source))
+
+    def _sources(self, node: ast.Call) -> list[tuple[str, str]]:
+        """
+        Where a call's keyword arguments come from, the ones that can be told: [('Bucket', 'env ARCHIVE_BUCKET'),
+        ('Key', "f'{prefix}/{name}'")]: what a name holds, or the literal or f-string written there.
+        """
+        values = self.keywords[1] if self.keywords[0] is node else {}
+        found = []
+        for kw in node.keywords:
+            if not kw.arg:
+                continue
+            said = self._describe(values.get(kw.arg))
+            if not said and isinstance(kw.value, (ast.Constant, ast.JoinedStr)):
+                said = _unparse(kw.value, 50)
+            if said:
+                found.append((kw.arg, said))
+        return found
 
     def _pages(self, service: str, op: str, node: ast.Call, frame: _Frame) -> str:
         """

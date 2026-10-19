@@ -11,6 +11,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .analysis.syntax import _parse
 from .platforms import platforms
 
 _SKIPPED_FOLDERS = frozenset({
@@ -55,6 +56,7 @@ class Project:
     modules: dict[str, str] = field(default_factory=dict)  # file -> the module name Python imports it by
     skipped: list[str] = field(default_factory=list)
     limited: bool = False
+    configs: list[str] = field(default_factory=list)  # its pyproject.toml files, the root's first
     _trees: dict[str, ast.Module] | None = None
 
     @property
@@ -66,7 +68,7 @@ class Project:
             self._trees = {}
             for rel, text in self.files.items():
                 try:
-                    self._trees[rel] = ast.parse(text, filename=rel)
+                    self._trees[rel] = _parse(text, rel)
                 except (SyntaxError, ValueError):
                     self.skipped.append(rel)
         return self._trees
@@ -114,6 +116,8 @@ def read_project(root: str | os.PathLike[str]) -> Project:
     for folder, subfolders, names in os.walk(base):
         subfolders[:] = sorted(d for d in subfolders if d not in _SKIPPED_FOLDERS and not d.endswith(".egg-info"))
         for name in sorted(names):
+            if name == "pyproject.toml":
+                project.configs.append((Path(folder) / name).relative_to(base).as_posix())
             if not name.endswith(".py"):
                 continue
             path = Path(folder) / name
@@ -130,11 +134,10 @@ def read_project(root: str | os.PathLike[str]) -> Project:
     return project
 
 
-def _console_scripts(root: Path) -> dict[str, str]:
+def _console_scripts(path: Path) -> dict[str, str]:
     """
-    pyproject.toml's console scripts: {'code-node': 'code_node.cli:main'}.
+    A pyproject.toml's console scripts: {'code-node': 'code_node.cli:main'}.
     """
-    path = root / "pyproject.toml"
     if not path.exists():
         return {}
     text = path.read_text("utf-8", "replace")
@@ -218,7 +221,9 @@ def entry_points(project: Project) -> list[EntryPoint]:
     def add(entry: EntryPoint) -> None:
         found.setdefault(entry.name, entry)
 
-    for script, target in _console_scripts(project.root).items():
+    scripts = [(script, target, config) for config in project.configs
+               for script, target in _console_scripts(project.root / config).items()]
+    for script, target, config in scripts:
         module, _, function = target.partition(":")
         rel = by_module.get(module)
         if not (rel and function and rel in project.trees):
@@ -227,10 +232,11 @@ def entry_points(project: Project) -> list[EntryPoint]:
         node = _module_functions(tree).get(function.split(".")[0])
         apps = {name: (line, kind) for name, line, kind in _web_apps(tree)}
         runs = [name for name in (_calls(node) if node is not None else set()) if name in apps]
+        command = f"the {script} command" + (f" in {config}" if "/" in config else "")
         if runs:  # main() just runs the app: start from the app, so each command is followed
             line, kind = apps[runs[0]]
-            add(EntryPoint(f"{module}.{runs[0]}", f"the {script} command ({kind})", rel, line))
-        add(EntryPoint(f"{module}.{function}", f"the {script} command", rel, getattr(node, "lineno", 0)))
+            add(EntryPoint(f"{module}.{runs[0]}", f"{command} ({kind})", rel, line))
+        add(EntryPoint(f"{module}.{function}", command, rel, getattr(node, "lineno", 0)))
     code = {rel: tree for rel, tree in project.trees.items() if not _is_test(rel)}
     for rel, tree in code.items():
         module = project.modules[rel]

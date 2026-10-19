@@ -4,6 +4,7 @@ code-node end to end on small folders written into tmp_path: entry points found,
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from code_node.analysis.graph import code_graph
@@ -275,3 +276,207 @@ def test_a_platform_plugin_finds_its_entry_points_and_adds_findings(tmp_path: Pa
 
     assert ("info", "1 fields of the job are read.") in code_map_findings(cmap)
     assert "It reads size from the job." in _code_summary(cmap)
+
+
+SNAPSHOT = Path(__file__).parent / "snapshots" / "orders-service.txt"
+
+
+def test_the_example_page_matches_its_snapshot(monkeypatch) -> None:
+    """
+    The example's page as text, against tests/snapshots/orders-service.txt, so a change to what the page says shows
+    as a readable diff. UPDATE_SNAPSHOTS=1 uv run pytest writes it anew.
+    """
+    from code_node.kit.render import _render_text
+    from code_node.pages import PageOptions, map_entry
+    from code_node.report.build import page_blocks
+
+    root = Path(__file__).parent.parent / "examples" / "orders-service"
+    entry = entry_points(read_project(root))[0]
+    cmap, project = map_entry(root, entry, PageOptions())
+    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
+                                    sources=project.files), 100) + "\n"
+    if os.environ.get("UPDATE_SNAPSHOTS"):
+        SNAPSHOT.parent.mkdir(exist_ok=True)
+        SNAPSHOT.write_text(text)
+    # code is shown as ast.unparse writes it, whose quotes differ between Pythons (f'{a['b']}' from 3.12 only)
+    assert text.replace("'", '"') == SNAPSHOT.read_text().replace("'", '"')
+
+
+ENGINE = '''
+def main():
+    tidy()
+    note()
+    run()
+
+
+def tidy():
+    pass
+
+
+def note():
+    pass
+
+
+def run():
+    work()
+
+
+def work():
+''' + "".join(f"    step{i} = {i}\n" for i in range(30))
+
+
+def test_the_graph_draws_the_functions_that_do_the_work(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": ENGINE}))
+    cmap = map_code(project.files, "app.main")
+    graph = code_graph(cmap, max_functions=3)
+    assert [n.label for n in graph.nodes if n.kind in ("handler", "function")] == ["main()", "run()", "work()"]
+    main_box = next(n for n in graph.nodes if n.label == "main()")
+    assert main_box.more == ["tidy()", "note()"]  # said in its box, rather than looking like it does nothing
+
+
+def test_line_links_open_the_editor(tmp_path: Path) -> None:
+    from code_node.report.editor import editor_link, open_at
+
+    link = editor_link("vscode", "/home/me/my code")
+    assert open_at(link, "app/main.py", 12) == "vscode://file/home/me/my%20code/app/main.py:12"
+    assert open_at(editor_link("cursor", "/home/me/code", wsl="Ubuntu"), "a.py", 3) == (
+        "cursor://vscode-remote/wsl+Ubuntu/home/me/code/a.py:3")
+    assert open_at(editor_link("vscode", "C:\\code"), "a.py", 1) == "vscode://file/C:/code/a.py:1"
+    assert editor_link("none", "/home/me/code") == ""
+    write(tmp_path / "code", {"app.py": HANDLER})
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    assert f'href="vscode://file{(tmp_path / "code").as_posix()}/app.py:' in out.read_text()
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out), "--editor", "none"]) == 0
+    assert "vscode://" not in out.read_text()
+
+
+IDIOMS = '''
+class Base:
+    def __init__(self, name):
+        self.setup(name)
+
+    def setup(self, name):
+        open(name, "w").write("x")
+
+
+class Repo(Base):
+    def __init__(self, name):
+        super().__init__(name)
+
+    @property
+    def size(self):
+        return count()
+
+    @size.setter
+    def size(self, value):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        close()
+
+    def save(self, item):
+        pass
+
+
+def count():
+    pass
+
+
+def close():
+    pass
+
+
+def main(item):
+    repo = Repo("x")
+    n = repo.size
+    with Repo("y") as r:
+        r.save(item)
+'''
+
+
+def test_super_properties_and_with_blocks_are_followed(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": IDIOMS}))
+    cmap = map_code(project.files, "app.main")
+    reached = {f.name for f in cmap.functions}
+    assert {"app.Base.__init__", "app.Base.setup"} <= reached  # through super().__init__()
+    assert {"app.Repo.size", "app.count"} <= reached  # repo.size runs its getter, not its setter
+    # r is what __enter__ returns, and __exit__ runs after the block
+    assert {"app.Repo.__enter__", "app.Repo.save", "app.Repo.__exit__", "app.close"} <= reached
+    with_step = next(s for s in cmap.steps[0].steps if s.kind == "with")
+    assert [s.code for s in with_step.steps] == ["r.save(item)", "# leaving the with block: __exit__ runs"]
+    assert [c.name for c in with_step.calls] == ["app.Repo.__init__", "app.Repo.__enter__"]
+
+
+def test_syntax_warnings_stay_out_of_the_terminal(tmp_path: Path) -> None:
+    import warnings
+
+    code = 'import re\n\n\ndef main():\n    return re.match("\\d+", "1")\n'  # '\\d' in a plain string: a SyntaxWarning
+    project = read_project(write(tmp_path, {"app.py": code}))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert "app.py" in project.trees
+        map_code(project.files, "app.main")
+    assert not caught
+
+
+def test_console_scripts_come_from_every_pyproject(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {
+        "pyproject.toml": '[project]\nname = "workspace"\n',
+        "libs/cli/pyproject.toml": '[project]\nname = "tool"\n[project.scripts]\ntool = "tool.main:run"\n',
+        "libs/cli/tool/__init__.py": "",
+        "libs/cli/tool/main.py": "def run():\n    pass\n",
+        "scripts/release.py": "def main():\n    pass\n\n\nif __name__ == '__main__':\n    main()\n",
+    }))
+    assert project.configs == ["pyproject.toml", "libs/cli/pyproject.toml"]
+    first = entry_points(project)[0]
+    assert (first.name, first.why) == ("tool.main.run", "the tool command in libs/cli/pyproject.toml")
+
+
+DISPATCH = '''
+import os
+import boto3
+
+s3 = boto3.client("s3")
+
+
+def init():
+    pass
+
+
+def deploy(name):
+    s3.put_object(Bucket=os.environ["BUCKET"], Key=f"apps/{name}", Body=b"")
+
+
+def main(command, names):
+    if command == "init":
+        init()
+    elif command == "deploy":
+        for name in names:
+            if not name:
+                continue
+            deploy(name)
+'''
+
+
+def test_what_names_hold_where_arguments_come_from_and_when_calls_run(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": DISPATCH}))
+    cmap = map_code(project.files, "app.main")
+    steps = list(cmap.steps[0].walk())
+    calls = {s.name: s.when for s in steps if s.kind == "def" and s.name != "app.main"}
+    # the if around each call; `if not name: continue` makes the rest of the loop run only when name
+    assert calls == {"app.init": ["command == 'init'"], "app.deploy": ["command == 'deploy'", "name"]}
+    put = next(c for c in cmap.aws if c.operation == "PutObject")
+    assert put.args == [("Bucket", "env BUCKET"), ("Key", "f'apps/{name}'"), ("Body", "b''")]
+    line = next(s for s in steps if s.given)
+    assert line.given[:2] == [("S3 PutObject Bucket", "env BUCKET"), ("S3 PutObject Key", "f'apps/{name}'")]
+    holds = next(s for s in cmap.startup[0].walk() if s.holds)
+    assert holds.holds == [("s3", "an S3 client")]
+    graph = code_graph(cmap)
+    deploy = next(n for n in graph.nodes if n.label == "deploy()")
+    assert deploy.when == "command == 'deploy'"  # the graph says the if nearest around the call
+    assert any(e.kind == "call" and e.when == deploy.when for e in graph.edges)
+    assert '|"when command == \'deploy\'"|' in graph.mermaid()

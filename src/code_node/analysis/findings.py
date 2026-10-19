@@ -15,7 +15,7 @@ from ..kit.text import _clip
 
 from .terms import LATEST_RUNTIMES
 from .terms import _BATCHES, _REMOVED_MODULES
-from .syntax import _a, _const
+from .syntax import _a, _const, _parse
 from .aws_model import _service_name
 from .model import AwsCall, CodeMap, CodeSpot
 from .mapping import _python_version
@@ -247,7 +247,7 @@ def _returned(code: str) -> str:
     statusCode and body'; short code as it is.
     """
     try:
-        node = ast.parse(code, mode="eval").body
+        node = _parse(code, mode="eval").body
     except SyntaxError:
         return _clip(code, 60)
     if isinstance(node, ast.Dict) and node.keys and all(isinstance(_const(k), str) for k in node.keys):

@@ -5,6 +5,7 @@ reaches, with .mermaid().
 
 from __future__ import annotations
 
+import heapq
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -50,6 +51,8 @@ class GraphNode:
     flags: dict[str, str] = field(default_factory=dict)  # a listed line a warning is about -> a word or two:
     # {'TEAM_TOPIC': 'not set'}, {'Query': 'first page only'}, {'GET https://...': 'no timeout'}
     code: list[CodeSpan] = field(default_factory=list)  # the lines of code it's about
+    more: list[str] = field(default_factory=list)  # its own functions it calls that the graph leaves out: 'save()'
+    when: str = ""  # a function called only under an if, everywhere it's called: 'check(order)'
 
 
 @dataclass
@@ -67,6 +70,7 @@ class GraphEdge:
     loop: bool = False  # made inside a loop: once per item
     guessed: bool = False  # AWS calls known only by their method's name: their client couldn't be followed
     indirect: bool = False  # made in functions the graph leaves out, below the box it starts from
+    when: str = ""  # a call made only under an if: its test, 'args.command == "init"'
 
 
 @dataclass
@@ -98,6 +102,7 @@ class CodeGraph:
         for e in self.edges:
             arrow = arrows.get(e.kind, "-->")
             label = e.label if e.kind != "call" or not e.label.startswith("line ") else ""
+            label = " · ".join(filter(None, [label, f"when {e.when}" if e.when else ""]))
             text = f'|"{_mermaid_text(_clip(label, 60))}"|' if label else ""
             out.append(f"  {_mermaid_id(e.source)} {arrow}{text} {_mermaid_id(e.target)}")
         warned = [n.id for n in self.nodes if n.tone == "warn"]
@@ -128,7 +133,9 @@ def _aws_node(service: str) -> str:
     return "aws-" + (re.sub(r"[^a-z0-9]+", "-", service.lower()).strip("-") or "service")
 
 
-_GRAPH_FUNCTIONS = 24  # functions code_graph() draws, at most (the shallowest first)
+_GRAPH_FUNCTIONS = 24  # functions code_graph() draws, at most (the ones that lead to the most code first)
+
+_REACH_WEIGHT = 30  # lines of code an AWS call, HTTP request or environment variable counts as, picking boxes
 
 _GRAPH_DEPTH = 5  # ...and how deep below the handler
 
@@ -178,14 +185,86 @@ def _listed_lines(items: list[str], most: int = _GRAPH_LINES) -> list[str]:
     return items[:most] if len(items) <= most else items[:most - 1] + [f"+{len(items) - most + 1} more"]
 
 
+def _when(f: CodeFunction, places: list[str]) -> str:
+    """
+    The condition a function is called under from these places ('check(order)'), when every one of them has one:
+    each place's nearest test, joined with 'or'. '' when one of them always calls it.
+    """
+    if not places or any(not f.when.get(where) for where in places):
+        return ""
+    return " or ".join(dict.fromkeys(f.when[where] for where in places))
+
+
+def _weights(cmap: CodeMap, children: dict[str, list[tuple[str, str]]]) -> dict[str, int]:
+    """
+    How much each function leads to: the lines of code in it and in every function it calls, however deep (each
+    counted once), and _REACH_WEIGHT more for each AWS call, HTTP request and environment variable among them.
+    """
+    lines = {f.name: f.lines for f in cmap.functions}
+    for function in [c.function for c in cmap.aws] + [e.function for e in cmap.env] + [
+            s.function for s in cmap.spots if s.kind == "http"]:
+        if function in lines:
+            lines[function] += _REACH_WEIGHT
+    weight: dict[str, int] = {}
+    for name in lines:
+        seen, todo = {name}, [name]
+        while todo:
+            for child, _ in children.get(todo.pop(), []):
+                if child not in seen:
+                    seen.add(child)
+                    todo.append(child)
+        weight[name] = sum(lines.get(k, 0) for k in seen)
+    return weight
+
+
+def _pick(cmap: CodeMap, entry: str, start_key: str, children: dict[str, list[tuple[str, str]]],
+          level: dict[str, int], weight: dict[str, int], order: dict[str, int], room: int, max_depth: int) -> list[str]:
+    """
+    The functions the graph draws besides the entry point, at most `room` of them and max_depth calls deep: grown out
+    from the entry point (and what runs at import), each time taking the one the drawn boxes call that leads to the
+    most code, so the boxes are the ones that do the work and each is joined to one above it.
+    """
+    def depth(name: str) -> int:
+        return level.get(name, by_name[name].depth + 1)
+
+    by_name = {f.name: f for f in cmap.functions}
+    allowed = [f.name for f in cmap.functions if f.name != entry and depth(f.name) <= max_depth]
+    if len(allowed) <= room:
+        return allowed
+    queue: list[tuple[int, int, int, str]] = []
+
+    def offer(name: str) -> None:
+        if name in by_name and name != entry and depth(name) <= max_depth:
+            heapq.heappush(queue, (-weight.get(name, 0), depth(name), order[name], name))
+
+    for root in (entry, start_key):
+        for child, _ in children.get(root, []):
+            offer(child)
+    for name in allowed:  # nothing the drawn code is known to call it: offered from the start, as before
+        if name not in level:
+            offer(name)
+    picked: list[str] = []
+    while queue and len(picked) < room:
+        name = heapq.heappop(queue)[3]
+        if name in picked:
+            continue
+        picked.append(name)
+        for child, _ in children.get(name, []):
+            if child not in picked:
+                offer(child)
+    return picked
+
+
 def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_depth: int = _GRAPH_DEPTH) -> CodeGraph:
     """
     How the code fits together, as boxes and arrows, from a CodeMap: on the left what comes in (the event, with the
     fields it reads, and the environment variables), then the handler, what runs at start-up, and its own functions
     by how many calls they are from those (an arrow for each call), and on the right the AWS services and the web it
     reaches, each arrow by what it does (reads, writes, sends, runs). A box or an arrow a warning is about is marked,
-    and says which on hover. At most max_functions functions, max_depth calls deep, the nearest first; `hidden` counts the rest, and what
+    and says which on hover. At most max_functions functions, max_depth calls deep; `hidden` counts the rest, and what
     they do is drawn from the nearest box above them that is.
+    The functions drawn are grown out from the entry point, each time the one that leads to the most code (and to AWS,
+    the web and the environment), so the boxes are the ones that do the work, not the nearest helpers.
     """
     graph = CodeGraph()
     if cmap.note or cmap.entry is None:
@@ -223,11 +302,21 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
                 level[child] = level[key] + 1
                 todo.append(child)
     order = {f.name: i for i, f in enumerate(cmap.functions)}
-    rest = sorted((f for f in cmap.functions if f.name != entry and level.get(f.name, f.depth + 1) <= max_depth),
-                  key=lambda f: (level.get(f.name, f.depth + 1), order[f.name]))
-    shown = ([by_name[entry]] if entry_is_function else []) + rest[:max_functions - 1]
+    weight = _weights(cmap, children)
+    picked = _pick(cmap, entry, start_key, children, level, weight, order, max_functions - entry_is_function,
+                   max_depth)
+    shown = ([by_name[entry]] if entry_is_function else []) + sorted(
+        (by_name[name] for name in picked), key=lambda f: (level.get(f.name, f.depth + 1), order[f.name]))
     graph.hidden = len(cmap.functions) - len(shown)
     ids = {f.name: f"f{i}" for i, f in enumerate(shown)}
+    drawn_level = {entry: 0, start_key: 0}  # calls from the entry point through the boxes drawn: each box's column
+    todo = [entry, start_key]
+    while todo:
+        key = todo.pop(0)
+        for child, _ in children.get(key, []):
+            if child in ids and child not in drawn_level:
+                drawn_level[child] = drawn_level[key] + 1
+                todo.append(child)
     if not entry_is_function:
         ids[entry] = "f-entry"
 
@@ -294,7 +383,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             lines = [ln for c, ln in parents[f.name] if c == caller and ln]
             label = ("; ".join(routes[f.name]) if caller == entry and f.name in routes else
                      "line " + ", ".join(lines[:3]) + (" …" if len(lines) > 3 else "") if lines else "")
-            edges.append(GraphEdge(source, ids[f.name], "call", label))
+            edges.append(GraphEdge(source, ids[f.name], "call", label, when=_when(f, [
+                where for where in f.called_from if where.rpartition(" line ")[0] == caller])))
     has_input = bool(cmap.event) or platform.draws_input
     if has_input:
         edges.insert(0, GraphEdge("event", entry_id, "event", "its input"))
@@ -324,6 +414,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         does = list(dict.fromkeys(c.access for c in calls))
         tip = f"{_service_name(service)}: " + ", ".join(
             f"{c.operation} ({c.permission or 'no permission needed'})" for c in {c.operation: c for c in calls}.values())
+        tip += "".join(f"\n{c.operation} line {c.line}: " + ", ".join(f"{arg} ← {source}" for arg, source in c.args)
+                       for c in calls if c.args)
         if all(c.guessed for c in calls):
             tip += "\nKnown only by the methods' names: their client couldn't be followed"
         reach.append(GraphNode(node_id, "aws", _service_name(service), " · ".join(does), _listed_lines(ops),
@@ -415,14 +507,18 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     for f in shown:
         is_entry = f.name == entry
         why = reasons.get(f.name, []) + (handler_reasons if is_entry else [])
+        more = list(dict.fromkeys(f"{_short_name(child)}()" for child, _ in children.get(f.name, [])
+                                  if child in by_name and child not in ids))
         graph.nodes.append(GraphNode(
             ids[f.name], "handler" if is_entry else "function", f"{_short_name(f.name)}()",
             f"{f.file} line {f.line}", [f.doc] if f.doc else [], "warn" if why else "",
-            warned_tip(f"{f.name}({f.args}) in {f.file}, {_plural(f.lines, 'line')}" + (f": {f.doc}" if f.doc else ""),
-                       why),
-            column=1 + level.get(f.name, f.depth),
+            warned_tip(f"{f.name}({f.args}) in {f.file}, {_plural(f.lines, 'line')}" + (f": {f.doc}" if f.doc else "")
+                       + (f"\nIt calls {_plural(len(more), 'function')} the graph leaves out: {', '.join(more)}"
+                          if more else ""), why),
+            column=1 + drawn_level.get(f.name, level.get(f.name, f.depth)),
             code=[CodeSpan(f.file, f.line, f.line + f.lines - 1,
-                           sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))]))
+                           sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))], more=more,
+            when=_when(f, f.called_from)))
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
     for node in reach:
         node.column = out_column

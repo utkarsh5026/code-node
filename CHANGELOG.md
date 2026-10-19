@@ -7,6 +7,27 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- The graph picks its boxes by how much code each one leads to, not by how near it is: from the entry point it
+  keeps taking the function that leads to the most lines (and AWS calls, HTTP requests and environment variables)
+  below it. On code-node's own command it now draws `make_page`, `map_code`, `page_blocks` and `render_page`
+  instead of small helpers, and the graph is less than half as tall.
+- A box whose calls the graph leaves out says "+3 calls not drawn", and its code panel names them, instead of
+  looking like it does nothing.
+- It follows what Python calls for you: `super().__init__()` and other `super()` calls open the base class's method,
+  reading a `@property` (or `cached_property`) runs its getter, and a `with` block on one of your classes runs its
+  `__enter__` (what `as` names is what that returns) and, after the block, its `__exit__`.
+- Console scripts come from every `pyproject.toml` in the folder, not only the root's, so a monorepo's commands
+  (`libs/cli/pyproject.toml`) are found before its CI scripts.
+- SyntaxWarnings from the code being read (`"\d"` in a plain string) no longer show in the terminal.
+- It shows what it already knew about values. In Step by step, a line's card says what the names it sets now hold
+  (`store` holds an OrderStore, `self.table` a DynamoDB Table) and where its AWS call's arguments come from
+  (`Bucket ← env ARCHIVE_BUCKET`, `Key ← event Records[].s3.object.key`). A call's card says when it runs
+  ("only when `check(order)`"). The text and Mermaid output say the same, and the graph's AWS boxes list the sources
+  on hover.
+- A function called only under an `if` says so in its graph box ("when args.serve"), from the `if` nearest around
+  the call. Lines after `if not check(order): continue` (or `return`, `raise`, `break`) count as running only when
+  `check(order)`, rather than always.
+
 - The page is only two tabs now, Graph and Step by step. The title, the cards of numbers, the findings and the tables
   under the graph (AWS calls and their IAM policy, environment variables, the event, functions, imports, HTTP
   requests) are gone. The entry point and the folder sit at the right of the tab bar, which stays at the top as you
@@ -33,6 +54,10 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
 ### Added
+
+- Line links to your editor: each step's card ("line 36 ↗") and each place in a box's code panel ("open ↗") opens
+  that line in VS Code, or in Cursor with `--editor cursor`. Inside WSL they open the Windows editor on the WSL
+  files. `--editor none` leaves them out, and the folder's full path with them.
 
 - The pages have a tab icon (code-node's logo), saved and served.
 

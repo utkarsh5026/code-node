@@ -36,11 +36,11 @@ def _closing_note(cmap: CodeMap, graph: CodeGraph) -> str:
 
 
 def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: int,
-                sources: dict[str, str] | None = None) -> list[Any]:
+                sources: dict[str, str] | None = None, editor: str = "") -> list[Any]:
     """
     The whole page for one entry point, as report blocks: tabs for the graph and the walk through its steps, with the
     entry point and the folder beside them. sources is the code read, {file: its text}: with it, a box of the graph
-    clicked shows its code.
+    clicked shows its code. editor is a link from editor_link(), to open the code at a line in an editor.
     """
     if cmap.note:
         return [_Note(cmap.note)]
@@ -52,12 +52,12 @@ def page_blocks(cmap: CodeMap, *, project: str, max_functions: int, max_depth: i
     entry = _short_name(cmap.entry) if cmap.entry else None
     walk = _Walk(cmap.startup, cmap.steps, f"What each call does, step by step from {entry}()" if entry
                  else "What each call does", calls_title=f"Each call, from {entry}()" if entry else "Each call",
-                 functions=cmap.functions, sources=sources or {})
+                 functions=cmap.functions, sources=sources or {}, editor=editor)
     tabs: list[tuple[str, str, list[Any]]] = []
     if graph.nodes:
         tabs.append(("Graph", f"{len(graph.nodes)} box{'' if len(graph.nodes) == 1 else 'es'}", [
             _Graph(graph, "How it fits together: what comes in, who calls whom, and what it reaches",
-                   sources=sources or {}),
+                   sources=sources or {}, editor=editor),
             _Text(graph.mermaid(), code=True, collapsed=True, title=(
                 "The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request"))]))
     tabs.append(("Step by step", _plural(len(walk_stops(walk)), "step"), [walk]))

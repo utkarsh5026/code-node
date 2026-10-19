@@ -1,0 +1,115 @@
+orders.handler.lambda_handler · orders-service · 4 files, 92 lines, nothing run
+
+-- How it fits together: what comes in, who calls whom, and what it reaches --
+  An S3 event: Records[].s3.bucket.name, Records[].s3.object.key
+      → lambda_handler()
+  Environment: ORDERS_TABLE, ARCHIVE_BUCKET, ORDERS_TOPIC, CHAT_WEBHOOK
+      → At import reads ORDERS_TABLE
+      → OrderStore._archive() reads ARCHIVE_BUCKET
+      → announce() reads ORDERS_TOPIC
+      → post_to_chat() reads CHAT_WEBHOOK
+  At import  once, when it loads
+      calls OrderStore() (line 16)
+      makes the SNS client
+      makes the S3 client
+  lambda_handler()  orders/handler.py line 30
+      calls read_orders() (line 35)
+      calls check() (line 36)
+      calls OrderStore.save() (line 39) when check(order)
+      calls announce() (line 40) when check(order)
+  OrderStore()  orders/store.py line 12
+      makes the DynamoDB client
+      makes the S3 client
+  read_orders()  orders/handler.py line 19
+      reads from S3: GetObject, in a loop
+  check()  orders/handler.py line 25
+      (does nothing this follows: no AWS calls, own functions or HTTP)
+  OrderStore.save()  orders/store.py line 16
+      calls OrderStore._archive() (line 19)
+      writes to DynamoDB: PutItem, in a loop
+  announce()  orders/notify.py line 14
+      calls post_to_chat() (line 17)
+      sends to SNS: Publish, in a loop
+  OrderStore._archive()  orders/store.py line 21
+      writes to S3: PutObject, in a loop
+  post_to_chat()  orders/notify.py line 20 (!)
+      sends POST os.environ.get('CHAT_WEBHOOK', 'https://chat.example.com/ho…, in a loop (!)
+
+-- The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request --
+flowchart LR
+  event(["An S3 event<br/><small>what it's called with</small>"])
+  env[/"Environment<br/><small>variables it reads</small>"/]
+  start[["At import<br/><small>once, when it loads</small>"]]
+  f0["lambda_handler()<br/><small>orders/handler.py line 30</small>"]
+  f1["OrderStore()<br/><small>orders/store.py line 12</small>"]
+  f2["read_orders()<br/><small>orders/handler.py line 19</small>"]
+  f3["check()<br/><small>orders/handler.py line 25</small>"]
+  f4["OrderStore.save()<br/><small>orders/store.py line 16</small>"]
+  f5["announce()<br/><small>orders/notify.py line 14</small>"]
+  f6["OrderStore._archive()<br/><small>orders/store.py line 21</small>"]
+  f7["post_to_chat()<br/><small>orders/notify.py line 20</small>"]
+  aws_s3[("S3<br/><small>reads · writes</small>")]
+  aws_dynamodb[("DynamoDB<br/><small>writes</small>")]
+  aws_sns[("SNS<br/><small>sends</small>")]
+  http{{"The web<br/><small>HTTP requests</small>"}}
+  event ==>|"its input"| f0
+  start --> f1
+  f0 --> f2
+  f0 --> f3
+  f0 -->|"when check(order)"| f4
+  f0 -->|"when check(order)"| f5
+  f4 --> f6
+  f5 --> f7
+  env -.->|"ORDERS_TABLE"| start
+  env -.->|"ARCHIVE_BUCKET"| f6
+  env -.->|"ORDERS_TOPIC"| f5
+  env -.->|"CHAT_WEBHOOK"| f7
+  f2 -->|"GetObject"| aws_s3
+  f6 -->|"PutObject"| aws_s3
+  f4 -->|"PutItem"| aws_dynamodb
+  f5 -->|"Publish"| aws_sns
+  start -->|"makes its SNS client"| aws_sns
+  start -->|"makes its S3 client"| aws_s3
+  f1 -->|"makes its DynamoDB client"| aws_dynamodb
+  f1 -->|"makes its S3 client"| aws_s3
+  f7 -->|"POST os.environ.get('CHAT_WEBHOOK', 'https://chat.example.c…"| http
+  classDef warn stroke:#f59e0b,stroke-width:2px
+  class f7,http warn
+
+-- When Python imports it (once, before the first call) --
+   12  from .notify import announce
+           ↳ orders/notify.py, run when it's imported
+   11          sns = boto3.client('sns')   # makes an SNS client
+   15  s3 = boto3.client('s3')   # makes an S3 client
+   16  store = OrderStore(os.environ['ORDERS_TABLE'])   # env ORDERS_TABLE · store: an OrderStore
+   12      ↳ def __init__(self, table_name):   # orders/store.py
+   13          self.table = boto3.resource('dynamodb').Table(table_name)   # makes a DynamoDB resource · self.table: a DynamoDB Table
+   14          self.archive = boto3.client('s3')   # makes an S3 client
+
+-- What each call does, step by step from lambda_handler() --
+   30  def lambda_handler(event, context):   # orders/handler.py
+   32    for record in event['Records']:   # event Records · record: each event Records[]
+   33      bucket = record['s3']['bucket']['name']   # event Records[].s3.bucket.name
+   34      key = record['s3']['object']['key']   # event Records[].s3.object.key
+   35      for order in read_orders(bucket, key):
+   19          ↳ def read_orders(bucket, key):   # orders/handler.py
+   21              body = s3.get_object(Bucket=bucket, Key=key)['Body'].read()   # S3 GetObject (reads) · Bucket ← event Records[].s3.bucket.name · Key ← event Records[].s3.object.key
+   22              return [json.loads(line) for line in body.splitlines() if line]
+   36        if not check(order):
+   25            ↳ def check(order):   # orders/handler.py
+   27                return bool(order.get('id')) and bool(order.get('customer')) and (order.get('total', 0) > 0)
+   37          log.warning('skipping %s', order.get('id'))   # logs a warning
+   39        store.save(order)
+   16            ↳ def save(self, order):   # orders/store.py · when check(order)
+   18                self.table.put_item(Item=order)   # DynamoDB PutItem (writes)
+   19                self._archive(order)
+   21                    ↳ def _archive(self, order):   # orders/store.py
+   23                        self.archive.put_object(Bucket=os.environ['ARCHIVE_BUCKET'], Key=key, Body=json.dumps(order))   # env ARCHIVE_BUCKET · S3 PutObject (writes) · Bucket ← env ARCHIVE_BUCKET
+   40        announce(order)
+   14            ↳ def announce(order):   # orders/notify.py · when check(order)
+   16                sns.publish(TopicArn=os.environ['ORDERS_TOPIC'], Message=json.dumps(order))   # env ORDERS_TOPIC · SNS Publish (sends) · TopicArn ← env ORDERS_TOPIC
+   17                post_to_chat(f"New order {order['id']} for {order['total']}")
+   20                    ↳ def post_to_chat(text):   # orders/notify.py
+   21                        requests.post(os.environ.get('CHAT_WEBHOOK', 'https://chat.example.com/hook'), json={'text': text})   # env CHAT_WEBHOOK · HTTP POST
+   42    return {'saved': saved}
+It reads the code with Python's ast module and runs none of it. It follows calls into the folder's own functions and the boto3 clients it makes; calls through a value handed in from elsewhere, or made inside a library, aren't followed, so there may be more than it lists. 1 function in the files it read never runs from lambda_handler().
