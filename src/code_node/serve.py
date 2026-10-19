@@ -1,7 +1,7 @@
 """
 code-node --serve: the page on a local server, made again whenever a .py file under the folder changes, and the
-browser told to reload (keeping its scroll position). Standard library only: a polling watcher thread, a threaded HTTP
-server, and Server-Sent Events for the reload.
+browser told to reload (keeping its scroll position, and the tab and step that were open). Standard library only: a
+polling watcher thread, a threaded HTTP server, and Server-Sent Events for the reload.
 
 The saved pages have no JavaScript; the served one gets a few lines (_LIVE_SCRIPT) to reload and to say when the
 server has stopped.
@@ -38,14 +38,23 @@ padding:6px 10px;border-radius:999px;background:rgba(127,127,127,.14);backdrop-f
 <script>
 (() => {
   const key = "code-node-scroll:" + location.pathname;
-  const saved = sessionStorage.getItem(key);
-  if (saved) { window.scrollTo(0, +saved); sessionStorage.removeItem(key); }
+  const saved = JSON.parse(sessionStorage.getItem(key) || "null");
+  sessionStorage.removeItem(key);
+  if (saved) {  // the tab and the step that were open, where the list of steps was, then the page
+    for (const id of saved.picked || []) { const radio = document.getElementById(id); if (radio) radio.checked = true; }
+    document.querySelectorAll(".walk .wl").forEach((list, i) => { list.scrollTop = (saved.lists || [])[i] || 0; });
+    window.scrollTo(0, saved.y || 0);
+  }
   const badge = document.getElementById("cn-live");
   const events = new EventSource("/events");
   let version = null;
   events.onmessage = (e) => {
     if (version !== null && e.data !== version) {
-      sessionStorage.setItem(key, String(window.scrollY));
+      sessionStorage.setItem(key, JSON.stringify({
+        y: window.scrollY,
+        picked: [...document.querySelectorAll("input[type=radio]:checked")].map((radio) => radio.id),
+        lists: [...document.querySelectorAll(".walk .wl")].map((list) => list.scrollTop),
+      }));
       location.reload();
     }
     version = e.data;

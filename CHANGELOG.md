@@ -7,6 +7,17 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- The graph and the steps are in tabs, Graph and Step by step, instead of one under the other.
+- Step by step is now a walk through the code in the order it runs, as a debugger steps: every step in a list, and
+  beside it the function the current step is in, its line lit, with a card saying what the line does and which calls
+  it's inside. Next goes into each function a line calls, Step over and Step out skip past them, and once a step is
+  clicked the arrow keys step through the rest. Click any numbered line in the code to jump to it. Still no
+  JavaScript, and a step is as quick on a page with thousands of them.
+- The paragraph summing up the code under the numbers is gone: the numbers, the findings and the graph say it.
+- Code on the page is set in Cascadia Mono when it's installed (the usual monospace font otherwise).
+- `code-node --serve` keeps the open tab and step when the page redraws.
+- The graph's code panel makes room beside the graph, rather than moving the whole page.
+
 - `code-node --serve` without `--port` takes the first free port from 8765, so you can serve several folders at
   once instead of the second one failing. The served tab's title starts with the folder's name. `--port N` still
   means exactly that port.

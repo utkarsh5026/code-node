@@ -1,6 +1,6 @@
 ---
 description: Remake the screenshots in docs/images/ and check the README and docs still describe them
-argument-hint: "[figure ...]  (page, graph, outline, summary; default all)"
+argument-hint: "[figure ...]  (page, graph, steps, summary; default all)"
 ---
 
 1. Run `uv run python scripts/shots.py $ARGUMENTS`. It needs Chrome: set `CHROME=` if it isn't found

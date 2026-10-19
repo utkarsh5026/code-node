@@ -4,7 +4,7 @@ examples/orders-service, each figure a page holding only the blocks it shows, dr
 dark and trimmed to what's drawn.
 
     python scripts/shots.py                 # every figure
-    python scripts/shots.py graph outline   # some of them
+    python scripts/shots.py graph steps     # some of them
     CHROME=/path/to/chrome python scripts/shots.py
 
 Needs Chrome or Chromium (CHROME, else the first of chromium, google-chrome, or Playwright's in ~/.cache) and pillow.
@@ -22,12 +22,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from code_node.analysis.mapping import map_code
-from code_node.kit.blocks import _Cards, _Findings, _Note
+from code_node.kit.blocks import _Cards, _Findings
 from code_node.project import entry_points, read_project
 from code_node.report.build import page_blocks
 from code_node.report.graph import _Graph
-from code_node.report.outline import _Outline
 from code_node.report.style import render_page
+from code_node.report.tabs import _Tabs
+from code_node.report.walk import _Walk
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE = ROOT / "examples" / "orders-service"
@@ -36,12 +37,24 @@ WIDTH = 1240  # the browser window: the figures are trimmed to what's drawn in i
 SCALE = 2  # device pixels per CSS pixel, for sharp text
 MARGIN = 24  # kept around what's drawn, in device pixels
 
+
+
+def _inside(blocks: list[Any]) -> list[Any]:
+    """
+    The blocks, with what's in each tab in place of the tabs.
+    """
+    return [inner for b in blocks for inner in (
+        [x for _, _, tab in b.tabs for x in tab] if isinstance(b, _Tabs) else [b])]
+
+
 FIGURES: dict[str, Callable[[list[Any]], list[Any]]] = {
-    "page": lambda blocks: blocks[:6],
-    "graph": lambda blocks: [b for b in blocks if isinstance(b, _Graph)],
-    "outline": lambda blocks: [b for b in blocks if isinstance(b, _Outline)][-1:],
-    "summary": lambda blocks: [b for b in blocks if isinstance(b, (_Cards, _Note, _Findings))][:3],
+    "page": lambda blocks: blocks[:4],
+    "graph": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],
+    "steps": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Walk)],
+    "summary": lambda blocks: [b for b in blocks if isinstance(b, (_Cards, _Findings))],
 }
+
+STEP_SHOWN = 14  # the step the steps figure has open: inside read_orders(), its S3 call lit
 
 
 def _chrome() -> str:
@@ -79,12 +92,17 @@ def _trim(path: Path) -> tuple[int, int]:
 
 def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     page = work / f"{name}.html"
-    page.write_text(render_page(blocks, f"code-node: {name}"), "utf-8")
+    html = render_page(blocks, f"code-node: {name}")
+    if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
+        html = html.replace('id="cw0" checked', 'id="cw0"').replace(f'id="cw{STEP_SHOWN}"',
+                                                                    f'id="cw{STEP_SHOWN}" checked')
+    page.write_text(html, "utf-8")
     for theme in ("light", "dark"):
         out = IMAGES / f"{name}-{theme}.png"
         flags = ["--force-dark-mode"] if theme == "dark" else []
         subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
                         f"--force-device-scale-factor={SCALE}", f"--window-size={WIDTH},4000", *flags,
+                        "--virtual-time-budget=2000",  # let the tabs fade in before the picture
                         f"--screenshot={out}", page.as_uri()], check=True, capture_output=True)
         width, height = _trim(out)
         print(f"{out.with_suffix('.webp').relative_to(ROOT)}  {width} x {height}")

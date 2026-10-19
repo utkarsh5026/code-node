@@ -49,7 +49,7 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/platforms/` | **Pure, no I/O.** `Platform` (plain Python: the base a plugin overrides), the registry (`register_platform`, `get_platform`, the `code_node.platforms` entry point group), and `aws_lambda.py` (`LambdaPlatform`: handlers, the event, its findings and wording) |
 | `src/code_node/pages.py` | `PageOptions`, `make_page` / `make_mermaid`: read the folder, map, draw (what the command and the server share) |
 | `src/code_node/serve.py` | `--serve`: `LivePage` (the latest page, a version, a Condition), a polling watcher thread, `ThreadingHTTPServer` with `/` and `/events` (Server-Sent Events) |
-| `src/code_node/report/` | Drawing: `graph.py` (the SVG layout), `outline.py` (the step tree), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
+| `src/code_node/report/` | Drawing: `graph.py` (the SVG layout), `walk.py` (Step by step: the steps in run order beside their code), `tabs.py` (the Graph / Step by step tabs), `outline.py` (the step tree, for text), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
 | `src/code_node/kit/` | Report blocks (`_Title`, `_Cards`, `_Table`, `_Findings`, ...) and the HTML/text renderer, copied from aws-analyzer's `_kit` |
 | `examples/orders-service/` | A small Lambda service the screenshots and the CI smoke test run on. Never run |
 | `Makefile`, `makefile.py` | The commands below by name; `makefile.py` is the same tasks in Python with rich, for any OS |
@@ -71,8 +71,11 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
   `platforms/aws_lambda.py`: add a hook to `Platform` instead, with plain-Python wording as its default.
 - **Partial, never a traceback.** `map_code` catches what the reader can't follow and records it in `cmap.limited`.
   The page says what was cut short.
-- **No JavaScript in the page.** Interactivity is CSS (`:has()`, `<details>`), as in aws-analyzer. The one exception
-  is `serve.py`'s `_LIVE_SCRIPT`, which is added only to the served page, for the reload.
+- **No JavaScript in the page.** Interactivity is CSS (`:has()`, `<details>`, radio buttons), as in aws-analyzer.
+  The one exception is `serve.py`'s `_LIVE_SCRIPT`, which is added only to the served page, for the reload.
+- **No `:has()` on an ancestor of the walk's radio buttons** (`.cnd`, `.tabs`, `body`). Chrome then restyles the
+  whole page on every step, which takes seconds on a big one; use sibling selectors, or `:has()` on a box that
+  doesn't hold the walk (the graph's are on `.cgw`).
 - **The server never dies on bad code.** `LivePage.build` turns any failure into the page and keeps watching. It
   listens on 127.0.0.1 only.
 - Python 3.10 floor (CI runs 3.10–3.14), `from __future__ import annotations`, lines up to 120 characters.

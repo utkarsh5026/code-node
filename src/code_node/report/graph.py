@@ -804,7 +804,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
     panels = {n.id: _g_panel(n, lines_of) for n in graph.nodes} if block.sources else {}
     for n in graph.nodes:
         if panels.get(n.id):  # the box whose code is open, outlined
-            report.rules.add(f".{root}:has(#{_g_panel_id(n)}:target) .cg .n-{n.id} .fg"
+            report.rules.add(f".{root} .cgw:has(#{_g_panel_id(n)}:target) .cg .n-{n.id} .fg"
                              "{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}")
     for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
@@ -851,14 +851,16 @@ def _graph_html(block: _Graph, report: _Report) -> str:
                      f'aria-hidden="true"><circle r="7"/><path transform="scale(.6) translate(-8,-8)" d="{_G_LOOP}"/>'
                      "</svg>in a loop: once per item</span>")
     hidden = (f'<span class="kp kh"><b>+{graph.hidden}</b>{"more function" if graph.hidden == 1 else "more functions"} '
-              "not drawn (too deep or too many): the steps below have them all</span>") if graph.hidden else ""
+              "not drawn (too deep or too many): the Step by step tab has them all</span>") if graph.hidden else ""
     hint = ('<span class="kt">Point at a box to see only what it\'s joined to'
             + ("; click it to read its code" if any(panels.values()) else "") + "</span>")
-    return (f'{title}<div class="cgb"><div class="cg"><svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" '
+    # in a box of its own with its panels: the :has() rules that outline a box whose code is open look only in here,
+    # so a radio button elsewhere (the walk's steps) doesn't make the browser restyle the whole page
+    return (f'{title}<div class="cgw"><div class="cgb"><div class="cg"><svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" '
             f'height="{tall:.0f}" style="min-width:{width * 0.72:.0f}px" role="img" '
             f'aria-label="{_esc(block.title or "How the code fits together")}">'
             f'{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}</svg></div>'
-            f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}')
+            f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}</div>')
 
 
 @_draws(_Graph, "text")

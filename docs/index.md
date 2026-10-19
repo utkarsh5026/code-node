@@ -70,7 +70,7 @@ It also catches list calls that only read the first page, `except: pass`, and se
 
 ## The page
 
-Everything above is on one HTML page, along with a summary and each call step by step. It works offline, and it has
+Everything above is on one HTML page, along with the findings and each call step by step. It works offline, and it has
 no JavaScript.
 
 <figure class="cn-shot" markdown>
