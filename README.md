@@ -105,10 +105,13 @@ explains the rest.
 ## Develop
 
 ```bash
-uv venv && uv pip install -e . -r requirements-dev.txt
-.venv/bin/python -m pytest && .venv/bin/ruff check .
-.venv/bin/python scripts/shots.py      # remake the screenshots (needs Chrome)
+make install    # .venv with code-node and the dev tools (needs uv)
+make check      # lint, tests, the example, the docs build and the package, as CI runs them
+make shots      # remake the screenshots (needs Chrome)
 ```
+
+`make` alone lists the rest. `python makefile.py` has the same tasks, drawn with rich, and runs on Windows too
+(`python makefile.py check`; with no `.venv` yet, `uv run makefile.py install`).
 
 code-node was extracted from [aws-analyzer](https://github.com/utkarsh5026/aws-analyzer)'s `how_it_works()`.
 Apache 2.0.

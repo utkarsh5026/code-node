@@ -26,6 +26,11 @@ uv pip install -r requirements-docs.txt && .venv/bin/mkdocs build --strict   # t
 uv tool install -e .                                      # put code-node on your PATH, live-edited
 ```
 
+The `Makefile` has each of these by name (`make` lists them): `make install`, `make test`, `make lint`, `make try`
+(`REPO=<folder>` for another repo), `make serve`, `make shots`, `make docs`, `make package`, and `make check` for
+all of what CI runs. `makefile.py` has the same tasks in Python with rich (`python makefile.py check`), for
+Windows and for coloured output; a new task goes in both.
+
 Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/shots` (screenshots), `/map <repo>`
 (run it on a repo and review the page), `/release` (publish to PyPI).
 
@@ -42,6 +47,7 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/report/` | Drawing: `graph.py` (the SVG layout), `outline.py` (the step tree), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
 | `src/code_node/kit/` | Report blocks (`_Title`, `_Cards`, `_Table`, `_Findings`, ...) and the HTML/text renderer, copied from aws-analyzer's `_kit` |
 | `examples/orders-service/` | A small Lambda service the screenshots and the CI smoke test run on. Never run |
+| `Makefile`, `makefile.py` | The commands below by name; `makefile.py` is the same tasks in Python with rich, for any OS |
 | `scripts/shots.py` | Makes `docs/images/<figure>-{light,dark}.webp` |
 | `scripts/site_graph.py` | Makes the home page's graph (`docs/snippets/graph-trace.svg`) |
 | `docs/`, `mkdocs.yml` | The docs site (MkDocs Material), published by `.github/workflows/pages.yml` |
