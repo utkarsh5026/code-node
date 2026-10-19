@@ -298,7 +298,8 @@ def test_the_example_page_matches_its_snapshot(monkeypatch) -> None:
     if os.environ.get("UPDATE_SNAPSHOTS"):
         SNAPSHOT.parent.mkdir(exist_ok=True)
         SNAPSHOT.write_text(text)
-    assert text == SNAPSHOT.read_text()
+    # code is shown as ast.unparse writes it, whose quotes differ between Pythons (f'{a['b']}' from 3.12 only)
+    assert text.replace("'", '"') == SNAPSHOT.read_text().replace("'", '"')
 
 
 ENGINE = '''
