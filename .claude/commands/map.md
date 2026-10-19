@@ -3,7 +3,7 @@ description: Run code-node on a repository and review the page it draws - what i
 argument-hint: "<path to a repo, file or file:function> [-e entry]"
 ---
 
-Run `.venv/bin/code-node $ARGUMENTS --no-open -o /tmp/code-node-map.html` (the installed `code-node` works too), with
+Run `uv run code-node $ARGUMENTS --no-open -o /tmp/code-node-map.html` (the installed `code-node` works too), with
 `--list` first if no entry point is given, so you can say which one it picked.
 
 Then review the result against the code:

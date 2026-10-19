@@ -16,18 +16,23 @@ command is `code-node` and the import is `code_node`.
 ## Commands
 
 ```bash
-uv venv && uv pip install -e . -r requirements-dev.txt   # once
-.venv/bin/python -m pytest                                # tests
-.venv/bin/ruff check .                                    # lint
-.venv/bin/code-node examples/orders-service --no-open -o /tmp/page.html   # try it
-.venv/bin/python scripts/shots.py                         # remake docs/images/ (needs Chrome + pillow)
-uv pip install -r requirements-docs.txt && .venv/bin/mkdocs build --strict   # the docs site
-.venv/bin/python -m build && .venv/bin/twine check --strict dist/*         # the package
+uv sync                                                   # .venv with every dependency group
+uv run pytest                                             # tests
+uv run ruff check .                                       # lint
+uv run code-node examples/orders-service --no-open -o /tmp/page.html   # try it
+uv run python scripts/shots.py                            # remake docs/images/ (needs Chrome)
+uv run mkdocs build --strict                              # the docs site
+uv run python -m build && uv run twine check --strict dist/*   # the package
 uv tool install -e .                                      # put code-node on your PATH, live-edited
 ```
 
-The `Makefile` has each of these by name (`make` lists them): `make install`, `make test`, `make lint`, `make try`
-(`REPO=<folder>` for another repo), `make serve`, `make shots`, `make docs`, `make package`, and `make check` for
+Every dependency, the dev tools included, is in `pyproject.toml`: `[project] dependencies` for the package, and
+`[dependency-groups]` (`dev`, `package`, `docs`) for working on it, all installed by `uv sync` and locked in `uv.lock`.
+Change them there (`uv add --group dev x`), never with `uv pip install`, and commit `uv.lock` with it. `uv run` syncs
+`.venv` before each command, so a stale or stripped venv fixes itself.
+
+The `Makefile` has each of these by name (`make` lists them): `make install` (`uv sync`), `make test`, `make lint`,
+`make try` (`REPO=<folder>` for another repo), `make serve`, `make shots`, `make docs`, `make package`, and `make check` for
 all of what CI runs. `makefile.py` has the same tasks in Python with rich (`python makefile.py check`), for
 Windows and for coloured output; a new task goes in both.
 

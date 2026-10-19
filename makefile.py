@@ -11,6 +11,7 @@ The Makefile's tasks in Python, drawn with rich, so they run and look the same o
     python makefile.py test lint       # several, in order
     python makefile.py try --repo ~/projects/aws-analyzer
     uv run makefile.py install         # no .venv yet: uv brings rich
+With uv, every task runs through `uv run`, which first brings .venv in line with pyproject.toml and uv.lock.
 """
 
 from __future__ import annotations
@@ -100,6 +101,8 @@ def _shown(word: str) -> str:
     """
     A command word as it reads best: paths inside the repo relative to it, .venv's Python as "python".
     """
+    if word == UV:
+        return "uv"
     if word == str(VENV_PYTHON):
         return "python"
     if word.startswith(str(ROOT) + os.sep):
@@ -117,14 +120,10 @@ def run(*command: str | Path) -> None:
 
 
 def python(*arguments: str | Path) -> None:
-    run(VENV_PYTHON, *arguments)
-
-
-def pip_install(*arguments: str) -> None:
     if UV:
-        run(UV, "pip", "install", "--python", VENV_PYTHON, *arguments)
+        run(UV, "run", "python", *arguments)
     else:
-        python("-m", "pip", "install", *arguments)
+        run(VENV_PYTHON, *arguments)
 
 
 def code_node(options: Options, *arguments: str) -> None:
@@ -133,19 +132,17 @@ def code_node(options: Options, *arguments: str) -> None:
 
 # Set up
 
-@task("install", "📦", "make .venv and install code-node with the dev tools", "Set up", venv=False)
+@task("install", "📦", "make .venv with code-node and every dependency group in pyproject.toml", "Set up",
+      venv=False)
 def install(options: Options) -> None:
+    if UV:
+        run(UV, "sync")
+        return
+    # Without uv: pip reads the same groups (pip 25.1 or later), at pyproject.toml's pins rather than uv.lock's.
     if not VENV_PYTHON.exists():
-        if UV:
-            run(UV, "venv", VENV)
-        else:
-            run(sys.executable, "-m", "venv", VENV)
-    pip_install("-e", ".", "-r", "requirements-dev.txt")
-
-
-@task("docs-install", "📚", "install MkDocs into .venv", "Set up")
-def docs_install(options: Options) -> None:
-    pip_install("-q", "-r", "requirements-docs.txt")
+        run(sys.executable, "-m", "venv", VENV)
+    python("-m", "pip", "install", "-q", "--upgrade", "pip")
+    python("-m", "pip", "install", "-e", ".", "--group", "dev", "--group", "docs")
 
 
 @task("tool", "🚀", "put code-node on your PATH, live-edited (needs uv)", "Set up", venv=False)
@@ -214,12 +211,12 @@ def mermaid(options: Options) -> None:
 
 # Docs
 
-@task("docs", "📖", "build the docs site, failing on a broken link", "Docs", needs=("docs-install",))
+@task("docs", "📖", "build the docs site, failing on a broken link", "Docs")
 def docs(options: Options) -> None:
     python("-m", "mkdocs", "build", "--strict")
 
 
-@task("docs-serve", "👀", "serve the docs site locally", "Docs", needs=("docs-install",), until_stopped=True)
+@task("docs-serve", "👀", "serve the docs site locally", "Docs", until_stopped=True)
 def docs_serve(options: Options) -> None:
     python("-m", "mkdocs", "serve")
 

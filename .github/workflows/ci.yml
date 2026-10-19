@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+# uv fails instead of changing uv.lock when it no longer matches pyproject.toml.
+env:
+  UV_LOCKED: "1"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,14 +29,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-          cache: pip
-          cache-dependency-path: requirements-dev.txt
-      - run: python -m pip install -e . -r requirements-dev.txt
-      - run: ruff check .
-      - run: python -m pytest -q
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest -q
 
   package:
     name: Package
@@ -42,19 +44,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.14"
-      - run: >-
-          python -m pip install
-          "$(grep -E '^build==' requirements-dev.txt)"
-          "$(grep -E '^twine==' requirements-dev.txt)"
-          "$(grep -E '^readme-renderer\[md\]==' requirements-dev.txt)"
-      - run: python -m build
+      - run: uv run --only-group package python -m build
       - name: Check the metadata, and that the README renders on PyPI
-        run: twine check --strict dist/*
+        run: uv run --only-group package twine check --strict dist/*
       - name: Install the wheel alone and run the command on the example
         run: |
-          python -m venv "$RUNNER_TEMP/wheel"
-          "$RUNNER_TEMP/wheel/bin/pip" install dist/*.whl
+          uv venv "$RUNNER_TEMP/wheel"
+          uv pip install --python "$RUNNER_TEMP/wheel" dist/*.whl
           "$RUNNER_TEMP/wheel/bin/code-node" examples/orders-service --no-open -o "$RUNNER_TEMP/page.html"

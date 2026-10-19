@@ -1,15 +1,14 @@
 # The commands in CLAUDE.md, by name. `make` alone lists them.
-# Everything runs from .venv; `make install` makes it (with uv).
+# Everything runs with `uv run`, which first brings .venv in line with pyproject.toml and uv.lock.
 
 VENV   := .venv
-PY     := $(VENV)/bin/python
-BIN    := $(VENV)/bin
+RUN    := uv run
 REPO   ?= examples/orders-service
 OUT    ?= /tmp/code-node-page.html
 PORT   ?= 8765
 
 .DEFAULT_GOAL := help
-.PHONY: help install docs-install test lint fix try serve mermaid shots site-graph docs docs-serve package check \
+.PHONY: help install test lint fix try serve mermaid shots site-graph docs docs-serve package check \
 	tool clean
 
 help: ## list the targets
@@ -17,49 +16,43 @@ help: ## list the targets
 	@echo ""
 	@echo "  REPO=<folder> picks the code for try, serve and mermaid (default $(REPO))"
 
-$(PY):
-	uv venv
-	uv pip install -e . -r requirements-dev.txt
+install: ## make .venv with code-node and every dependency group in pyproject.toml
+	uv sync
 
-install: $(PY) ## make .venv and install code-node with the dev tools
+test: ## run the tests
+	$(RUN) pytest -q
 
-docs-install: $(PY) ## install MkDocs into .venv
-	uv pip install -q -r requirements-docs.txt
+lint: ## ruff check
+	$(RUN) ruff check .
 
-test: $(PY) ## run the tests
-	$(PY) -m pytest -q
+fix: ## ruff check --fix
+	$(RUN) ruff check --fix .
 
-lint: $(PY) ## ruff check
-	$(BIN)/ruff check .
+try: ## draw REPO's page to OUT without opening it
+	$(RUN) code-node $(REPO) --no-open -o $(OUT)
 
-fix: $(PY) ## ruff check --fix
-	$(BIN)/ruff check --fix .
+serve: ## serve REPO's page on PORT, redrawn on every save
+	$(RUN) code-node $(REPO) --serve --port $(PORT)
 
-try: $(PY) ## draw REPO's page to OUT without opening it
-	$(BIN)/code-node $(REPO) --no-open -o $(OUT)
+mermaid: ## print REPO's graph as Mermaid
+	$(RUN) code-node $(REPO) --mermaid
 
-serve: $(PY) ## serve REPO's page on PORT, redrawn on every save
-	$(BIN)/code-node $(REPO) --serve --port $(PORT)
+shots: ## remake docs/images/ (needs Chrome)
+	$(RUN) python scripts/shots.py
 
-mermaid: $(PY) ## print REPO's graph as Mermaid
-	$(BIN)/code-node $(REPO) --mermaid
+site-graph: ## remake the home page's graph (docs/snippets/graph-trace.svg)
+	$(RUN) python scripts/site_graph.py
 
-shots: $(PY) ## remake docs/images/ (needs Chrome)
-	$(PY) scripts/shots.py
+docs: ## build the docs site, failing on a broken link
+	$(RUN) mkdocs build --strict
 
-site-graph: $(PY) ## remake the home page's graph (docs/snippets/graph-trace.svg)
-	$(PY) scripts/site_graph.py
+docs-serve: ## serve the docs site locally
+	$(RUN) mkdocs serve
 
-docs: docs-install ## build the docs site, failing on a broken link
-	$(BIN)/mkdocs build --strict
-
-docs-serve: docs-install ## serve the docs site locally
-	$(BIN)/mkdocs serve
-
-package: $(PY) ## build the sdist and wheel, and check them as PyPI would
+package: ## build the sdist and wheel, and check them as PyPI would
 	rm -rf dist
-	$(PY) -m build -q
-	$(BIN)/twine check --strict dist/*
+	$(RUN) python -m build -q
+	$(RUN) twine check --strict dist/*
 
 check: lint test try docs package ## everything CI runs
 
