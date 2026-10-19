@@ -124,7 +124,7 @@ def _swallows(handler: ast.ExceptHandler) -> bool:
 
 def _is_main_guard(test: Any) -> bool:
     """
-    `if __name__ == "__main__":`, which never runs in Lambda.
+    `if __name__ == "__main__":`, which never runs when the code is imported.
     """
     return (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == "__name__"
             and any(_const(c) == "__main__" for c in test.comparators))

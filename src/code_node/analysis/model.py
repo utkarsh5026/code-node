@@ -52,12 +52,12 @@ class AwsCall:
     permission: str  # the IAM action its role needs: 's3:GetObject' ('' when it needs none)
     file: str
     line: int
-    function: str  # where: 'etl.handler', or the module ('etl') for code that runs when Lambda starts it
+    function: str  # where: 'etl.handler', or the module ('etl') for code that runs when it's imported
     code: str  # the call: "s3.get_object(Bucket=body['bucket'], Key=body['key'])"
     loop: str = ""  # the loop it's in: 'for row in rows:'
     pages: str = ""  # a list call: 'all' (a paginator, or it follows the next-page token), 'one' (its first page only)
     guessed: bool = False  # from the method's name alone: its client couldn't be followed
-    startup: bool = False  # made when Lambda loads the code (once per cold start), not on each call
+    startup: bool = False  # made when the code is imported (on Lambda, once per cold start), not on each call
 
     @property
     def label(self) -> str:
@@ -79,13 +79,13 @@ class EnvRead:
     function: str
     required: bool  # os.environ['X']: a KeyError when it isn't set; os.environ.get / os.getenv give a default
     default: str = ""  # the default, as code
-    startup: bool = False  # read when Lambda loads the code (once per cold start)
+    startup: bool = False  # read when the code is imported
 
 
 @dataclass
 class EventField:
     """
-    A field the code reads from the event Lambda passes the handler.
+    A field the code reads from its input: what its platform passes the entry point (a Lambda handler's event).
     """
 
     path: tuple[str, ...]  # ('Records', '[]', 'body', '{json}', 'bucket')
@@ -104,7 +104,7 @@ class EventField:
 @dataclass
 class CodeFunction:
     """
-    One of the package's own functions that runs when the handler does.
+    One of the code's own functions that runs when the entry point does.
     """
 
     name: str  # 'db.connect', 'repo.Orders.save'
@@ -114,13 +114,13 @@ class CodeFunction:
     args: str  # 'host, password'
     doc: str = ""  # its docstring's first line
     called_from: list[str] = field(default_factory=list)  # 'etl.handler line 19'
-    depth: int = 0  # calls from the handler (the handler is 0)
+    depth: int = 0  # calls from the entry point (the entry point is 0)
 
 
 @dataclass
 class ImportUse:
     """
-    A module the code imports, and where Lambda finds it.
+    A module the code imports, and where Python finds it.
     """
 
     module: str  # as written: 'requests', 'db', 'pkg.sub'
@@ -148,46 +148,46 @@ class CodeSpot:
     function: str
     code: str
     detail: str = ""  # http: the method; write: the path; secret: its name (never the value); client: the service
-    ok: bool = True  # http: has a timeout; client: made once and reused; write: under /tmp
+    ok: bool = True  # http: has a timeout; client: made once and reused
     loop: str = ""
-    startup: bool = False  # when Lambda loads the code (once per cold start)
+    startup: bool = False  # when the code is imported
 
 
 @dataclass
 class CodeMap:
     """
-    How a Python function's code works, read from its deployment package with Python's ast module (nothing in it is
-    run): what runs when Lambda starts it, the steps of each call from the handler on, following its own functions,
-    and what they reach outside: AWS calls, environment variables, the event's fields, libraries and HTTP.
+    How Python code works from one entry point, read with Python's ast module (nothing in it is run): what runs when
+    it's imported, the steps of each call from the entry point on, following its own functions, and what they reach
+    outside: AWS calls, environment variables, the fields of its input, libraries and HTTP.
     """
 
     function: Any  # what the findings check against (a Lambda function in aws-analyzer); None here
-    handler: str | None  # the handler setting: 'etl.handler'
-    platform: str = ""  # 'lambda' for a Lambda handler: its findings check what Lambda needs
+    handler: str | None  # the entry point as given: 'etl.handler'
+    platform: str = ""  # the platform it runs on, by name ('lambda'): its checks and wording. '' is plain Python
     handler_file: str | None = None  # 'etl.py'
-    entry: str | None = None  # the function Lambda calls, as module.name ('etl.handler'); None when it isn't there
+    entry: str | None = None  # the function it starts from, as module.name ('etl.handler'); None when it isn't there
     entry_line: int = 0
-    params: list[str] = field(default_factory=list)  # the handler's parameters: 'event', 'ctx=…', '*args'
+    params: list[str] = field(default_factory=list)  # the entry point's parameters: 'event', 'ctx=…', '*args'
     is_async: bool = False  # async def: the Python runtime doesn't await it
-    startup: list[CodeStep] = field(default_factory=list)  # what runs when Lambda loads the code (once per cold start)
-    steps: list[CodeStep] = field(default_factory=list)  # one 'def' step: the handler's, with every step under it
-    functions: list[CodeFunction] = field(default_factory=list)  # its own functions the handler reaches, in order
+    startup: list[CodeStep] = field(default_factory=list)  # what runs when the code is imported
+    steps: list[CodeStep] = field(default_factory=list)  # one 'def' step: the entry point's, with every step under it
+    functions: list[CodeFunction] = field(default_factory=list)  # its own functions the entry point reaches, in order
     aws: list[AwsCall] = field(default_factory=list)
     env: list[EnvRead] = field(default_factory=list)
     event: list[EventField] = field(default_factory=list)
     imports: list[ImportUse] = field(default_factory=list)
     spots: list[CodeSpot] = field(default_factory=list)
-    returns: list[tuple[str, str, int]] = field(default_factory=list)  # what the handler returns: (code, file, line)
+    returns: list[tuple[str, str, int]] = field(default_factory=list)  # what the entry point returns: (code, file, line)
     routes: list[tuple[str, str, str]] = field(default_factory=list)  # web routes: (method, path, function)
     files: int = 0  # Python files read
     lines: int = 0  # their lines
-    other_files: int = 0  # its own Python files the handler's code never imports (tests, scripts, other handlers)
-    unreached: int = 0  # functions in the files it read that the handler never reaches
+    other_files: int = 0  # its own Python files the entry point's code never imports (tests, scripts, other handlers)
+    unreached: int = 0  # functions in the files it read that the entry point never reaches
     skipped: list[tuple[str, str]] = field(default_factory=list)  # (file, why) for files that couldn't be read
     limited: str = ""  # what was cut short, when something was
-    note: str | None = None  # why there's nothing to map: not Python, a container image, no handler file
-    handlers: list[str] = field(default_factory=list)  # when the handler isn't in its file: the functions there
-    # that take two arguments
+    note: str | None = None  # why there's nothing to map: not Python, a container image, no entry point file
+    handlers: list[str] = field(default_factory=list)  # when the entry point isn't in its file: the functions there
+    # that could be (that take what its platform passes)
 
     @property
     def services(self) -> list[str]:

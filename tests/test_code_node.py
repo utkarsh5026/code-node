@@ -50,7 +50,7 @@ def write(root: Path, files: dict[str, str]) -> Path:
 def test_a_lambda_handler_is_found_and_mapped(tmp_path: Path) -> None:
     project = read_project(write(tmp_path, {"app.py": HANDLER}))
     found = entry_points(project)
-    assert [(e.name, e.is_lambda) for e in found] == [("app.lambda_handler", True)]
+    assert [(e.name, e.platform) for e in found] == [("app.lambda_handler", "lambda")]
     cmap = map_code(project.files, "app.lambda_handler", libraries=project.libraries(), platform="lambda")
     assert [c.operation for c in cmap.aws] == ["GetObject"]
     assert [e.name for e in cmap.env] == ["HOOK"]
@@ -128,7 +128,7 @@ def test_the_live_server_redraws_when_the_code_changes(tmp_path: Path, monkeypat
     monkeypatch.setattr(servemod, "POLL_SECONDS", 0.05)
     monkeypatch.setattr(servemod, "SETTLE_SECONDS", 0.05)
     root = write(tmp_path, {"app.py": HANDLER})
-    live = servemod.LivePage(root, EntryPoint("app.lambda_handler", "", "app.py", 0, True), PageOptions(),
+    live = servemod.LivePage(root, EntryPoint("app.lambda_handler", "", "app.py", 0, "lambda"), PageOptions(),
                              log=lambda line: None)
     live.build()
     assert live.version == 1 and "EventSource" in live.page and "GetObject" in live.page
@@ -160,3 +160,53 @@ def test_a_broken_build_shows_in_the_page(tmp_path: Path, monkeypatch) -> None:
     live = servemod.LivePage(tmp_path, EntryPoint("app.main", "", "app.py", 0), PageOptions(), log=lambda line: None)
     live.build()
     assert "Couldn't draw app.main" in live.page and "RuntimeError: boom" in live.page
+
+
+def test_plain_python_has_no_lambda_checks_until_asked(tmp_path: Path) -> None:
+    source = 'import requests\n\n\ndef main():\n    open("out.txt", "w")\n    requests.get("https://example.com")\n'
+    project = read_project(write(tmp_path / "code", {"app.py": source}))
+    plain = map_code(project.files, "app.main", libraries=project.libraries())
+    as_lambda = map_code(project.files, "app.main", libraries=project.libraries(), platform="lambda")
+    from code_node.analysis.findings import code_map_findings
+
+    said = " ".join(message for _, message in code_map_findings(plain))
+    assert "Lambda" not in said and "/tmp" not in said and "hangs" in said
+    assert not any(n.kind == "event" for n in code_graph(plain).nodes)
+    said = " ".join(message for _, message in code_map_findings(as_lambda))
+    assert "Lambda passes two" in said and "outside /tmp" in said
+    assert any(n.kind == "event" for n in code_graph(as_lambda).nodes)
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "-e", "app.main", "--platform", "lambda", "--no-open", "-o", str(out)]) == 0
+    assert "Lambda passes two" in out.read_text()
+
+
+def test_a_platform_plugin_finds_its_entry_points_and_adds_findings(tmp_path: Path, monkeypatch) -> None:
+    import ast
+
+    from code_node import platforms as platformsmod
+    from code_node.platforms import Platform
+
+    class Worker(Platform):
+        name = "worker"
+        title = "Job runner"
+        inputs = ("event",)
+        input_name = "the job"
+
+        def find_entries(self, module: str, tree: ast.Module) -> list[tuple[str, int, str]]:
+            return [(n.name, n.lineno, "a job") for n in tree.body
+                    if isinstance(n, ast.FunctionDef) and n.name.startswith("job_")]
+
+        def findings(self, cmap) -> list[tuple[str, str]]:
+            return [("info", f"{len(cmap.event)} fields of the job are read.")]
+
+    platformsmod.platforms()  # the built-in ones first
+    monkeypatch.setitem(platformsmod._platforms, "worker", Worker())
+    project = read_project(write(tmp_path, {"jobs.py": "def job_resize(job):\n    return job['size']\n"}))
+    found = entry_points(project)
+    assert [(e.name, e.platform) for e in found] == [("jobs.job_resize", "worker")]
+    cmap = map_code(project.files, found[0].name, platform=found[0].platform)
+    assert [f.label for f in cmap.event] == ["size"]
+    from code_node.analysis.findings import _code_summary, code_map_findings
+
+    assert ("info", "1 fields of the job are read.") in code_map_findings(cmap)
+    assert "It reads size from the job." in _code_summary(cmap)

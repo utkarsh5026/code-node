@@ -82,7 +82,7 @@ at the same scroll position. If the code can't be drawn, the page says why and c
 | `--serve`, `--port N` | Serve the page on localhost (8765) and redraw it whenever a `.py` file changes |
 | `--mermaid` | Print the graph as Mermaid |
 | `-o`, `--out`, `--no-open` | Where to save the page (default `~/.cache/code-node/`), and whether to open it |
-| `--lambda` | Run the Lambda checks even when the entry point isn't a found handler |
+| `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler sets it; anything else is plain Python |
 
 ## From Python
 

@@ -27,13 +27,13 @@ _ALL_READ_DEPTH = 40  # --all: calls followed from the entry point
 @dataclass
 class PageOptions:
     """
-    How much of the code the page draws, and which checks it runs.
+    How much of the code the page draws, and which platform's checks it runs.
     """
 
     draw_all: bool = False
     functions: int = GRAPH_FUNCTIONS
     depth: int = GRAPH_DEPTH
-    is_lambda: bool = False
+    platform: str = ""  # --platform: its checks run whatever the entry point is ('' leaves it to the entry point)
 
     @property
     def limits(self) -> tuple[int, int]:
@@ -50,7 +50,7 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
     project = read_project(root)
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file or None,
                     max_depth=_ALL_READ_DEPTH if options.draw_all else None,
-                    platform="lambda" if entry.is_lambda or options.is_lambda else "")
+                    platform=options.platform or entry.platform)
     return cmap, project.root.name
 
 
