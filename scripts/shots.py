@@ -41,13 +41,13 @@ SCALE = 2  # device pixels per CSS pixel, for sharp text
 MARGIN = 24  # kept around what's drawn, in device pixels
 
 
-
 def _inside(blocks: list[Any]) -> list[Any]:
     """
     The blocks, with what's in each tab in place of the tabs.
     """
-    return [inner for b in blocks for inner in (
-        [x for _, _, tab in b.tabs for x in tab] if isinstance(b, _Tabs) else [b])]
+    return [
+        inner for b in blocks for inner in ([x for _, _, tab in b.tabs for x in tab] if isinstance(b, _Tabs) else [b])
+    ]
 
 
 FIGURES: dict[str, Callable[[list[Any]], list[Any]]] = {
@@ -62,8 +62,9 @@ STEP_SHOWN = 14  # the step the steps figure has open: inside read_orders(), its
 
 def _chrome() -> str:
     found = os.environ.get("CHROME") or shutil.which("chromium") or shutil.which("google-chrome")
-    found = found or next(iter(sorted(glob.glob(os.path.expanduser(
-        "~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome")))), None)
+    found = found or next(
+        iter(sorted(glob.glob(os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome")))), None
+    )
     if not found:
         sys.exit("No Chrome found: set CHROME=/path/to/chrome")
     return found
@@ -103,23 +104,42 @@ def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     html = render_page(blocks, f"code-node: {name}")
     # headless Chrome can take the picture mid fade-in: show the open tab at once. The pictures are shown shrunk
     # (the README fits them to its column), so logos are their small marks, as on a 1x screen
-    html = html.replace("</head>", "<style>.cnd *{animation:none!important}.cnd .cg .logo.lgf{display:none!important}"
-                                   ".cnd .cg .logo.lgs{display:inline!important}</style>\n</head>", 1)
+    html = html.replace(
+        "</head>",
+        "<style>.cnd *{animation:none!important}.cnd .cg .logo.lgf{display:none!important}"
+        ".cnd .cg .logo.lgs{display:inline!important}</style>\n</head>",
+        1,
+    )
     if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
-        html = html.replace('id="cw0" checked', 'id="cw0"').replace(f'id="cw{STEP_SHOWN}"',
-                                                                    f'id="cw{STEP_SHOWN}" checked')
+        html = html.replace('id="cw0" checked', 'id="cw0"').replace(
+            f'id="cw{STEP_SHOWN}"', f'id="cw{STEP_SHOWN}" checked'
+        )
     # all of the graph in the picture, however wide it is: Fit, not Auto
     html = html.replace('id="cn-graph0-auto" checked', 'id="cn-graph0-auto"').replace(
-        'id="cn-graph0-fit"', 'id="cn-graph0-fit" checked')
+        'id="cn-graph0-fit"', 'id="cn-graph0-fit" checked'
+    )
     page.write_text(html, "utf-8")
     width = WIDE if name in ("graph", "plugins") else WIDTH
     for theme in ("light", "dark"):
         out = IMAGES / f"{name}-{theme}.png"
         flags = ["--force-dark-mode"] if theme == "dark" else []
-        subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-                        f"--force-device-scale-factor={SCALE}", f"--window-size={width},4000", *flags,
-                        "--virtual-time-budget=2000",
-                        f"--screenshot={out}", page.as_uri()], check=True, capture_output=True)
+        subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--hide-scrollbars",
+                f"--force-device-scale-factor={SCALE}",
+                f"--window-size={width},4000",
+                *flags,
+                "--virtual-time-budget=2000",
+                f"--screenshot={out}",
+                page.as_uri(),
+            ],
+            check=True,
+            capture_output=True,
+        )
         width, height = _trim(out)
         print(f"{out.with_suffix('.webp').relative_to(ROOT)}  {width} x {height}")
 

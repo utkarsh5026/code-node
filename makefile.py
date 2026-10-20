@@ -39,9 +39,11 @@ except ImportError:  # a Python without rich: hand over to .venv's, or say how t
     _python = _venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if _python.exists() and Path(sys.prefix).resolve() != _venv.resolve():
         sys.exit(subprocess.call([str(_python), str(Path(__file__).resolve()), *sys.argv[1:]]))
-    sys.exit("makefile.py draws with rich, which isn't installed here. Run it with uv, which brings rich:\n"
-             "    uv run makefile.py install\n"
-             "or install rich first: pip install rich")
+    sys.exit(
+        "makefile.py draws with rich, which isn't installed here. Run it with uv, which brings rich:\n"
+        "    uv run makefile.py install\n"
+        "or install rich first: pip install rich"
+    )
 
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
@@ -89,11 +91,20 @@ TASKS: dict[str, Task] = {}
 GROUPS = ("Set up", "Check", "Run", "Docs", "Release")
 
 
-def task(name: str, emoji: str, help: str, group: str, *, needs: tuple[str, ...] = (), venv: bool = True,
-         until_stopped: bool = False) -> Callable[[Callable[[Options], None]], Callable[[Options], None]]:
+def task(
+    name: str,
+    emoji: str,
+    help: str,
+    group: str,
+    *,
+    needs: tuple[str, ...] = (),
+    venv: bool = True,
+    until_stopped: bool = False,
+) -> Callable[[Callable[[Options], None]], Callable[[Options], None]]:
     def add(action: Callable[[Options], None]) -> Callable[[Options], None]:
         TASKS[name] = Task(name, emoji, help, group, action, needs, venv, until_stopped)
         return action
+
     return add
 
 
@@ -112,8 +123,9 @@ def _shown(word: str) -> str:
 
 def run(*command: str | Path) -> None:
     words = [str(word) for word in command]
-    console.print(Text("  $ ", style="dim") + Text(" ".join(_shown(word) for word in words), style="cyan"),
-                  soft_wrap=True)
+    console.print(
+        Text("  $ ", style="dim") + Text(" ".join(_shown(word) for word in words), style="cyan"), soft_wrap=True
+    )
     code = subprocess.call(words, cwd=ROOT)
     if code:
         raise TaskFailed(f"`{' '.join(_shown(word) for word in words[:3])} …` exited with {code}")
@@ -132,8 +144,8 @@ def code_node(options: Options, *arguments: str) -> None:
 
 # Set up
 
-@task("install", "📦", "make .venv with code-node and every dependency group in pyproject.toml", "Set up",
-      venv=False)
+
+@task("install", "📦", "make .venv with code-node and every dependency group in pyproject.toml", "Set up", venv=False)
 def install(options: Options) -> None:
     if UV:
         run(UV, "sync")
@@ -173,14 +185,17 @@ def clean(options: Options) -> None:
 
 # Check
 
-@task("lint", "🔍", "ruff check", "Check")
+
+@task("lint", "🔍", "ruff check and ruff format --check", "Check")
 def lint(options: Options) -> None:
     python("-m", "ruff", "check", ".")
+    python("-m", "ruff", "format", "--check", ".")
 
 
-@task("fix", "🔧", "ruff check --fix", "Check")
+@task("fix", "🔧", "ruff check --fix and ruff format", "Check")
 def fix(options: Options) -> None:
     python("-m", "ruff", "check", "--fix", ".")
+    python("-m", "ruff", "format", ".")
 
 
 @task("test", "🧪", "run the tests", "Check")
@@ -188,11 +203,17 @@ def test(options: Options) -> None:
     python("-m", "pytest", "-q")
 
 
-TASKS["check"] = Task("check", "✅", "everything CI runs: lint, test, try, docs, package", "Check",
-                      needs=("lint", "test", "try", "docs", "package"))
+TASKS["check"] = Task(
+    "check",
+    "✅",
+    "everything CI runs: lint, test, try, docs, package",
+    "Check",
+    needs=("lint", "test", "try", "docs", "package"),
+)
 
 
 # Run
+
 
 @task("try", "🧭", "draw --repo's page to --out without opening it", "Run")
 def try_page(options: Options) -> None:
@@ -210,6 +231,7 @@ def mermaid(options: Options) -> None:
 
 
 # Docs
+
 
 @task("docs", "📖", "build the docs site, failing on a broken link", "Docs")
 def docs(options: Options) -> None:
@@ -243,6 +265,7 @@ def figures(options: Options) -> None:
 
 # Release
 
+
 @task("package", "🎁", "build the sdist and wheel, and check them as PyPI would", "Release")
 def package(options: Options) -> None:
     shutil.rmtree(ROOT / "dist", ignore_errors=True)
@@ -254,8 +277,14 @@ def package(options: Options) -> None:
 
 
 def show_tasks() -> None:
-    table = Table(box=box.ROUNDED, border_style="grey50", show_header=False, padding=(0, 1),
-                  title="🧩 [bold]code-node[/] tasks", title_justify="left")
+    table = Table(
+        box=box.ROUNDED,
+        border_style="grey50",
+        show_header=False,
+        padding=(0, 1),
+        title="🧩 [bold]code-node[/] tasks",
+        title_justify="left",
+    )
     table.add_column(width=2)
     table.add_column(style="bold cyan", no_wrap=True)
     table.add_column()
@@ -279,8 +308,9 @@ def show_tasks() -> None:
         ("uv run makefile.py install", "no .venv yet? uv brings rich"),
     ]:
         usage.add_row(example, meaning)
-    console.print(Panel(usage, title="💡 how", title_align="left", border_style="grey50", box=box.ROUNDED,
-                        expand=False))
+    console.print(
+        Panel(usage, title="💡 how", title_align="left", border_style="grey50", box=box.ROUNDED, expand=False)
+    )
 
 
 def plan(names: list[str]) -> list[Task]:
@@ -338,7 +368,7 @@ def run_tasks(tasks: list[Task], options: Options, keep_going: bool) -> int:
 
     failed = [each.name for each, result, _ in results if result == "failed"]
     interrupted = [each for each, result, _ in results if result == "stopped" and not each.until_stopped]
-    skipped = tasks[len(results):]
+    skipped = tasks[len(results) :]
     total = _seconds(time.perf_counter() - started)
     console.print()
     if len(tasks) > 1:
@@ -353,15 +383,31 @@ def run_tasks(tasks: list[Task], options: Options, keep_going: bool) -> int:
             summary.add_row(f"{each.emoji} {each.name}", "[dim]⏩ skipped[/]", "")
         console.print(summary)
     if failed:
-        console.print(Panel(f"[bold]{', '.join(failed)}[/] failed  [dim]· {total}[/]", title="💥",
-                            title_align="left", border_style="red", box=box.ROUNDED, expand=False))
+        console.print(
+            Panel(
+                f"[bold]{', '.join(failed)}[/] failed  [dim]· {total}[/]",
+                title="💥",
+                title_align="left",
+                border_style="red",
+                box=box.ROUNDED,
+                expand=False,
+            )
+        )
         return 1
     if interrupted:
         console.print(Panel(f"Stopped  [dim]· {total}[/]", border_style="yellow", box=box.ROUNDED, expand=False))
         return 130
     done = len(results)
-    console.print(Panel(f"[bold]{done} task{'' if done == 1 else 's'}[/] done  [dim]· {total}[/]", title="🎉",
-                        title_align="left", border_style="green", box=box.ROUNDED, expand=False))
+    console.print(
+        Panel(
+            f"[bold]{done} task{'' if done == 1 else 's'}[/] done  [dim]· {total}[/]",
+            title="🎉",
+            title_align="left",
+            border_style="green",
+            box=box.ROUNDED,
+            expand=False,
+        )
+    )
     return 0
 
 

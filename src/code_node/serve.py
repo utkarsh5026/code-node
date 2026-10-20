@@ -97,9 +97,11 @@ def changed_files(before: dict[str, tuple[int, int]], after: dict[str, tuple[int
 
 
 def _error_page(message: str, entry: EntryPoint) -> str:
-    return (f"<!doctype html><meta charset='utf-8'>{FAVICON_LINK}<title>code-node</title><body style='font:15px system-ui;"
-            f"margin:40px;color-scheme:light dark'><h2>Couldn't draw {html.escape(entry.name)}</h2>"
-            f"<p>{html.escape(message)}</p><p>Fix it and save: the page comes back by itself.</p></body>")
+    return (
+        f"<!doctype html><meta charset='utf-8'>{FAVICON_LINK}<title>code-node</title><body style='font:15px system-ui;"
+        f"margin:40px;color-scheme:light dark'><h2>Couldn't draw {html.escape(entry.name)}</h2>"
+        f"<p>{html.escape(message)}</p><p>Fix it and save: the page comes back by itself.</p></body>"
+    )
 
 
 @dataclass
@@ -237,8 +239,14 @@ def listen(handler: type[BaseHTTPRequestHandler], port: int | None = None) -> Th
     return _Server(("127.0.0.1", 0), handler)
 
 
-def serve(root: Path, entry: EntryPoint, options: PageOptions, *, port: int | None = None,
-          open_page: Callable[[str], None] | None = None) -> int:
+def serve(
+    root: Path,
+    entry: EntryPoint,
+    options: PageOptions,
+    *,
+    port: int | None = None,
+    open_page: Callable[[str], None] | None = None,
+) -> int:
     """
     Serves the page on http://localhost:<port> until Ctrl-C, drawing it again on every change under root. Without a
     port, it's the first free one from DEFAULT_PORT.
@@ -248,8 +256,10 @@ def serve(root: Path, entry: EntryPoint, options: PageOptions, *, port: int | No
     try:
         server = listen(_handler(live), port)
     except OSError as exc:
-        print(f"Can't listen on port {port if port is not None else DEFAULT_PORT} ({exc.strerror}): pick another with "
-              "--port.")
+        print(
+            f"Can't listen on port {port if port is not None else DEFAULT_PORT} ({exc.strerror}): pick another with "
+            "--port."
+        )
         return 1
     url = f"http://localhost:{server.server_address[1]}/"
     watcher = threading.Thread(target=live.watch, name="code-node-watch", daemon=True)

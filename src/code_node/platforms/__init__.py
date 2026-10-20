@@ -52,8 +52,9 @@ class Platform:
         """
         return []
 
-    def route_inputs(self, function: ast.FunctionDef | ast.AsyncFunctionDef, path: str, imports: set[str],
-                     bound: bool = False) -> dict[str, tuple[str, ...]]:
+    def route_inputs(
+        self, function: ast.FunctionDef | ast.AsyncFunctionDef, path: str, imports: set[str], bound: bool = False
+    ) -> dict[str, tuple[str, ...]]:
         """
         What each parameter of a function a route runs holds from the input, as a path into it: {'order_id':
         ('path', 'order_id'), 'request': ()}. path is the route's ('/orders/{order_id}'), imports the libraries its
@@ -90,8 +91,10 @@ class Platform:
         """
         The finding when the entry point isn't a function in its file.
         """
-        return (f"No function {name}() in {cmap.handler_file}: there's nothing to start from. Name one of its "
-                f"functions{others}.")
+        return (
+            f"No function {name}() in {cmap.handler_file}: there's nothing to start from. Name one of its "
+            f"functions{others}."
+        )
 
     def hang(self, cmap: CodeMap) -> str:
         """

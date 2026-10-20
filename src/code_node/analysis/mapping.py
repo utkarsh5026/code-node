@@ -78,8 +78,9 @@ def map_code(
 
         map_code({"app.py": open("app.py").read()}, "app.handler")
     """
-    texts = {path: text.decode("utf-8", "replace") if isinstance(text, bytes) else str(text)
-             for path, text in files.items()}
+    texts = {
+        path: text.decode("utf-8", "replace") if isinstance(text, bytes) else str(text) for path, text in files.items()
+    }
     names = list(names) if names is not None else list(texts)
     if deployment is not None:
         platform = platform or deployment.platform
@@ -96,8 +97,9 @@ def map_code(
     cmap.handler_file, root = found
     libs = set(libraries) | _RUNTIME_MODULES | _LIBRARIES
     libs.discard(entry.split(".")[0])  # its own top package is never a library
-    reader = _CodeReader(texts, names, root, cmap, _python_version(python), libs,
-                         bool(deployment is not None and deployment.layers))
+    reader = _CodeReader(
+        texts, names, root, cmap, _python_version(python), libs, bool(deployment is not None and deployment.layers)
+    )
     if max_depth is not None:
         reader.max_depth = max_depth
     try:

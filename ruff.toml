@@ -4,3 +4,7 @@ target-version = "py310"
 [lint]
 # Real errors only; the code copied from aws-analyzer keeps its own style.
 select = ["E4", "E7", "E9", "F"]
+
+[format]
+# The examples' line numbers are quoted in the docs and the snapshots, and the docs' snippets are laid out by hand.
+exclude = ["examples/**", "docs/**"]

@@ -11,31 +11,92 @@ from . import Call, Handle, Library, Use
 
 _CLIENTS = ("MongoClient", "AsyncMongoClient", "AsyncIOMotorClient", "MotorClient")
 
-_CLIENT_METHODS = frozenset({
-    "get_database", "get_default_database", "list_database_names", "list_databases", "drop_database", "close",
-    "start_session", "server_info", "watch", "address", "options", "admin", "bulk_write", "with_options",
-})
+_CLIENT_METHODS = frozenset(
+    {
+        "get_database",
+        "get_default_database",
+        "list_database_names",
+        "list_databases",
+        "drop_database",
+        "close",
+        "start_session",
+        "server_info",
+        "watch",
+        "address",
+        "options",
+        "admin",
+        "bulk_write",
+        "with_options",
+    }
+)
 
-_DATABASE_METHODS = frozenset({
-    "get_collection", "list_collection_names", "list_collections", "create_collection", "drop_collection", "command",
-    "aggregate", "watch", "client", "name", "with_options", "validate_collection", "dereference", "cursor_command",
-})
+_DATABASE_METHODS = frozenset(
+    {
+        "get_collection",
+        "list_collection_names",
+        "list_collections",
+        "create_collection",
+        "drop_collection",
+        "command",
+        "aggregate",
+        "watch",
+        "client",
+        "name",
+        "with_options",
+        "validate_collection",
+        "dereference",
+        "cursor_command",
+    }
+)
 
-_READS = frozenset({
-    "find", "find_one", "count_documents", "estimated_document_count", "distinct", "aggregate", "watch",
-    "find_raw_batches", "aggregate_raw_batches", "list_indexes", "index_information", "options",
-})
+_READS = frozenset(
+    {
+        "find",
+        "find_one",
+        "count_documents",
+        "estimated_document_count",
+        "distinct",
+        "aggregate",
+        "watch",
+        "find_raw_batches",
+        "aggregate_raw_batches",
+        "list_indexes",
+        "index_information",
+        "options",
+    }
+)
 
-_WRITES = frozenset({
-    "insert_one", "insert_many", "update_one", "update_many", "replace_one", "delete_one", "delete_many",
-    "find_one_and_update", "find_one_and_replace", "find_one_and_delete", "bulk_write", "create_index",
-    "create_indexes", "drop_index", "drop_indexes", "drop", "rename",
-})
+_WRITES = frozenset(
+    {
+        "insert_one",
+        "insert_many",
+        "update_one",
+        "update_many",
+        "replace_one",
+        "delete_one",
+        "delete_many",
+        "find_one_and_update",
+        "find_one_and_replace",
+        "find_one_and_delete",
+        "bulk_write",
+        "create_index",
+        "create_indexes",
+        "drop_index",
+        "drop_indexes",
+        "drop",
+        "rename",
+    }
+)
 
 _COLLECTION_METHODS = _READS | _WRITES | {"with_options", "name", "full_name", "database"}
 
-_MANY = {"insert_one": "insert_many()", "update_one": "bulk_write() with UpdateOne", "delete_one": "delete_many()",
-         "replace_one": "bulk_write() with ReplaceOne", "find_one": "one find() with $in"}
+_MANY = {
+    "insert_one": "insert_many()",
+    "update_one": "bulk_write() with UpdateOne",
+    "delete_one": "delete_many()",
+    "replace_one": "bulk_write() with ReplaceOne",
+    "find_one": "one find() with $in",
+}
 
 
 class MongoLibrary(Library):
@@ -82,11 +143,18 @@ class MongoLibrary(Library):
         collection = handle.fact("collection")
         flag = why = ""
         where = call.inputs(0, "filter")
-        if method in ("find", "find_one", "delete_many", "update_many", "count_documents") and where \
-                and "$where" in call.code(0, "filter", most=400):
-            flag, why = "$where from the input", (
-                f"runs JavaScript built from {where[0]} on the server ($where): whoever sends it can run their own. "
-                "Match the fields with a plain filter instead.")
+        if (
+            method in ("find", "find_one", "delete_many", "update_many", "count_documents")
+            and where
+            and "$where" in call.code(0, "filter", most=400)
+        ):
+            flag, why = (
+                "$where from the input",
+                (
+                    f"runs JavaScript built from {where[0]} on the server ($where): whoever sends it can run their own. "
+                    "Match the fields with a plain filter instead."
+                ),
+            )
         if method in _READS:
             return Use(method, "reads", collection, flag=flag, why=why, batch=_MANY.get(method, ""))
         if method in _WRITES:

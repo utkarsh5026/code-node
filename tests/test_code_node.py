@@ -14,7 +14,7 @@ from code_node.project import entry_points, read_project
 from code_node.report.style import render_page
 from code_node.report.walk import _Walk, walk_stops
 
-HANDLER = '''
+HANDLER = """
 import os
 import boto3
 import requests
@@ -30,14 +30,16 @@ def lambda_handler(event, context):
     for record in event["Records"]:
         load(record["s3"]["bucket"]["name"], record["s3"]["object"]["key"])
     requests.post(os.environ["HOOK"], json={})
-'''
+"""
 
 PACKAGE = {
     "pyproject.toml": '[project]\nname = "tool"\n[project.scripts]\ntool = "tool.cli:main"\n',
     "src/tool/__init__.py": "",
     "src/tool/cli.py": "from .store import Store\n\n\ndef main():\n    Store().save('x')\n",
-    "src/tool/store.py": ("class Store:\n    def save(self, item):\n        self._write(item)\n\n"
-                          "    def _write(self, item):\n        open('out.txt', 'w').write(item)\n"),
+    "src/tool/store.py": (
+        "class Store:\n    def save(self, item):\n        self._write(item)\n\n"
+        "    def _write(self, item):\n        open('out.txt', 'w').write(item)\n"
+    ),
     "tests/test_cli.py": "def main():\n    pass\n",
 }
 
@@ -94,9 +96,14 @@ def test_the_command_saves_a_page(tmp_path: Path, capsys) -> None:
     page = out.read_text()
     assert "How app.lambda_handler works" in page and "<svg" in page
     # the page is its tabs, the entry point beside them, with no cards or findings
-    assert '<div class="cnd"><div class="tabs">' in page and '<code>app.lambda_handler</code>' in page
+    assert '<div class="cnd"><div class="tabs">' in page and "<code>app.lambda_handler</code>" in page
     assert all(f">{tab}<small>" in page for tab in ("Graph", "Step by step"))
-    assert 'class="cards"' not in page and 'class="fd"' not in page and ">Findings<" not in page and 'class="t"' not in page
+    assert (
+        'class="cards"' not in page
+        and 'class="fd"' not in page
+        and ">Findings<" not in page
+        and 'class="t"' not in page
+    )
     assert main([str(tmp_path / "code"), "--mermaid"]) == 0
     assert "flowchart LR" in capsys.readouterr().out
 
@@ -133,8 +140,10 @@ def test_the_steps_are_walked_in_the_order_the_code_runs(tmp_path: Path) -> None
     html = render_page([walk], "walk")
     assert 'id="cw0" checked' in html and html.count('name="cnd-walk"') == 7
     assert '<label class="wbt" for="cw6" title="Run what this line calls without going in' in html  # Skip call
-    assert ('<label class="wbt" for="cw6" title="Run the rest of load() and go back to where it was called">'
-            "Finish <code>load()</code>") in html  # from inside load()
+    assert (
+        '<label class="wbt" for="cw6" title="Run the rest of load() and go back to where it was called">'
+        "Finish <code>load()</code>"
+    ) in html  # from inside load()
     assert '<div class="whead">Makes an S3 client</div>' in html  # each step said in plain words
     assert '<span class="wtx">Goes through each <code>record</code> in <code>event[&#x27;Records&#x27;]</code>' in html
     assert '<label class="sl" for="cw5"><span class="sn">10</span>' in html  # load()'s line 10 jumps to its step
@@ -158,11 +167,12 @@ def test_starting_from_a_file(tmp_path: Path, capsys) -> None:
 
 
 def test_cli_commands_are_followed_from_the_app(tmp_path: Path) -> None:
-    source = ('import typer\n\napp = typer.Typer()\n\n\ndef helper():\n    pass\n\n\n@app.command()\n'
-              'def sync_all():\n    helper()\n\n\n@app.command("show")\ndef display():\n    pass\n\n\n'
-              'def main():\n    app()\n')
-    project = read_project(write(tmp_path, {"pyproject.toml": '[project.scripts]\nt = "cli:main"\n',
-                                            "cli.py": source}))
+    source = (
+        "import typer\n\napp = typer.Typer()\n\n\ndef helper():\n    pass\n\n\n@app.command()\n"
+        'def sync_all():\n    helper()\n\n\n@app.command("show")\ndef display():\n    pass\n\n\n'
+        "def main():\n    app()\n"
+    )
+    project = read_project(write(tmp_path, {"pyproject.toml": '[project.scripts]\nt = "cli:main"\n', "cli.py": source}))
     assert entry_points(project)[0].name == "cli.app"
     cmap = map_code(project.files, "cli.app")
     assert [(method, path) for method, path, _ in cmap.routes] == [("CLI", "sync-all"), ("CLI", "show")]
@@ -180,8 +190,9 @@ def test_the_live_server_redraws_when_the_code_changes(tmp_path: Path, monkeypat
     monkeypatch.setattr(servemod, "POLL_SECONDS", 0.05)
     monkeypatch.setattr(servemod, "SETTLE_SECONDS", 0.05)
     root = write(tmp_path, {"app.py": HANDLER})
-    live = servemod.LivePage(root, EntryPoint("app.lambda_handler", "", "app.py", 0, "lambda"), PageOptions(),
-                             log=lambda line: None)
+    live = servemod.LivePage(
+        root, EntryPoint("app.lambda_handler", "", "app.py", 0, "lambda"), PageOptions(), log=lambda line: None
+    )
     live.build()
     assert live.version == 1 and "EventSource" in live.page and "GetObject" in live.page
     server = servemod.ThreadingHTTPServer(("127.0.0.1", 0), servemod._handler(live))
@@ -249,7 +260,7 @@ def test_plain_python_has_no_lambda_checks_until_asked(tmp_path: Path) -> None:
     assert "Lambda passes two" in out.read_text()
 
 
-FASTAPI = '''
+FASTAPI = """
 import sqlite3
 import time
 from typing import Annotated, Optional
@@ -285,7 +296,7 @@ async def search(q: Annotated[str, Query(alias="term")], limit: Optional[int] = 
 async def create(order: OrderIn, request: Request):
     note = (await request.json())["note"]
     db.execute("INSERT INTO orders (item, note) VALUES (?, ?)", (order.item, note))
-'''
+"""
 
 
 def test_a_fastapi_routes_parameters_are_the_request(tmp_path: Path) -> None:
@@ -295,12 +306,22 @@ def test_a_fastapi_routes_parameters_are_the_request(tmp_path: Path) -> None:
     assert [(e.name, e.platform) for e in entry_points(project)] == [("main.app", "web")]
     cmap = map_code(project.files, "main.app", libraries=project.libraries(), platform="web")
     assert {f.label: f.required for f in cmap.event} == {
-        "path.order_id": True, "query.fields": False, "query.term": True, "query.limit": False, "body": True,
-        "body.item": True, "json": True, "json.note": True}  # who=Depends(...) isn't from the request
+        "path.order_id": True,
+        "query.fields": False,
+        "query.term": True,
+        "query.limit": False,
+        "body": True,
+        "body.item": True,
+        "json": True,
+        "json.note": True,
+    }  # who=Depends(...) isn't from the request
     said = [message for _, message in code_map_findings(cmap)]
     assert any("puts request query.fields, request path.order_id into the SQL text itself" in m for m in said)
-    assert any("requests.get() at main.py line 29 and time.sleep() at main.py line 30 wait without await inside "
-               "async def search()" in m for m in said)
+    assert any(
+        "requests.get() at main.py line 29 and time.sleep() at main.py line 30 wait without await inside "
+        "async def search()" in m
+        for m in said
+    )
     assert not any("create()" in m for m in said)  # its SQL takes parameters
     assert next(n for n in code_graph(cmap).nodes if n.kind == "event").label == "The request"
     assert next(n for n in code_graph(cmap).nodes if n.kind == "handler").icon == "fastapi-icon"  # the app's logo
@@ -311,19 +332,28 @@ def test_a_fastapi_routes_parameters_are_the_request(tmp_path: Path) -> None:
 def test_a_flask_views_url_values_and_request_are_the_input(tmp_path: Path) -> None:
     from code_node.analysis.findings import code_map_findings
 
-    source = ('import os\nimport sqlite3\nfrom flask import Flask, request\n\napp = Flask(__name__)\n'
-              'db = sqlite3.connect("x.db")\n\n\n@app.route("/users/<int:user_id>")\ndef user(user_id):\n'
-              '    return db.execute("SELECT * FROM users WHERE id = %s" % user_id).fetchone()\n\n\n'
-              '@app.post("/search")\ndef search():\n    q = request.args.get("q", "")\n'
-              '    team = request.get_json()["team"]\n'
-              '    db.execute(f"SELECT * FROM users WHERE name = \'{q}\' AND team = \'{team}\'")\n'
-              '    os.system("grep " + request.form["pattern"] + " app.log")\n')
+    source = (
+        "import os\nimport sqlite3\nfrom flask import Flask, request\n\napp = Flask(__name__)\n"
+        'db = sqlite3.connect("x.db")\n\n\n@app.route("/users/<int:user_id>")\ndef user(user_id):\n'
+        '    return db.execute("SELECT * FROM users WHERE id = %s" % user_id).fetchone()\n\n\n'
+        '@app.post("/search")\ndef search():\n    q = request.args.get("q", "")\n'
+        '    team = request.get_json()["team"]\n'
+        "    db.execute(f\"SELECT * FROM users WHERE name = '{q}' AND team = '{team}'\")\n"
+        '    os.system("grep " + request.form["pattern"] + " app.log")\n'
+    )
     project = read_project(write(tmp_path / "code", {"app.py": source}))
     entry = entry_points(project)[0]
     assert (entry.name, entry.platform) == ("app.app", "web")
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), platform=entry.platform)
-    assert [f.label for f in cmap.event] == ["path.user_id", "args", "args.q", "json", "json.team", "form",
-                                            "form.pattern"]
+    assert [f.label for f in cmap.event] == [
+        "path.user_id",
+        "args",
+        "args.q",
+        "json",
+        "json.team",
+        "form",
+        "form.pattern",
+    ]
     said = [message for _, message in code_map_findings(cmap)]
     assert any("puts request path.user_id into the SQL text" in m for m in said)
     assert any("puts request args.q, request json.team into the SQL text" in m for m in said)
@@ -333,29 +363,48 @@ def test_a_flask_views_url_values_and_request_are_the_input(tmp_path: Path) -> N
 def test_django_urls_are_followed_through_include_views_and_routers(tmp_path: Path) -> None:
     from code_node.analysis.findings import code_map_findings
 
-    views = ('import json\nfrom django.db import connection\nfrom django.views import View\n'
-             'from django.views.decorators.http import require_GET\nfrom rest_framework import viewsets\n\n\n'
-             '@require_GET\ndef order_list(request):\n    status = request.GET.get("status")\n'
-             '    with connection.cursor() as cursor:\n'
-             '        cursor.execute(f"SELECT * FROM orders WHERE status = \'{status}\'")\n\n\n'
-             'class OrderDetail(View):\n    def get(self, request, pk):\n        return pk\n\n'
-             '    def post(self, request, pk):\n        note = json.loads(request.body)["note"]\n\n\n'
-             'class ItemViewSet(viewsets.ViewSet):\n    def retrieve(self, request, pk=None):\n        return pk\n')
-    urls = ('from django.urls import include, path\nfrom rest_framework.routers import DefaultRouter\n'
-            'from . import views\n\nrouter = DefaultRouter()\nrouter.register("items", views.ItemViewSet)\n\n'
-            'urlpatterns = [\n    path("orders/", views.order_list),\n'
-            '    path("orders/<int:pk>/", views.OrderDetail.as_view()),\n    path("", include(router.urls)),\n]\n')
-    project = read_project(write(tmp_path / "code", {
-        "shop/__init__.py": "", "shop/urls.py": ('from django.urls import include, path\n\n'
-                                                 'urlpatterns = [path("api/", include("orders.urls"))]\n'),
-        "orders/__init__.py": "", "orders/urls.py": urls, "orders/views.py": views}))
+    views = (
+        "import json\nfrom django.db import connection\nfrom django.views import View\n"
+        "from django.views.decorators.http import require_GET\nfrom rest_framework import viewsets\n\n\n"
+        '@require_GET\ndef order_list(request):\n    status = request.GET.get("status")\n'
+        "    with connection.cursor() as cursor:\n"
+        "        cursor.execute(f\"SELECT * FROM orders WHERE status = '{status}'\")\n\n\n"
+        "class OrderDetail(View):\n    def get(self, request, pk):\n        return pk\n\n"
+        '    def post(self, request, pk):\n        note = json.loads(request.body)["note"]\n\n\n'
+        "class ItemViewSet(viewsets.ViewSet):\n    def retrieve(self, request, pk=None):\n        return pk\n"
+    )
+    urls = (
+        "from django.urls import include, path\nfrom rest_framework.routers import DefaultRouter\n"
+        'from . import views\n\nrouter = DefaultRouter()\nrouter.register("items", views.ItemViewSet)\n\n'
+        'urlpatterns = [\n    path("orders/", views.order_list),\n'
+        '    path("orders/<int:pk>/", views.OrderDetail.as_view()),\n    path("", include(router.urls)),\n]\n'
+    )
+    project = read_project(
+        write(
+            tmp_path / "code",
+            {
+                "shop/__init__.py": "",
+                "shop/urls.py": (
+                    'from django.urls import include, path\n\nurlpatterns = [path("api/", include("orders.urls"))]\n'
+                ),
+                "orders/__init__.py": "",
+                "orders/urls.py": urls,
+                "orders/views.py": views,
+            },
+        )
+    )
     found = entry_points(project)  # the site's URLs first: they include the app's
-    assert [(e.name, e.platform) for e in found] == [("shop.urls.urlpatterns", "web"),
-                                                     ("orders.urls.urlpatterns", "web")]
+    assert [(e.name, e.platform) for e in found] == [
+        ("shop.urls.urlpatterns", "web"),
+        ("orders.urls.urlpatterns", "web"),
+    ]
     cmap = map_code(project.files, found[0].name, libraries=project.libraries(), platform="web")
     assert [(method, path) for method, path, _ in cmap.routes] == [
-        ("GET", "/api/items/<pk>/"), ("GET", "/api/orders/"), ("GET", "/api/orders/<int:pk>/"),
-        ("POST", "/api/orders/<int:pk>/")]
+        ("GET", "/api/items/<pk>/"),
+        ("GET", "/api/orders/"),
+        ("GET", "/api/orders/<int:pk>/"),
+        ("POST", "/api/orders/<int:pk>/"),
+    ]
     assert {"path.pk", "GET.status", "body (JSON).note"} <= {f.label for f in cmap.event}
     said = [message for _, message in code_map_findings(cmap)]
     assert any("puts request GET.status into the SQL text" in m for m in said)
@@ -375,8 +424,11 @@ def test_a_platform_plugin_finds_its_entry_points_and_adds_findings(tmp_path: Pa
         input_name = "the job"
 
         def find_entries(self, module: str, tree: ast.Module) -> list[tuple[str, int, str]]:
-            return [(n.name, n.lineno, "a job") for n in tree.body
-                    if isinstance(n, ast.FunctionDef) and n.name.startswith("job_")]
+            return [
+                (n.name, n.lineno, "a job")
+                for n in tree.body
+                if isinstance(n, ast.FunctionDef) and n.name.startswith("job_")
+            ]
 
         def findings(self, cmap) -> list[tuple[str, str]]:
             return [("info", f"{len(cmap.event)} fields of the job are read.")]
@@ -409,8 +461,10 @@ def test_the_example_page_matches_its_snapshot(monkeypatch) -> None:
     root = Path(__file__).parent.parent / "examples" / "orders-service"
     entry = entry_points(read_project(root))[0]
     cmap, project = map_entry(root, entry, PageOptions())
-    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
-                                    sources=project.files), 100) + "\n"
+    text = (
+        _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5, sources=project.files), 100)
+        + "\n"
+    )
     if os.environ.get("UPDATE_SNAPSHOTS"):
         SNAPSHOT.parent.mkdir(exist_ok=True)
         SNAPSHOT.write_text(text)
@@ -418,7 +472,7 @@ def test_the_example_page_matches_its_snapshot(monkeypatch) -> None:
     assert text.replace("'", '"') == SNAPSHOT.read_text().replace("'", '"')
 
 
-ENGINE = '''
+ENGINE = """
 def main():
     tidy()
     note()
@@ -438,7 +492,7 @@ def run():
 
 
 def work():
-''' + "".join(f"    step{i} = {i}\n" for i in range(30))
+""" + "".join(f"    step{i} = {i}\n" for i in range(30))
 
 
 def test_the_graph_draws_the_functions_that_do_the_work(tmp_path: Path) -> None:
@@ -453,8 +507,10 @@ def test_the_graph_draws_the_functions_that_do_the_work(tmp_path: Path) -> None:
 def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) -> None:
     from code_node.report.graph import _g_cards, _graph_layout
 
-    chain = ("import os\n\n\ndef main():\n    a()\n\n\ndef a():\n    b()\n\n\ndef b():\n    os.environ['B']\n    c()\n\n\n"
-             "def c():\n    os.environ['C']\n")
+    chain = (
+        "import os\n\n\ndef main():\n    a()\n\n\ndef a():\n    b()\n\n\ndef b():\n    os.environ['B']\n    c()\n\n\n"
+        "def c():\n    os.environ['C']\n"
+    )
     project = read_project(write(tmp_path / "code", {"app.py": chain}))
     graph = code_graph(map_code(project.files, "app.main"))
     _, routes, *_ = _graph_layout(graph, _g_cards(graph))
@@ -473,7 +529,8 @@ def test_line_links_open_the_editor(tmp_path: Path) -> None:
     link = editor_link("vscode", "/home/me/my code")
     assert open_at(link, "app/main.py", 12) == "vscode://file/home/me/my%20code/app/main.py:12"
     assert open_at(editor_link("cursor", "/home/me/code", wsl="Ubuntu"), "a.py", 3) == (
-        "cursor://vscode-remote/wsl+Ubuntu/home/me/code/a.py:3")
+        "cursor://vscode-remote/wsl+Ubuntu/home/me/code/a.py:3"
+    )
     assert open_at(editor_link("vscode", "C:\\code"), "a.py", 1) == "vscode://file/C:/code/a.py:1"
     assert editor_link("none", "/home/me/code") == ""
     write(tmp_path / "code", {"app.py": HANDLER})
@@ -484,7 +541,7 @@ def test_line_links_open_the_editor(tmp_path: Path) -> None:
     assert "vscode://" not in out.read_text()
 
 
-IDIOMS = '''
+IDIOMS = """
 class Base:
     def __init__(self, name):
         self.setup(name)
@@ -528,7 +585,7 @@ def main(item):
     n = repo.size
     with Repo("y") as r:
         r.save(item)
-'''
+"""
 
 
 def test_super_properties_and_with_blocks_are_followed(tmp_path: Path) -> None:
@@ -557,19 +614,24 @@ def test_syntax_warnings_stay_out_of_the_terminal(tmp_path: Path) -> None:
 
 
 def test_console_scripts_come_from_every_pyproject(tmp_path: Path) -> None:
-    project = read_project(write(tmp_path, {
-        "pyproject.toml": '[project]\nname = "workspace"\n',
-        "libs/cli/pyproject.toml": '[project]\nname = "tool"\n[project.scripts]\ntool = "tool.main:run"\n',
-        "libs/cli/tool/__init__.py": "",
-        "libs/cli/tool/main.py": "def run():\n    pass\n",
-        "scripts/release.py": "def main():\n    pass\n\n\nif __name__ == '__main__':\n    main()\n",
-    }))
+    project = read_project(
+        write(
+            tmp_path,
+            {
+                "pyproject.toml": '[project]\nname = "workspace"\n',
+                "libs/cli/pyproject.toml": '[project]\nname = "tool"\n[project.scripts]\ntool = "tool.main:run"\n',
+                "libs/cli/tool/__init__.py": "",
+                "libs/cli/tool/main.py": "def run():\n    pass\n",
+                "scripts/release.py": "def main():\n    pass\n\n\nif __name__ == '__main__':\n    main()\n",
+            },
+        )
+    )
     assert project.configs == ["pyproject.toml", "libs/cli/pyproject.toml"]
     first = entry_points(project)[0]
     assert (first.name, first.why) == ("tool.main.run", "the tool command in libs/cli/pyproject.toml")
 
 
-DISPATCH = '''
+DISPATCH = """
 import os
 import boto3
 
@@ -592,7 +654,7 @@ def main(command, names):
             if not name:
                 continue
             deploy(name)
-'''
+"""
 
 
 def test_what_names_hold_where_arguments_come_from_and_when_calls_run(tmp_path: Path) -> None:
@@ -612,10 +674,10 @@ def test_what_names_hold_where_arguments_come_from_and_when_calls_run(tmp_path: 
     deploy = next(n for n in graph.nodes if n.label == "deploy()")
     assert deploy.when == "command == 'deploy'"  # the graph says the if nearest around the call
     assert any(e.kind == "call" and e.when == deploy.when for e in graph.edges)
-    assert '|"when command == \'deploy\'"|' in graph.mermaid()
+    assert "|\"when command == 'deploy'\"|" in graph.mermaid()
 
 
-STORES = '''
+STORES = """
 import json
 import os
 import subprocess
@@ -646,7 +708,7 @@ def handler(event, context):
     claude.messages.create(model="claude-sonnet-5-5", max_tokens=200, messages=[])
     subprocess.run(f"echo {body['note']}", shell=True)
     return name, found
-'''
+"""
 
 
 def test_library_plugins_follow_their_clients_and_flag_what_the_input_reaches(tmp_path: Path) -> None:
@@ -656,9 +718,14 @@ def test_library_plugins_follow_their_clients_and_flag_what_the_input_reaches(tm
     cmap = map_code(project.files, "app.handler", libraries=project.libraries(), platform="lambda")
     calls = {(c.service, c.operation, c.target): c for c in cmap.library_calls}
     assert set(calls) == {
-        ("SQLite", "SELECT", "users"), ("SQLite", "DELETE", "sessions"), ("Redis", "KEYS", "session:*"),
-        ("Redis", "DELETE", "key"), ("MongoDB", "insert_one", "orders"), ("MongoDB", "find_one", "users"),
-        ("Anthropic", "messages.create", "claude-sonnet-5-5")}
+        ("SQLite", "SELECT", "users"),
+        ("SQLite", "DELETE", "sessions"),
+        ("Redis", "KEYS", "session:*"),
+        ("Redis", "DELETE", "key"),
+        ("MongoDB", "insert_one", "orders"),
+        ("MongoDB", "find_one", "users"),
+        ("Anthropic", "messages.create", "claude-sonnet-5-5"),
+    }
     # the user id went from the event, through a name and a + on text, into the SQL: flagged where it's run
     assert calls[("SQLite", "DELETE", "sessions")].flag == "SQL injection"
     assert not calls[("SQLite", "SELECT", "users")].flag  # a parameter, in a constant statement
@@ -697,18 +764,21 @@ def test_a_library_plugin_from_another_package(tmp_path: Path, monkeypatch) -> N
 
     librariesmod.libraries()
     monkeypatch.setitem(librariesmod._libraries, "kafka", Kafka())
-    code = ("from kafka import KafkaProducer\n\nproducer = KafkaProducer()\n\n\n"
-            "def main():\n    producer.send('orders', b'1')\n")
+    code = (
+        "from kafka import KafkaProducer\n\nproducer = KafkaProducer()\n\n\n"
+        "def main():\n    producer.send('orders', b'1')\n"
+    )
     project = read_project(write(tmp_path, {"app.py": code}))
     cmap = map_code(project.files, "app.main", libraries=project.libraries())
     assert [(c.service, c.operation, c.access, c.target) for c in cmap.library_calls] == [
-        ("Kafka", "send", "sends", "orders")]
+        ("Kafka", "send", "sends", "orders")
+    ]
     box = next(n for n in code_graph(cmap).nodes if n.kind == "service")
     assert (box.label, box.icon, box.lines) == ("Kafka", "queue", ["send orders"])
 
 
 SAM = {
-    "template.yaml": '''
+    "template.yaml": """
 Transform: AWS::Serverless-2016-10-31
 Globals:
   Function:
@@ -734,9 +804,9 @@ Resources:
               Resource: "*"
   Uploads:
     Type: AWS::S3::Bucket
-''',
+""",
     "src/images/__init__.py": "",
-    "src/images/resize.py": '''
+    "src/images/resize.py": """
 import os
 import boto3
 import PIL
@@ -748,7 +818,7 @@ def run(event, context):
     s3.get_object(Bucket=os.environ["BUCKET"], Key="a")
     s3.put_object(Bucket=os.environ["STAGE"], Key="b", Body=b"")
     boto3.client("sqs").send_message(QueueUrl="q", MessageBody="done")
-''',
+""",
 }
 
 
@@ -762,16 +832,24 @@ def test_a_sam_template_names_the_entry_point_and_what_its_role_allows(tmp_path:
     found = entry_points(project)
     # run() isn't named like a handler: the template is what says it is one
     assert [(e.name, e.why, e.platform) for e in found] == [
-        ("images.resize.run", "ResizeFunction in template.yaml", "lambda")]
+        ("images.resize.run", "ResizeFunction in template.yaml", "lambda")
+    ]
     cmap, _ = map_entry(root, found[0], PageOptions())
     fn = cmap.function
     assert (fn.name, fn.runtime, fn.timeout, fn.env_names, fn.layers) == (
-        "ResizeFunction", "python3.13", 20, {"STAGE"}, ["PillowLayer"])
+        "ResizeFunction",
+        "python3.13",
+        20,
+        {"STAGE"},
+        ["PillowLayer"],
+    )
     assert {i.top: i.source for i in cmap.imports}["PIL"] == "package"
     said = " ".join(message for _, message in code_map_findings(cmap))
     assert "BUCKET isn't set on ResizeFunction" in said and "STAGE isn't" not in said
-    assert ("ResizeFunction's role in template.yaml (it has S3ReadPolicy and an inline statement) doesn't allow "
-            "s3:PutObject") in said
+    assert (
+        "ResizeFunction's role in template.yaml (it has S3ReadPolicy and an inline statement) doesn't allow "
+        "s3:PutObject"
+    ) in said
     assert "Add S3WritePolicy to ResizeFunction's Policies in template.yaml" in said
     s3 = next(n for n in code_graph(cmap).nodes if n.label == "S3")
     assert s3.flags == {"PutObject": "not allowed"} and s3.tone == "warn"
@@ -784,7 +862,8 @@ def test_a_role_it_cant_read_leaves_permissions_unchecked(tmp_path: Path) -> Non
 
     files = dict(SAM)
     files["template.yaml"] = files["template.yaml"].replace(
-        "      Policies:", "      Role: arn:aws:iam::123456789012:role/shared\n      Policies:")
+        "      Policies:", "      Role: arn:aws:iam::123456789012:role/shared\n      Policies:"
+    )
     root = write(tmp_path, files)
     cmap, _ = map_entry(root, entry_points(read_project(root))[0], PageOptions())
     assert cmap.function.permissions is None
@@ -795,8 +874,10 @@ def test_serverless_yml_names_the_entry_point(tmp_path: Path) -> None:
     from code_node.analysis.findings import code_map_findings
     from code_node.pages import PageOptions, map_entry
 
-    root = write(tmp_path, {
-        "serverless.yml": '''
+    root = write(
+        tmp_path,
+        {
+            "serverless.yml": """
 service: jobs
 provider:
   name: aws
@@ -812,11 +893,14 @@ provider:
 functions:
   sweep:
     handler: jobs/sweep.go
-''',
-        "jobs/__init__.py": "",
-        "jobs/sweep.py": ('import os\nimport boto3\n\n\ndef go(event, context):\n'
-                          '    boto3.resource("dynamodb").Table(os.environ["TABLE"]).delete_item(Key={})\n'),
-    })
+""",
+            "jobs/__init__.py": "",
+            "jobs/sweep.py": (
+                "import os\nimport boto3\n\n\ndef go(event, context):\n"
+                '    boto3.resource("dynamodb").Table(os.environ["TABLE"]).delete_item(Key={})\n'
+            ),
+        },
+    )
     found = entry_points(read_project(root))
     assert [(e.name, e.why) for e in found] == [("jobs.sweep.go", "sweep in serverless.yml")]
     cmap, _ = map_entry(root, found[0], PageOptions())
@@ -846,8 +930,7 @@ def _matches_snapshot(example: str) -> None:
     snapshot = Path(__file__).parent / "snapshots" / f"{example}.txt"
     entry = entry_points(read_project(root))[0]
     cmap, project = map_entry(root, entry, PageOptions())
-    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
-                                    sources=project.files), 100)
+    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5, sources=project.files), 100)
     text += "\n\n-- Findings --\n" + "\n".join(f"{level}: {message}" for level, message in code_map_findings(cmap))
     text += "\n"
     if os.environ.get("UPDATE_SNAPSHOTS"):
@@ -884,7 +967,7 @@ def test_services_show_their_real_logos(tmp_path: Path) -> None:
     page = render_page(page_blocks_for(project, "app.handler"), "x")
     assert page.count('<svg class="logo"') == 4  # SQLite, Redis, MongoDB, Anthropic
     assert 'id="cnl-sqlite-' in page  # each logo's gradient ids get its own prefix, so two logos never share one
-    assert "fill=\"#181818\"" not in page  # Anthropic's black follows the text colour, for dark mode
+    assert 'fill="#181818"' not in page  # Anthropic's black follows the text colour, for dark mode
 
 
 def test_logos_come_in_two_sizes_as_favicons_do(tmp_path: Path) -> None:

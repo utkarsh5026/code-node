@@ -54,9 +54,15 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
     project = read_project(root)
     file = entry.file or (entry_file(entry.name, project.files) or ("",))[0]
     deployment = find_deployment(project.deploy_files, project.files, file, entry.name.rsplit(".", 1)[-1])
-    cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file or None,
-                    max_depth=_ALL_READ_DEPTH if options.draw_all else None,
-                    platform=options.platform or entry.platform, deployment=deployment)
+    cmap = map_code(
+        project.files,
+        entry.name,
+        libraries=project.libraries(),
+        file=entry.file or None,
+        max_depth=_ALL_READ_DEPTH if options.draw_all else None,
+        platform=options.platform or entry.platform,
+        deployment=deployment,
+    )
     return cmap, project
 
 
@@ -66,9 +72,14 @@ def make_page(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[str,
     """
     cmap, project = map_entry(root, entry, options)
     max_functions, max_depth = options.limits
-    blocks = page_blocks(cmap, project=project.root.name, max_functions=max_functions, max_depth=max_depth,
-                         sources=project.files, editor=editor_link(options.editor, str(project.root),
-                                                                   os.environ.get("WSL_DISTRO_NAME", "")))
+    blocks = page_blocks(
+        cmap,
+        project=project.root.name,
+        max_functions=max_functions,
+        max_depth=max_depth,
+        sources=project.files,
+        editor=editor_link(options.editor, str(project.root), os.environ.get("WSL_DISTRO_NAME", "")),
+    )
     return render_page(blocks, f"How {entry.name} works"), cmap
 
 

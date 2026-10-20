@@ -18,23 +18,82 @@ from . import Platform
 
 _PLACEHOLDER_RE = re.compile(r"\{(\w+)(?::[^}]*)?\}|<(?:[^:<>]+:)?(\w+)>|\(\?P<(\w+)>")  # {id}, <int:id>, (?P<id>...)
 
-_MARKERS = {"Query": "query", "Path": "path", "Body": "body", "Header": "headers", "Cookie": "cookies",
-            "Form": "form", "File": "files"}  # FastAPI's: where a parameter comes from in the request
+_MARKERS = {
+    "Query": "query",
+    "Path": "path",
+    "Body": "body",
+    "Header": "headers",
+    "Cookie": "cookies",
+    "Form": "form",
+    "File": "files",
+}  # FastAPI's: where a parameter comes from in the request
 
-_NOT_INPUT = {"Depends", "Security", "BackgroundTasks", "Response", "SecurityScopes", "Session", "AsyncSession",
-              "Connection", "AsyncConnection"}  # FastAPI fills these itself, not from the request
+_NOT_INPUT = {
+    "Depends",
+    "Security",
+    "BackgroundTasks",
+    "Response",
+    "SecurityScopes",
+    "Session",
+    "AsyncSession",
+    "Connection",
+    "AsyncConnection",
+}  # FastAPI fills these itself, not from the request
 
 _WHOLE = {"Request", "WebSocket", "HTTPConnection"}  # the request itself
 
-_SCALARS = {"int", "str", "float", "bool", "bytes", "UUID", "date", "datetime", "time", "timedelta", "Decimal",
-            "EmailStr", "HttpUrl", "AnyUrl", "Any", "Literal", "list", "List", "set", "Set", "tuple", "Tuple",
-            "Sequence", "frozenset", "FrozenSet", "StrictStr", "StrictInt", "conint", "constr"}  # a query parameter's
+_SCALARS = {
+    "int",
+    "str",
+    "float",
+    "bool",
+    "bytes",
+    "UUID",
+    "date",
+    "datetime",
+    "time",
+    "timedelta",
+    "Decimal",
+    "EmailStr",
+    "HttpUrl",
+    "AnyUrl",
+    "Any",
+    "Literal",
+    "list",
+    "List",
+    "set",
+    "Set",
+    "tuple",
+    "Tuple",
+    "Sequence",
+    "frozenset",
+    "FrozenSet",
+    "StrictStr",
+    "StrictInt",
+    "conint",
+    "constr",
+}  # a query parameter's
 
-_WRAPPERS = {"Optional", "Union", "Annotated", "list", "List", "set", "Set", "tuple", "Tuple", "Sequence",
-             "frozenset", "FrozenSet"}  # look inside them for the type that says where it comes from
+_WRAPPERS = {
+    "Optional",
+    "Union",
+    "Annotated",
+    "list",
+    "List",
+    "set",
+    "Set",
+    "tuple",
+    "Tuple",
+    "Sequence",
+    "frozenset",
+    "FrozenSet",
+}  # look inside them for the type that says where it comes from
 
 FRAMEWORK_LOGOS = {  # a module the code imports -> its framework's logo (report/logos/), the first one found
-    "fastapi": "fastapi-icon", "flask": "flask", "quart": "flask", "rest_framework": "django-icon",
+    "fastapi": "fastapi-icon",
+    "flask": "flask",
+    "quart": "flask",
+    "rest_framework": "django-icon",
     "django": "django-icon",
 }
 
@@ -104,8 +163,14 @@ def _fastapi(names: set[str], params: list[tuple[ast.arg, ast.expr | None]]) -> 
         elif marker == "Body" or (not marker and name not in names and kind and kind not in _SCALARS):
             bodies.append(name)
         elif marker:
-            alias = next((kw.value.value for kw in getattr(call, "keywords", [])
-                          if kw.arg == "alias" and isinstance(kw.value, ast.Constant)), None)
+            alias = next(
+                (
+                    kw.value.value
+                    for kw in getattr(call, "keywords", [])
+                    if kw.arg == "alias" and isinstance(kw.value, ast.Constant)
+                ),
+                None,
+            )
             found[name] = (_MARKERS[marker], str(alias or (name.replace("_", "-") if marker == "Header" else name)))
         else:
             found[name] = ("path" if name in names else "query", name)
@@ -134,18 +199,24 @@ class WebPlatform(Platform):
         if module.rsplit(".", 1)[-1] != "urls":
             return []
         for node in tree.body:
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(
-                node, ast.AnnAssign) else []
+            targets = (
+                node.targets
+                if isinstance(node, ast.Assign)
+                else [node.target]
+                if isinstance(node, ast.AnnAssign)
+                else []
+            )
             if any(isinstance(t, ast.Name) and t.id == "urlpatterns" for t in targets):
                 return [("urlpatterns", node.lineno, "Django's URLs: each view")]
         return []
 
-    def route_inputs(self, function: ast.FunctionDef | ast.AsyncFunctionDef, path: str, imports: set[str],
-                     bound: bool = False) -> dict[str, tuple[str, ...]]:
+    def route_inputs(
+        self, function: ast.FunctionDef | ast.AsyncFunctionDef, path: str, imports: set[str], bound: bool = False
+    ) -> dict[str, tuple[str, ...]]:
         a = function.args
         positional = a.posonlyargs + a.args
         defaults: list[ast.expr | None] = [None] * (len(positional) - len(a.defaults)) + list(a.defaults)
-        params = list(zip(positional, defaults))[1 if bound else 0:] + list(zip(a.kwonlyargs, a.kw_defaults))
+        params = list(zip(positional, defaults))[1 if bound else 0 :] + list(zip(a.kwonlyargs, a.kw_defaults))
         names = {name for match in _PLACEHOLDER_RE.finditer(path) for name in match.groups() if name}
         if "fastapi" in imports or ("{" in path and "(?P" not in path):
             return _fastapi(names, params)
@@ -159,11 +230,15 @@ class WebPlatform(Platform):
         return next((logo for module, logo in FRAMEWORK_LOGOS.items() if module in imported), "")
 
     def hang(self, cmap: CodeMap) -> str:
-        return ("the request waits as long as the connection stays open, holding one of the server's workers, and "
-                "the client gives up first.")
+        return (
+            "the request waits as long as the connection stays open, holding one of the server's workers, and "
+            "the client gives up first."
+        )
 
     def lost_error(self) -> str:
-        return "answers with a success status, so the client thinks it worked and the server's error log never shows it."
+        return (
+            "answers with a success status, so the client thinks it worked and the server's error log never shows it."
+        )
 
     def findings(self, cmap: CodeMap) -> list[tuple[str, str]]:
         found: list[tuple[str, str]] = []
@@ -171,25 +246,38 @@ class WebPlatform(Platform):
             return found
         for function, lines in self._blocking(cmap).items():
             name = _short_name(function)
-            found.append(("warn", (
-                f"{_listed([f'{what} at {_where(file, line)}' for what, file, line in lines], 2)} "
-                f"{'waits' if len(lines) == 1 else 'wait'} without await inside async def {name}(): while "
-                f"{'it waits' if len(lines) == 1 else 'they wait'}, the server's event loop can't run anything else, "
-                f"so every other request this worker is serving waits too. Make {name}() a plain def (FastAPI runs "
-                "those in a thread pool), or use an async client (httpx.AsyncClient, aioboto3, await asyncio.sleep)."
-            )))
+            found.append(
+                (
+                    "warn",
+                    (
+                        f"{_listed([f'{what} at {_where(file, line)}' for what, file, line in lines], 2)} "
+                        f"{'waits' if len(lines) == 1 else 'wait'} without await inside async def {name}(): while "
+                        f"{'it waits' if len(lines) == 1 else 'they wait'}, the server's event loop can't run anything else, "
+                        f"so every other request this worker is serving waits too. Make {name}() a plain def (FastAPI runs "
+                        "those in a thread pool), or use an async client (httpx.AsyncClient, aioboto3, await asyncio.sleep)."
+                    ),
+                )
+            )
         for spot in [s for s in cmap.spots if s.kind == "connect" and not s.ok and not s.startup]:
-            found.append(("info", (
-                f"It opens a new {spot.detail} connection on every request, at "
-                f"{_where(spot.file, spot.line, spot.function)}" + (" inside a loop" if spot.loop else "")
-                + ": that's a round trip or more before any work, and many requests at once can use up the server's "
-                "connections. Make a pool once, at module level or when the app starts, and take a connection from it."
-            )))
+            found.append(
+                (
+                    "info",
+                    (
+                        f"It opens a new {spot.detail} connection on every request, at "
+                        f"{_where(spot.file, spot.line, spot.function)}"
+                        + (" inside a loop" if spot.loop else "")
+                        + ": that's a round trip or more before any work, and many requests at once can use up the server's "
+                        "connections. Make a pool once, at module level or when the app starts, and take a connection from it."
+                    ),
+                )
+            )
         return found
 
     def marks(self, cmap: CodeMap) -> dict[str, list[str]]:
-        return {function: [f"{what} blocks its event loop (line {line})" for what, _, line in lines]
-                for function, lines in self._blocking(cmap).items()}
+        return {
+            function: [f"{what} blocks its event loop (line {line})" for what, _, line in lines]
+            for function, lines in self._blocking(cmap).items()
+        }
 
     @staticmethod
     def _blocking(cmap: CodeMap) -> dict[str, list[tuple[str, str, int]]]:
@@ -199,8 +287,12 @@ class WebPlatform(Platform):
         """
         async_functions = {f.name for f in cmap.functions if f.is_async}
         lines: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
-        spots: list[CodeSpot | AwsCall] = [s for s in cmap.spots if (s.kind == "http" and s.code.startswith(
-            _BLOCKING_HTTP)) or (s.kind == "sleep" and s.code.startswith("time.sleep"))]
+        spots: list[CodeSpot | AwsCall] = [
+            s
+            for s in cmap.spots
+            if (s.kind == "http" and s.code.startswith(_BLOCKING_HTTP))
+            or (s.kind == "sleep" and s.code.startswith("time.sleep"))
+        ]
         spots += [c for c in cmap.aws if not c.guessed]
         for spot in spots:
             if spot.function in async_functions and not spot.startup:

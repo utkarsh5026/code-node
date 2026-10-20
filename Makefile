@@ -22,11 +22,13 @@ install: ## make .venv with code-node and every dependency group in pyproject.to
 test: ## run the tests
 	$(RUN) pytest -q
 
-lint: ## ruff check
+lint: ## ruff check and ruff format --check
 	$(RUN) ruff check .
+	$(RUN) ruff format --check .
 
-fix: ## ruff check --fix
+fix: ## ruff check --fix and ruff format
 	$(RUN) ruff check --fix .
+	$(RUN) ruff format .
 
 try: ## draw REPO's page to OUT without opening it
 	$(RUN) code-node $(REPO) --no-open -o $(OUT)

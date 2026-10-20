@@ -55,7 +55,7 @@ def _dark(hex_colour: str) -> bool:
     digits = hex_colour[1:]
     if len(digits) == 3:
         digits = "".join(c * 2 for c in digits)
-    r, g, b = (int(digits[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    r, g, b = (int(digits[i : i + 2], 16) / 255 for i in (0, 2, 4))
     return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.16
 
 
@@ -98,16 +98,20 @@ def _aws_small(name: str, body: str) -> str | None:
         return None
     glyph = _G_ICONS[AWS_GLYPHS.get(name, "cloud")]
     scale = 1.25  # the 16-unit symbol at 20 of the square's 32
-    return (f'{defs}<path fill="url(#{first.group(1)})" d="M0 0h{SMALL}v{SMALL}H0z"/>'
-            f'<path fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
-            f'transform="translate({(SMALL - 16 * scale) / 2:g} {(SMALL - 16 * scale) / 2:g}) scale({scale})" '
-            f'd="{glyph}"/>')
-
+    return (
+        f'{defs}<path fill="url(#{first.group(1)})" d="M0 0h{SMALL}v{SMALL}H0z"/>'
+        f'<path fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
+        f'transform="translate({(SMALL - 16 * scale) / 2:g} {(SMALL - 16 * scale) / 2:g}) scale({scale})" '
+        f'd="{glyph}"/>'
+    )
 
 
 def _write(path: Path, width: int, height: int, body: str) -> None:
-    path.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-                    f'viewBox="0 0 {width} {height}" fill="currentColor">{body}</svg>\n', "utf-8")
+    path.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" fill="currentColor">{body}</svg>\n',
+        "utf-8",
+    )
 
 
 def main() -> None:
@@ -143,7 +147,8 @@ def main() -> None:
         "code-node's white symbol for what it is, as AWS draws its 16 px icons.\n\n"
         "Written by `scripts/logos.py` (`make logos`): don't edit them. Each one's ids carry its name, and near-black "
         "fills are `currentColor`.\n",
-        "utf-8")
+        "utf-8",
+    )
     size = sum(f.stat().st_size for f in [*OUT.glob("*.svg"), *(OUT / "small").glob("*.svg")])
     small = len(list((OUT / "small").glob("*.svg")))
     print(f"{OUT.relative_to(ROOT)}/: {len(wanted)} logos, {small} with a small mark, {size // 1024} KB")

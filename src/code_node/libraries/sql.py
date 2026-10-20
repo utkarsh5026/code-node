@@ -11,34 +11,72 @@ import re
 from . import Call, Handle, Library, Use
 
 _CONNECT = {  # a driver's function that opens a connection -> the database, as people name it
-    "sqlite3.connect": "SQLite", "psycopg2.connect": "PostgreSQL", "psycopg.connect": "PostgreSQL",
-    "psycopg.Connection.connect": "PostgreSQL", "psycopg.AsyncConnection.connect": "PostgreSQL",
-    "pymysql.connect": "MySQL", "pymysql.connections.Connection": "MySQL", "MySQLdb.connect": "MySQL",
-    "mysql.connector.connect": "MySQL", "asyncpg.connect": "PostgreSQL",
+    "sqlite3.connect": "SQLite",
+    "psycopg2.connect": "PostgreSQL",
+    "psycopg.connect": "PostgreSQL",
+    "psycopg.Connection.connect": "PostgreSQL",
+    "psycopg.AsyncConnection.connect": "PostgreSQL",
+    "pymysql.connect": "MySQL",
+    "pymysql.connections.Connection": "MySQL",
+    "MySQLdb.connect": "MySQL",
+    "mysql.connector.connect": "MySQL",
+    "asyncpg.connect": "PostgreSQL",
 }
 
-_POOLS = {"asyncpg.create_pool": "PostgreSQL", "psycopg2.pool.SimpleConnectionPool": "PostgreSQL",
-          "psycopg2.pool.ThreadedConnectionPool": "PostgreSQL", "psycopg_pool.ConnectionPool": "PostgreSQL"}
+_POOLS = {
+    "asyncpg.create_pool": "PostgreSQL",
+    "psycopg2.pool.SimpleConnectionPool": "PostgreSQL",
+    "psycopg2.pool.ThreadedConnectionPool": "PostgreSQL",
+    "psycopg_pool.ConnectionPool": "PostgreSQL",
+}
 
-_SCHEMES = (("postgres", "PostgreSQL"), ("mysql", "MySQL"), ("mariadb", "MySQL"), ("sqlite", "SQLite"),
-            ("mssql", "SQL Server"), ("oracle", "Oracle"), ("snowflake", "Snowflake"), ("redshift", "Redshift"))
+_SCHEMES = (
+    ("postgres", "PostgreSQL"),
+    ("mysql", "MySQL"),
+    ("mariadb", "MySQL"),
+    ("sqlite", "SQLite"),
+    ("mssql", "SQL Server"),
+    ("oracle", "Oracle"),
+    ("snowflake", "Snowflake"),
+    ("redshift", "Redshift"),
+)
 
 _TIMEOUTS = ("connect_timeout", "timeout", "command_timeout", "connection_timeout", "read_timeout")
 
-_RUN = ("execute", "executemany", "executescript", "fetch", "fetchrow", "fetchval", "exec_driver_sql", "scalar",
-        "scalars", "copy_records_to_table", "copy_from", "copy_expert")
+_RUN = (
+    "execute",
+    "executemany",
+    "executescript",
+    "fetch",
+    "fetchrow",
+    "fetchval",
+    "exec_driver_sql",
+    "scalar",
+    "scalars",
+    "copy_records_to_table",
+    "copy_from",
+    "copy_expert",
+)
 
-_STATEMENT = re.compile(r"^\s*(?:\(\s*)?(WITH|SELECT|INSERT|UPDATE|DELETE|MERGE|REPLACE|UPSERT|CREATE|DROP|ALTER|"
-                        r"TRUNCATE|CALL|COPY|GRANT|VACUUM|PRAGMA|SHOW|EXPLAIN|BEGIN|COMMIT|ROLLBACK|SET)\b", re.I)
+_STATEMENT = re.compile(
+    r"^\s*(?:\(\s*)?(WITH|SELECT|INSERT|UPDATE|DELETE|MERGE|REPLACE|UPSERT|CREATE|DROP|ALTER|"
+    r"TRUNCATE|CALL|COPY|GRANT|VACUUM|PRAGMA|SHOW|EXPLAIN|BEGIN|COMMIT|ROLLBACK|SET)\b",
+    re.I,
+)
 
 _TABLE = {  # a statement -> where its table is named
-    "SELECT": r"\bFROM\s+([\w.\"`\[\]{}]+)", "WITH": r"\bFROM\s+([\w.\"`\[\]{}]+)",
-    "INSERT": r"\bINTO\s+([\w.\"`\[\]{}]+)", "REPLACE": r"\bINTO\s+([\w.\"`\[\]{}]+)",
-    "UPSERT": r"\bINTO\s+([\w.\"`\[\]{}]+)", "MERGE": r"\bINTO\s+([\w.\"`\[\]{}]+)",
-    "UPDATE": r"^\s*UPDATE\s+(?:ONLY\s+)?([\w.\"`\[\]{}]+)", "DELETE": r"\bFROM\s+([\w.\"`\[\]{}]+)",
+    "SELECT": r"\bFROM\s+([\w.\"`\[\]{}]+)",
+    "WITH": r"\bFROM\s+([\w.\"`\[\]{}]+)",
+    "INSERT": r"\bINTO\s+([\w.\"`\[\]{}]+)",
+    "REPLACE": r"\bINTO\s+([\w.\"`\[\]{}]+)",
+    "UPSERT": r"\bINTO\s+([\w.\"`\[\]{}]+)",
+    "MERGE": r"\bINTO\s+([\w.\"`\[\]{}]+)",
+    "UPDATE": r"^\s*UPDATE\s+(?:ONLY\s+)?([\w.\"`\[\]{}]+)",
+    "DELETE": r"\bFROM\s+([\w.\"`\[\]{}]+)",
     "CREATE": r"\b(?:TABLE|INDEX|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.\"`\[\]{}]+)",
     "DROP": r"\b(?:TABLE|INDEX|VIEW)\s+(?:IF\s+EXISTS\s+)?([\w.\"`\[\]{}]+)",
-    "ALTER": r"\bTABLE\s+([\w.\"`\[\]{}]+)", "TRUNCATE": r"^\s*TRUNCATE\s+(?:TABLE\s+)?([\w.\"`\[\]{}]+)",
+    "ALTER": r"\bTABLE\s+([\w.\"`\[\]{}]+)",
+    "TRUNCATE": r"^\s*TRUNCATE\s+(?:TABLE\s+)?([\w.\"`\[\]{}]+)",
     "COPY": r"^\s*COPY\s+([\w.\"`\[\]{}]+)",
 }
 
@@ -59,7 +97,7 @@ def _statement(text: str) -> tuple[str, str]:
         main = re.search(r"\)\s*(SELECT|INSERT|UPDATE|DELETE|MERGE)\b", body, re.I)
         verb = main.group(1).upper() if main else "SELECT"
     table = re.search(_TABLE.get(verb, r"$^"), body, re.I | re.S)
-    return verb, table.group(1).strip("\"`[]") if table else ""
+    return verb, table.group(1).strip('"`[]') if table else ""
 
 
 def _access(verb: str) -> str:
@@ -78,21 +116,40 @@ class SqlLibrary(Library):
 
     name = "sql"
     title = "SQL"
-    modules = ("sqlite3", "psycopg2", "psycopg", "psycopg_pool", "pymysql", "MySQLdb", "mysql", "asyncpg",
-               "sqlalchemy", "django")
+    modules = (
+        "sqlite3",
+        "psycopg2",
+        "psycopg",
+        "psycopg_pool",
+        "pymysql",
+        "MySQLdb",
+        "mysql",
+        "asyncpg",
+        "sqlalchemy",
+        "django",
+    )
     icon = "database"
 
     def make(self, name: str, call: Call) -> Handle | Use | None:
         if name in _CONNECT or name in _POOLS:
             service = _CONNECT.get(name) or _POOLS[name]
             target = call.shown(0, "database") if service == "SQLite" else ""
-            waits = "" if service == "SQLite" or call.given(*_TIMEOUTS) or "timeout" in call.code(0, most=300) \
+            waits = (
+                ""
+                if service == "SQLite" or call.given(*_TIMEOUTS) or "timeout" in call.code(0, most=300)
                 else f"as long as {service} takes to answer"
+            )
             kind = "connection" if name in _CONNECT else "pool"
             facts = (("database", target),) if target else ()
             fix = f"{name}(..., {'timeout' if name.startswith('asyncpg') else 'connect_timeout'}=5)"
-            return Handle(kind, service, facts + (("driver", name.split(".")[0]),), opens=service != "SQLite",
-                          waits=waits, fix=fix)  # SQLite opens a file: nothing to keep a connection to
+            return Handle(
+                kind,
+                service,
+                facts + (("driver", name.split(".")[0]),),
+                opens=service != "SQLite",
+                waits=waits,
+                fix=fix,
+            )  # SQLite opens a file: nothing to keep a connection to
         if name == "django.db.connection.cursor":  # Django opens and keeps the connection itself
             return Handle("cursor", "", (("driver", "django"),))
         last = name.rsplit(".", 1)[-1]
@@ -101,8 +158,15 @@ class SqlLibrary(Library):
             service = next((label for scheme, label in _SCHEMES if url.startswith(scheme)), "SQL database")
             return Handle("engine", service, (("driver", "sqlalchemy"),), opens=True)
         if name.startswith("sqlalchemy") and last == "text":
-            return Handle("statement", "", (("sql", call.text(0)), ("built", "yes" if call.built(0) else ""),
-                                            ("inputs", ", ".join(call.inputs(0)))))
+            return Handle(
+                "statement",
+                "",
+                (
+                    ("sql", call.text(0)),
+                    ("built", "yes" if call.built(0) else ""),
+                    ("inputs", ", ".join(call.inputs(0))),
+                ),
+            )
         return None
 
     def call(self, handle: Handle, method: str, call: Call) -> Handle | Use | None:
@@ -138,18 +202,31 @@ class SqlLibrary(Library):
         if built and inputs:
             marker = "$1" if handle.fact("driver") == "asyncpg" else _MARKERS.get(service, "%s")
             flag = "SQL injection"
-            why = (f"puts {', '.join(dict.fromkeys(inputs))} into the SQL text itself, so whoever sends it can change "
-                   f"the statement (SQL injection). Pass it as a parameter instead: "
-                   f"execute(\"... WHERE id = {marker}\", (value,)).")
+            why = (
+                f"puts {', '.join(dict.fromkeys(inputs))} into the SQL text itself, so whoever sends it can change "
+                f"the statement (SQL injection). Pass it as a parameter instead: "
+                f'execute("... WHERE id = {marker}", (value,)).'
+            )
         batch = ""
         if method == "execute" and access == "writes" and verb in ("INSERT", "UPDATE", "DELETE", "REPLACE", "UPSERT"):
             batch = "one execute() with a list of rows" if handle.fact("driver") == "sqlalchemy" else "executemany()"
         elif access == "reads":
             batch = "one query for all of them (WHERE ... IN (...), or a join)"
-        return Use(operation, access, table, service, flag=flag, why=why, batch=batch,
-                   gives=handle.but("cursor") if handle.kind == "connection" else None)
+        return Use(
+            operation,
+            access,
+            table,
+            service,
+            flag=flag,
+            why=why,
+            batch=batch,
+            gives=handle.but("cursor") if handle.kind == "connection" else None,
+        )
 
     def describe(self, handle: Handle) -> str:
         service = handle.service or "SQL"
-        return {"statement": "a SQL statement", "engine": f"a {service} engine",
-                "pool": f"a {service} connection pool"}.get(handle.kind, f"a {service} {handle.kind}")
+        return {
+            "statement": "a SQL statement",
+            "engine": f"a {service} engine",
+            "pool": f"a {service} connection pool",
+        }.get(handle.kind, f"a {service} {handle.kind}")

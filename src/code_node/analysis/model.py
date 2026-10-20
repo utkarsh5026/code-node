@@ -258,7 +258,9 @@ class CodeMap:
     event: list[EventField] = field(default_factory=list)
     imports: list[ImportUse] = field(default_factory=list)
     spots: list[CodeSpot] = field(default_factory=list)
-    returns: list[tuple[str, str, int]] = field(default_factory=list)  # what the entry point returns: (code, file, line)
+    returns: list[tuple[str, str, int]] = field(
+        default_factory=list
+    )  # what the entry point returns: (code, file, line)
     routes: list[tuple[str, str, str]] = field(default_factory=list)  # web routes: (method, path, function)
     files: int = 0  # Python files read
     lines: int = 0  # their lines

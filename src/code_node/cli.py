@@ -30,41 +30,75 @@ from .pages import GRAPH_DEPTH, GRAPH_FUNCTIONS, PageOptions, make_mermaid, make
 from .platforms import platforms
 from .report.editor import EDITORS
 from .project import (
-    EntryPoint, Project, entries_in_file, entry_in_files, entry_points, functions_matching, project_root, read_project,
+    EntryPoint,
+    Project,
+    entries_in_file,
+    entry_in_files,
+    entry_points,
+    functions_matching,
+    project_root,
+    read_project,
 )
+
 _CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "code-node"
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="code-node", description="See how Python code works: a graph of what calls what and what it reaches.")
-    parser.add_argument("path", nargs="?", default=".",
-                        help="the folder to read (default: this one), or the file to start from: main.py or "
-                             "main.py:function")
-    parser.add_argument("-e", "--entry", help="where to start: module.function, module.Class.method, "
-                                              "path/to/file.py[:function], or part of a function's name")
+        prog="code-node", description="See how Python code works: a graph of what calls what and what it reaches."
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="the folder to read (default: this one), or the file to start from: main.py or main.py:function",
+    )
+    parser.add_argument(
+        "-e",
+        "--entry",
+        help="where to start: module.function, module.Class.method, "
+        "path/to/file.py[:function], or part of a function's name",
+    )
     parser.add_argument("-l", "--list", action="store_true", help="list the entry points found, and stop")
-    parser.add_argument("--plugins", action="store_true",
-                        help="list the plugins it reads code with (platforms, libraries, deploy files), and stop")
+    parser.add_argument(
+        "--plugins",
+        action="store_true",
+        help="list the plugins it reads code with (platforms, libraries, deploy files), and stop",
+    )
     parser.add_argument("-o", "--out", help="where to save the page (default: ~/.cache/code-node/)")
     parser.add_argument("--no-open", action="store_true", help="save the page without opening a browser")
     parser.add_argument("--all", action="store_true", help="draw every function, however deep (big graphs)")
     parser.add_argument("--depth", type=int, default=GRAPH_DEPTH, help="calls deep the graph draws (default 5)")
-    parser.add_argument("--functions", type=int, default=GRAPH_FUNCTIONS,
-                        help="functions the graph draws at most (default 24)")
+    parser.add_argument(
+        "--functions", type=int, default=GRAPH_FUNCTIONS, help="functions the graph draws at most (default 24)"
+    )
     parser.add_argument("--mermaid", action="store_true", help="print the graph as Mermaid instead of a page")
-    parser.add_argument("--serve", action="store_true",
-                        help="serve the page on localhost and redraw it whenever a .py file changes")
-    parser.add_argument("--port", type=int, default=None,
-                        help="the --serve port (default: the first free one from 8765; 0 picks any free one)")
+    parser.add_argument(
+        "--serve", action="store_true", help="serve the page on localhost and redraw it whenever a .py file changes"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="the --serve port (default: the first free one from 8765; 0 picks any free one)",
+    )
     names = [p.name for p in platforms()]
-    parser.add_argument("--platform", choices=names, default="",
-                        help="where the code runs, for that platform's checks (found entry points set it: a Lambda "
-                             "handler is lambda; default plain Python)")
-    parser.add_argument("--lambda", dest="platform", action="store_const", const="lambda",
-                        help="the same as --platform lambda")
-    parser.add_argument("--editor", choices=[*EDITORS, "none"], default="vscode",
-                        help="the editor the page's line links open (default vscode; none for no links)")
+    parser.add_argument(
+        "--platform",
+        choices=names,
+        default="",
+        help="where the code runs, for that platform's checks (found entry points set it: a Lambda "
+        "handler is lambda; default plain Python)",
+    )
+    parser.add_argument(
+        "--lambda", dest="platform", action="store_const", const="lambda", help="the same as --platform lambda"
+    )
+    parser.add_argument(
+        "--editor",
+        choices=[*EDITORS, "none"],
+        default="vscode",
+        help="the editor the page's line links open (default vscode; none for no links)",
+    )
     return parser.parse_args(argv)
 
 
@@ -97,8 +131,9 @@ def _pick_entry(project: Project, given: str | None) -> EntryPoint | None:
         named = entry_in_files(project, given)
         if named is not None:
             return named
-        exact = [c for c in entry_points(project) + functions_matching(project, given.rsplit(".", 1)[-1])
-                 if c.name == given]
+        exact = [
+            c for c in entry_points(project) + functions_matching(project, given.rsplit(".", 1)[-1]) if c.name == given
+        ]
         if exact:
             return exact[0]
         if "." in given and not functions_matching(project, given):
@@ -110,10 +145,16 @@ def _pick_entry(project: Project, given: str | None) -> EntryPoint | None:
         return _ask(matches[:30])
     found = entry_points(project)
     if not found:
-        kinds = ["console script", "main()", *(p.entry_kind.split(":")[0].split(" (")[0].removeprefix("a ")
-                                               for p in platforms() if p.entry_kind)]
-        print(f"Found no entry point in {project.root}: no {', '.join(kinds[:-1])}, or {kinds[-1]}. Name one with -e "
-              "module.function.", file=sys.stderr)
+        kinds = [
+            "console script",
+            "main()",
+            *(p.entry_kind.split(":")[0].split(" (")[0].removeprefix("a ") for p in platforms() if p.entry_kind),
+        ]
+        print(
+            f"Found no entry point in {project.root}: no {', '.join(kinds[:-1])}, or {kinds[-1]}. Name one with -e "
+            "module.function.",
+            file=sys.stderr,
+        )
         return None
     return _ask(found[:30])
 
@@ -123,12 +164,18 @@ def _print_plugins() -> None:
     Every plugin installed, by kind: built-in ones and those other packages add.
     """
     kinds = [
-        ("Platforms (one per entry point: where it runs)",
-         [(p.name, p.title, p.entry_kind or "") for p in platforms()]),
-        ("Libraries (as many as the code imports: what it reaches)",
-         [(lib.name, lib.title, ", ".join(lib.modules)) for lib in libraries()]),
-        ("Deploy files (each found in the folder: how it's deployed)",
-         [(d.name, d.title, ", ".join(d.files)) for d in deploys()]),
+        (
+            "Platforms (one per entry point: where it runs)",
+            [(p.name, p.title, p.entry_kind or "") for p in platforms()],
+        ),
+        (
+            "Libraries (as many as the code imports: what it reaches)",
+            [(lib.name, lib.title, ", ".join(lib.modules)) for lib in libraries()],
+        ),
+        (
+            "Deploy files (each found in the folder: how it's deployed)",
+            [(d.name, d.title, ", ".join(d.files)) for d in deploys()],
+        ),
     ]
     for title, rows in kinds:
         print(title)
@@ -153,8 +200,13 @@ def _open(target: str) -> None:
             subprocess.run(["wslview", target], check=False)
             return
         if shutil.which("explorer.exe"):
-            where = target if is_url else subprocess.run(
-                ["wslpath", "-w", target], capture_output=True, text=True, check=False).stdout.strip()
+            where = (
+                target
+                if is_url
+                else subprocess.run(
+                    ["wslpath", "-w", target], capture_output=True, text=True, check=False
+                ).stdout.strip()
+            )
             subprocess.run(["explorer.exe", where], check=False)
             return
     webbrowser.open(target if is_url else Path(target).as_uri())
@@ -186,8 +238,11 @@ def _from_file(project: Project, file: Path, function: str) -> EntryPoint | None
         return None
     found = entries_in_file(project, rel, function)
     if not found:
-        print(f"{rel} has no functions to start from: code-node follows a function (a script's top-level code "
-              "isn't one yet).", file=sys.stderr)
+        print(
+            f"{rel} has no functions to start from: code-node follows a function (a script's top-level code "
+            "isn't one yet).",
+            file=sys.stderr,
+        )
         return None
     return _ask(found[:30])
 
@@ -230,8 +285,9 @@ def main(argv: list[str] | None = None) -> int:
     entry = _from_file(project, *in_file) if in_file else _pick_entry(project, args.entry)
     if entry is None:
         return 1
-    options = PageOptions(draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform,
-                          editor=args.editor)
+    options = PageOptions(
+        draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform, editor=args.editor
+    )
     if args.mermaid:
         print(make_mermaid(project.root, entry, options))
         return 0
@@ -244,11 +300,13 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, "utf-8")
     services = list(dict.fromkeys(call.service for call in cmap.library_calls))
-    print(f"{entry.name}: {len(cmap.functions)} functions, {len(cmap.aws)} AWS calls"
-          + (f", {len(cmap.library_calls)} through libraries ({', '.join(services)})" if services else "")
-          + (f" ({cmap.note})" if cmap.note else "")
-          + (f"\nDeployed as {cmap.function.name} in {cmap.function.source}" if cmap.function is not None else "")
-          + f"\nSaved {out}")
+    print(
+        f"{entry.name}: {len(cmap.functions)} functions, {len(cmap.aws)} AWS calls"
+        + (f", {len(cmap.library_calls)} through libraries ({', '.join(services)})" if services else "")
+        + (f" ({cmap.note})" if cmap.note else "")
+        + (f"\nDeployed as {cmap.function.name} in {cmap.function.source}" if cmap.function is not None else "")
+        + f"\nSaved {out}"
+    )
     if not args.no_open:
         _open(str(out))
     return 0

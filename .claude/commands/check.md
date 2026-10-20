@@ -4,7 +4,7 @@ description: Run everything CI runs - lint, tests, the docs build and the packag
 
 Run these from the repo root and report each result. Fix failures in the code (not the tests, unless the test is wrong).
 
-1. `uv run ruff check .` (`uv run` makes or updates `.venv` from `pyproject.toml` and `uv.lock` first)
+1. `uv run ruff check .` and `uv run ruff format --check .` (`uv run` makes or updates `.venv` from `pyproject.toml` and `uv.lock` first)
 2. `uv run pytest -q`
 3. `uv run code-node examples/orders-service --no-open -o /tmp/code-node-check.html`: it must say 8 functions and
    4 AWS calls. If those numbers changed, say why.
