@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from code_node.analysis.graph import code_graph
 from code_node.analysis.mapping import map_code
 from code_node.cli import main
@@ -523,8 +525,10 @@ def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) ->
     assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and "<script" not in page
 
 
-def test_line_links_open_the_editor(tmp_path: Path) -> None:
+def test_line_links_open_the_editor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from code_node.report.editor import editor_link, open_at
+
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
 
     link = editor_link("vscode", "/home/me/my code")
     assert open_at(link, "app/main.py", 12) == "vscode://file/home/me/my%20code/app/main.py:12"
