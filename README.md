@@ -29,6 +29,12 @@ models on disk. No module is imported and no request is made.
   line lit. Next goes into each function it calls, Skip call and Finish skip past them, and once you've clicked a
   step the arrow keys move through the rest.
 - **The graph as Mermaid**, to paste in a Markdown file, a wiki or a pull request.
+- **Plugins that mix.** Besides boto3, it follows Redis, SQL databases (sqlite3, psycopg, PyMySQL, asyncpg,
+  SQLAlchemy), MongoDB, and the OpenAI and Anthropic SDKs, a box for each service they reach. It reads a SAM
+  `template.yaml` or a `serverless.yml` in the folder, and checks the code against it: a variable that isn't set,
+  an AWS call the role doesn't allow, a client that waits longer than the function's timeout. SQL or a shell
+  command built from the input is flagged wherever it's run. [Plugins](https://utkarsh5026.github.io/code-node/plugins.html)
+  shows them on [`examples/cart-service`](examples/cart-service), and how to write your own.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/page-dark.webp">
@@ -51,12 +57,24 @@ code-node -e pkg.cli.main              # a dotted name
 code-node -e save                      # part of a name: it lists the matches
 ```
 
-It finds console scripts in every `pyproject.toml` (a monorepo's too), Lambda handlers, FastAPI / Flask apps (each route), Typer apps (each
-command), what runs under `if __name__ == "__main__":`, and functions named `main`. Test files are skipped.
+It finds console scripts in every `pyproject.toml` (a monorepo's too), the functions a SAM template or
+`serverless.yml` names, Lambda handlers, FastAPI / Flask apps (each route), Typer apps (each command), what runs under
+`if __name__ == "__main__":`, and functions named `main`. Test files are skipped.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-dark.webp">
   <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit, with Back, Next and Finish" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
+</picture>
+
+## Plugins that mix
+
+A platform says where the code runs; library plugins (Redis, SQL, MongoDB, OpenAI and Anthropic) and deploy files
+(SAM, Serverless) stack on top, and the checks see all of them at once. On
+[`examples/cart-service`](examples/cart-service):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-dark.svg">
+  <img alt="The cart example: template.yaml, AWS Lambda and its libraries read on_checkout(), and together find a role that doesn't allow two AWS calls, two unset variables, SQL injection, a client with no timeout, a connection on every call and a query run once per item" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-light.svg">
 </picture>
 
 ## Keep it open while you work
@@ -76,12 +94,13 @@ at the same scroll position. If the code can't be drawn, the page says why and c
 | `path` | The folder to read, or a file to start from (`main.py`, `main.py:function`) |
 | `-e`, `--entry` | Where to start: `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
 | `-l`, `--list` | List the entry points, then stop |
+| `--plugins` | List the platforms, libraries and deploy files it reads code with, then stop |
 | `--all` | Draw every function, however deep (by default the graph shows 24, 5 calls deep: the ones that lead to the most code) |
 | `--depth N`, `--functions N` | Your own limits |
-| `--serve`, `--port N` | Serve the page on localhost (8765, or the next free port) and redraw it whenever a `.py` file changes |
+| `--serve`, `--port N` | Serve the page on localhost (8765, or the next free port) and redraw it whenever a `.py` file (or a deploy file) changes |
 | `--mermaid` | Print the graph as Mermaid |
 | `-o`, `--out`, `--no-open` | Where to save the page (default `~/.cache/code-node/`), and whether to open it |
-| `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler sets it; anything else is plain Python |
+| `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler (or one a deploy file names) sets it; anything else is plain Python |
 | `--editor vscode\|cursor\|none` | The editor the page's line links open (default `vscode`; links into WSL open in Windows' editor) |
 
 ## From Python

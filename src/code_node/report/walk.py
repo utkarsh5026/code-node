@@ -45,10 +45,13 @@ _AWS_DOES = {  # an AWS call, by what it does, as a sentence: 'Reads from S3 (Ge
     "runs": "Starts something in {}", "signs": "Makes a signed link for {}",
 }
 
-_SAID_FIRST = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "http", "command", "file", "sleep",
-               "client")  # the tags that say what a line is for, before the calls and names in it
+_LIB_DOES = {"reads": "Reads from {}", "writes": "Writes to {}", "sends": "Sends a message with {}", "runs": "Calls {}"}
 
-_DOTS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "http")  # what's marked in the list
+_SAID_FIRST = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "lib-reads", "lib-writes", "lib-sends",
+               "lib-runs", "http", "command", "file", "sleep", "client")  # the tags that say what a line is for, before the calls and names in it
+
+_DOTS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "lib-reads", "lib-writes", "lib-sends",
+         "lib-runs", "http")  # what's marked in the list
 
 _HEADERS = [  # a block's first line -> what it does: (pattern, sentence with {} for what it matched)
     (r"(?:async )?for (.+?) in (.+):", "Goes through each {} in {}"),
@@ -201,6 +204,9 @@ def _note_said(kind: str, text: str) -> str:
     """
     One of a line's tags as the start of a sentence (HTML): 'Reads from S3 (GetObject)', 'Sends an HTTP POST request'.
     """
+    if kind.startswith("lib-"):
+        service, _, operation = text.partition(": ")
+        return _esc(_LIB_DOES.get(kind[4:], "Calls {}").format(service)) + (f" ({_esc(operation)})" if operation else "")
     if kind.startswith("aws-"):
         service, _, operation = text.rpartition(" ")
         if " waiter" in service:

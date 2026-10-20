@@ -9,7 +9,7 @@ from typing import Any
 from ..kit.blocks import _Note, _Text
 from ..kit.fmt import _plural
 
-from ..analysis.findings import _short_name
+from ..analysis.findings import _listed, _short_name
 from ..analysis.graph import CodeGraph, code_graph
 from ..analysis.model import CodeMap
 from .graph import _Graph
@@ -21,6 +21,13 @@ def _closing_note(cmap: CodeMap, graph: CodeGraph) -> str:
     said = ["It reads the code with Python's ast module and runs none of it. It follows calls into the folder's own "
             "functions and the boto3 clients it makes; calls through a value handed in from elsewhere, or made inside "
             "a library, aren't followed, so there may be more than it lists."]
+    fn = cmap.function
+    if fn is not None and getattr(fn, "source", ""):
+        said.append(f"Where it runs comes from {fn.name} in {fn.source}: its environment variables, timeout and "
+                    "what its role allows are checked against the code.")
+    services = list(dict.fromkeys(call.service for call in cmap.library_calls))
+    if services:
+        said.append(f"Calls to {_listed(services, 4)} are read by code-node's library plugins.")
     if graph.hidden:
         said.append(f"The graph leaves out {_plural(graph.hidden, 'function')} to stay readable: run with --all to "
                     "draw every one.")

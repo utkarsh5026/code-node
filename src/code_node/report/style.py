@@ -70,10 +70,10 @@ _EXTRA_CSS = """\
 .cnd .flow .ox{margin-left:38px;padding-left:10px;border-left:1px solid rgba(127,127,127,.28)}
 .cnd :is(.flow,.walk) .nt{display:inline-block;font-size:10.5px;font-weight:600;line-height:1.6;padding:0 7px;border-radius:9px;white-space:nowrap;background:rgba(127,127,127,.14)}
 .cnd :is(.flow,.walk) .nt i{font-style:normal;font-weight:500;opacity:.7;margin-left:4px}
-.cnd :is(.flow,.walk) .n-aws-reads{background:rgba(59,130,246,.16);color:#2f6fdb}
-.cnd :is(.flow,.walk) .n-aws-writes{background:rgba(234,88,12,.16);color:#d0570c}
-.cnd :is(.flow,.walk) .n-aws-sends{background:rgba(219,39,119,.14);color:#c42a73}
-.cnd :is(.flow,.walk) .n-aws-runs{background:rgba(147,51,234,.15);color:#8b3fd9}
+.cnd :is(.flow,.walk) :is(.n-aws-reads,.n-lib-reads){background:rgba(59,130,246,.16);color:#2f6fdb}
+.cnd :is(.flow,.walk) :is(.n-aws-writes,.n-lib-writes){background:rgba(234,88,12,.16);color:#d0570c}
+.cnd :is(.flow,.walk) :is(.n-aws-sends,.n-lib-sends){background:rgba(219,39,119,.14);color:#c42a73}
+.cnd :is(.flow,.walk) :is(.n-aws-runs,.n-lib-runs){background:rgba(147,51,234,.15);color:#8b3fd9}
 .cnd :is(.flow,.walk) .n-aws-signs{background:rgba(100,116,139,.18)}
 .cnd :is(.flow,.walk) .n-env{background:rgba(13,148,136,.16);color:#0f8a7e}
 .cnd :is(.flow,.walk) .n-event{background:rgba(22,163,74,.15);color:#178a45}
@@ -132,10 +132,13 @@ _EXTRA_CSS = """\
 .cnd .cg .k-env{--c:#0d9488;--t:rgba(13,148,136,.13)}
 .cnd .cg .k-aws{--c:#3b82f6;--t:rgba(59,130,246,.12)}
 .cnd .cg .k-http{--c:#db2777;--t:rgba(219,39,119,.11)}
+.cnd .cg .k-service{--c:#0891b2;--t:rgba(8,145,178,.12)}
+.cnd .cg .bdg.lg{fill:#fff;stroke:rgba(127,127,127,.35);stroke-opacity:1}
+.cnd .cg .logo{color:#1b1d22}
 .cnd .cg .k-start{--c:#64748b;--t:rgba(100,116,139,.13)}
 .cnd .cg .k-function{--c:currentColor;--t:rgba(127,127,127,.12)}
 .cnd .cg .k-function .ico{stroke-opacity:.72}
-.cnd .cg .k-aws .bu,.cnd .cg .k-http .bu{fill:rgba(127,127,127,.55)}
+.cnd .cg :is(.k-aws,.k-service,.k-http) .bu{fill:rgba(127,127,127,.55)}
 .cnd .cg .k-start .fg{stroke-dasharray:5 4;stroke:rgba(127,127,127,.55);fill:rgba(127,127,127,.04)}
 .cnd .cg .k-start .bg{filter:none}
 .cnd .cg .k-handler .bg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.1)) drop-shadow(0 10px 24px rgba(15,23,42,.12))}
@@ -256,8 +259,8 @@ _EXTRA_CSS = """\
 .cnd .walk :is(.k-def,.k-module) .wtx b{font:650 12.5px var(--mono)}
 .cnd .walk :is(.k-def,.k-module) .wof{margin-left:8px;font-size:11.5px;opacity:.55}
 .cnd .walk .wdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--c,rgba(127,127,127,.6))}
-.cnd .walk .d-aws-reads{--c:#3b82f6}.cnd .walk .d-aws-writes{--c:#ea580c}.cnd .walk :is(.d-aws-sends,.d-http){--c:#db2777}
-.cnd .walk .d-aws-runs{--c:#9333ea}.cnd .walk .d-aws-signs{--c:#64748b}
+.cnd .walk :is(.d-aws-reads,.d-lib-reads){--c:#3b82f6}.cnd .walk :is(.d-aws-writes,.d-lib-writes){--c:#ea580c}
+.cnd .walk :is(.d-aws-sends,.d-lib-sends,.d-http){--c:#db2777}.cnd .walk :is(.d-aws-runs,.d-lib-runs){--c:#9333ea}.cnd .walk .d-aws-signs{--c:#64748b}
 .cnd .walk .wc{display:none;position:absolute;left:var(--lw);right:0;top:0;height:var(--ch);box-sizing:border-box;overflow:auto;padding:14px 22px 12px;white-space:normal;cursor:auto;border-left:1px solid rgba(127,127,127,.2);border-bottom:1px solid rgba(127,127,127,.18);background:var(--bg);animation:cnd-in .18s ease}
 .cnd .walk .wr:checked+.wil+.wc{display:block}
 .cnd .walk .wnav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}

@@ -15,6 +15,7 @@ from ..analysis.aws_model import _event_kind, _service_name
 from ..analysis.findings import _listed, _where
 from ..analysis.mapping import _python_version
 from ..analysis.model import CodeMap, CodeSpot, EnvRead, EventField
+from ..deploys import allowed, get_deploy
 from ..kit.fmt import _plural
 from . import Platform
 
@@ -68,6 +69,13 @@ class LambdaPlatform(Platform):
         if fn is None or fn.env_error is not None:
             return set()
         return {e.name for e in cmap.env if e.required and e.name not in fn.env_names and e.name not in _LAMBDA_ENV}
+
+    def denied(self, cmap: CodeMap) -> dict[str, str]:
+        fn = cmap.function
+        if fn is None or getattr(fn, "permissions", None) is None:
+            return {}
+        return {c.permission: f"{fn.name}'s role in {fn.source} doesn't allow {c.permission}" for c in cmap.aws
+                if c.permission and not c.guessed and not allowed(c.permission, fn.permissions)}
 
     def missing_entry(self, cmap: CodeMap, name: str, others: str) -> str:
         return (f"No function {name}() in {cmap.handler_file}: every call fails with Runtime.HandlerNotFound before "
@@ -138,7 +146,7 @@ class LambdaPlatform(Platform):
             found.append(("info", (
                 f"{_listed(tops)} {'isn' if len(tops) == 1 else 'aren'}'t in the package, so "
                 f"{'it has' if len(tops) == 1 else 'they have'} to come from its layers "
-                f"({_listed([layer.name for layer in fn.layers], 2)}): if no layer has "
+                f"({_listed([layer.rsplit(':', 2)[0].rsplit(':', 1)[-1] for layer in fn.layers], 2)}): if no layer has "
                 f"{'it' if len(tops) == 1 else 'them'}, calls fail with Runtime.ImportModuleError."
             )))
         for spot in self._outside_tmp(cmap):
@@ -155,6 +163,26 @@ class LambdaPlatform(Platform):
                 + (" inside a loop" if spot.loop else "")
                 + ": making one takes time, more on a cold start. Make it once at module level (above the handler), "
                 "so warm calls reuse it."
+            )))
+        for spot in [s for s in cmap.spots if s.kind == "connect" and not s.ok and not s.startup]:
+            found.append(("info", (
+                f"It opens a new {spot.detail} connection on every call, at "
+                f"{_where(spot.file, spot.line, spot.function)}" + (" inside a loop" if spot.loop else "")
+                + ": that's a round trip or more before any work, and many runs at once can use up the server's "
+                "connections. Make it once at module level (above the handler), so warm calls reuse it."
+            )))
+        denied = self.denied(cmap)
+        if denied and fn is not None:
+            calls = [c for c in cmap.aws if c.permission in denied]
+            missing = list(dict.fromkeys(c.permission for c in calls))
+            deploy = get_deploy(fn.reader)
+            fix = deploy.grant(fn, missing) if deploy is not None else f"allow {', '.join(missing)} in its role"
+            given = f" (it has {_listed(fn.policies, 3)})" if fn.policies else ""
+            found.append(("warn", (
+                f"{fn.name}'s role in {fn.source}{given} doesn't allow {_listed(missing)}, which "
+                + _listed([f"{c.label} at {_where(c.file, c.line)}" for c in calls], 2)
+                + (" needs: that call fails" if len(calls) == 1 else " need: those calls fail")
+                + f" with AccessDenied. {fix[0].upper()}{fix[1:]}."
             )))
         for spot in [s for s in cmap.spots if s.kind == "sleep" and not s.startup]:
             found.append(("info", (

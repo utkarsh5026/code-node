@@ -5,7 +5,41 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ## [Unreleased]
 
+### Added
+
+- Plugins that mix. Besides a platform (one per entry point), two new kinds of plugin stack: libraries, each turned
+  on when the code imports it, and deploy files, each read when it's in the folder. `code-node --plugins` lists
+  them, and other packages add their own through the `code_node.libraries` and `code_node.deploys` entry point
+  groups.
+- Library plugins for Redis, SQL (sqlite3, psycopg2, psycopg, PyMySQL, mysql-connector, asyncpg, SQLAlchemy),
+  MongoDB (PyMongo, Motor) and the OpenAI and Anthropic SDKs. The graph draws a box for each service they reach
+  (Redis, PostgreSQL, OpenAI) with what each call does (`SELECT products`, `SETEX receipt:{customer}`,
+  `chat.completions.create gpt-4o-mini`), and Step by step says it ("Reads from PostgreSQL (SELECT products)").
+- Deploy plugins for SAM / CloudFormation templates and `serverless.yml`. A function they name is an entry point,
+  whatever it's called, and the Lambda checks run against what the file says: environment variables that aren't
+  set, the Python it runs on, layers, its timeout, and AWS calls its role doesn't allow (marked "not allowed" in the
+  graph, with the SAM policy template that would allow them).
+- It follows text built from the input: SQL put together from the event is flagged "SQL injection" where it runs,
+  and so is a shell command (`shell=True`, `os.system`). A name set to such text says so in Step by step.
+- Findings across plugins: a client that has no timeout, worded for where it runs ("Lambda stops it at its 15 s
+  timeout"); a connection opened on every call of a Lambda handler; a call in a loop that a batch call would do
+  (`executemany()`, `mget()`, `insert_many()`, the Batch API); Redis `KEYS`.
+- Real logos in the graph. AWS services (S3, DynamoDB, SNS, SQS, Lambda and about sixty more) and the services
+  libraries reach (Redis, PostgreSQL, MySQL, SQLite, MongoDB, OpenAI, Anthropic, Kafka...) show their own logo in
+  their box, in light and dark mode, where they had a line drawing; anything without one keeps it. The logos are
+  gilbarbara/logos (CC0), kept as .svg files in the package (`src/code_node/report/logos/`), and a page embeds
+  the ones it uses, so it still works offline. A library plugin can name one as
+  its icon (`icon = "kafka-icon"`).
+- Two new figures in the docs and the README, drawn with those logos: how the plugins mix on the cart example
+  (each finding marked with the plugins that found it together), and every service, platform and deploy file
+  code-node knows. Logos sit on a white tile in dark mode too, as they're drawn for one.
+- `examples/cart-service`, a Lambda function in a SAM template that uses PostgreSQL, Redis, OpenAI and boto3, and a
+  Plugins page in the docs drawn from it.
+
 ### Changed
+
+- code-node now depends on PyYAML, to read deploy files.
+- `--serve` also redraws when a deploy file (`template.yaml`, `serverless.yml`) changes.
 
 - Step by step is easier to read. Each step in the list says what it does in plain words ("Takes `bucket` from the
   event", "Reads from S3 (GetObject)", "Goes into `read_orders()`") instead of a cut-off line of code, with step

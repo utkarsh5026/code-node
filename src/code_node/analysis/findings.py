@@ -17,8 +17,9 @@ from .terms import LATEST_RUNTIMES
 from .terms import _BATCHES, _REMOVED_MODULES
 from .syntax import _a, _const, _parse
 from .aws_model import _service_name
-from .model import AwsCall, CodeMap, CodeSpot
+from .model import AwsCall, CodeMap, CodeSpot, LibraryCall
 from .mapping import _python_version
+from ..libraries import get_library
 from ..platforms import get_platform
 
 
@@ -166,7 +167,55 @@ def code_map_findings(cmap: CodeMap) -> list[tuple[str, str]]:
             f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}): a request "
             f"for each. {alternative} sends up to {size:,} at a time, so a run takes fewer round trips."
         )))
+    found += _library_findings(cmap)
+    for spot in [s for s in spots["command"] if not s.ok]:
+        found.append(("warn", (
+            f"It runs a shell command with {spot.detail} in it, at {_where(spot.file, spot.line, spot.function)}: "
+            f"whoever sends {platform.input_name} can make it run commands of their own (shell injection). Pass the "
+            "command as a list of arguments, without shell=True, and check the value before it goes in."
+        )))
     return found + platform.findings(cmap)
+
+
+def _library_findings(cmap: CodeMap) -> list[tuple[str, str]]:
+    """
+    What's worth fixing in the calls through libraries plugins know (Redis, SQL, MongoDB, OpenAI...): the calls a
+    plugin flagged, calls made once per item that a batch call would do together, and clients that wait too long
+    when their service doesn't answer. Then each plugin's own.
+    """
+    platform = get_platform(cmap.platform)
+    found: list[tuple[str, str]] = []
+    for call in list({(c.service, c.line, c.why): c for c in cmap.library_calls if c.why}.values()):
+        where = _where(call.file, call.line, "" if call.startup else call.function)
+        found.append(("warn", f"{call.label} at {where} {call.why}"))
+    looped = [c for c in cmap.library_calls if c.loop and c.batch]
+    for call in list({(c.service, c.operation, c.target): c for c in looped}.values()):
+        found.append(("info", (
+            f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}), a round "
+            f"trip for each, where {call.batch} would need fewer."
+        )))
+    for spot in [s for s in cmap.spots if s.kind == "connect"]:
+        if spot.waits:
+            found.append(("info" if not platform.name else "warn", (
+                f"The {spot.detail} client made at {_where(spot.file, spot.line, '' if spot.startup else spot.function)}"
+                f" has no timeout, so a call through it waits {spot.waits}: if {spot.detail} doesn't answer, "
+                f"{platform.hang(cmap)} Give it one where it's made"
+                + (f": {spot.fix}." if spot.fix else ".")
+            )))
+        if spot.loop and not spot.ok:
+            found.append(("info", (
+                f"It makes a new {spot.detail} client for each item in {spot.loop.rstrip(':')}, at "
+                f"{_where(spot.file, spot.line, spot.function)}: each one opens its own connection. Make it once, "
+                "before the loop."
+            )))
+    by_library: dict[str, list[LibraryCall]] = defaultdict(list)
+    for call in cmap.library_calls:
+        by_library[call.library].append(call)
+    for name, calls in by_library.items():
+        library = get_library(name)
+        if library is not None:
+            found += library.findings(cmap, calls)
+    return found
 
 
 def _snake(operation: str) -> str:
@@ -212,6 +261,7 @@ def _code_summary(cmap: CodeMap) -> list[str]:
         out.append(f"It reads {_listed(leaves, 4)} from {platform.input_name}"
                    + (f", which looks like {kind}" if kind else "") + ".")
     phrase = _aws_phrase([c for c in cmap.aws if not c.startup])
+    phrase += _library_phrase([c for c in cmap.library_calls if not c.startup])
     http = [s for s in cmap.spots if s.kind == "http" and not s.startup]
     more = list(phrase)
     if http:
@@ -254,6 +304,24 @@ def _returned(code: str) -> str:
         keys = [str(_const(k)) for k in node.keys]
         return f"a dict with {_listed(keys, 4)}" if len(code) > 50 else code
     return _clip(code, 60)
+
+
+def _library_phrase(calls: list[LibraryCall]) -> list[str]:
+    """
+    ['reads from Redis (GET) and PostgreSQL (SELECT orders)', 'runs OpenAI (chat.completions.create gpt-4o)'].
+    """
+    grouped: dict[str, dict[str, list[LibraryCall]]] = {}
+    for call in calls:
+        grouped.setdefault(call.access, {}).setdefault(call.service, []).append(call)
+    verbs = {"reads": "reads from", "writes": "writes to", "sends": "sends to", "runs": "calls"}
+    parts = []
+    for access, services in grouped.items():
+        each = []
+        for service, group in services.items():
+            rows = list(dict.fromkeys(c.row for c in group))
+            each.append(f"{service} ({', '.join(rows[:3])}{', …' if len(rows) > 3 else ''})")
+        parts.append(f"{verbs.get(access, 'calls')} {_listed(each, 4)}")
+    return parts
 
 
 def _aws_phrase(calls: list[AwsCall]) -> list[str]:

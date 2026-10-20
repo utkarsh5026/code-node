@@ -94,6 +94,7 @@ The links hold the folder's full path, so pass `--editor none` for a page you'll
 | `path` | A folder, or a file to start from |
 | `-e`, `--entry` | Where to start |
 | `-l`, `--list` | List the starts |
+| `--plugins` | List the plugins |
 | `--serve`, `--port` | Live page (8765, or the next free port) |
 | `--all` | Draw every function |
 | `--depth`, `--functions` | Graph limits (5, 24) |

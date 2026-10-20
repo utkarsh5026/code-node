@@ -1,0 +1,111 @@
+cart.app.on_checkout · cart-service · 4 files, 78 lines, nothing run
+
+-- How it fits together: what comes in, who calls whom, and what it reaches --
+  Its input: body (JSON).customer, body (JSON).items[].sku, body (JSON).items[].quantity, body (JSON).items[].name
+      → on_checkout()
+  Environment: REDIS_HOST, RECEIPTS_TABLE (not set), DATABASE_URL, TOPIC_ARN (not set) (!)
+      → At import reads REDIS_HOST, RECEIPTS_TABLE (!)
+      → connect() reads DATABASE_URL
+      → on_checkout() reads TOPIC_ARN (!)
+  At import  once, when it loads
+      makes the DynamoDB client
+      makes the SNS client
+      makes the OpenAI client
+      makes the Redis client
+  on_checkout()  cart/app.py line 20 (!)
+      calls connect() (line 23)
+      calls price() (line 26)
+      calls clear_cart() (line 27)
+      calls summary() (line 28)
+      writes to DynamoDB: PutItem (!)
+      sends to SNS: Publish (!)
+      writes to Redis: SETEX receipt:{customer}
+  connect()  cart/db.py line 12
+      makes the PostgreSQL client
+  price()  cart/db.py line 17
+      reads from PostgreSQL: SELECT products, in a loop
+  clear_cart()  cart/db.py line 24 (!)
+      writes to PostgreSQL: DELETE carts (!)
+  summary()  cart/assistant.py line 10
+      calls OpenAI: chat.completions.create gpt-4o-mini
+
+-- The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request --
+flowchart LR
+  event(["Its input<br/><small>what it's called with</small>"])
+  env[/"Environment<br/><small>variables it reads</small>"/]
+  start[["At import<br/><small>once, when it loads</small>"]]
+  f0["on_checkout()<br/><small>cart/app.py line 20</small>"]
+  f1["connect()<br/><small>cart/db.py line 12</small>"]
+  f2["price()<br/><small>cart/db.py line 17</small>"]
+  f3["clear_cart()<br/><small>cart/db.py line 24</small>"]
+  f4["summary()<br/><small>cart/assistant.py line 10</small>"]
+  aws_dynamodb[("DynamoDB<br/><small>writes</small>")]
+  aws_sns[("SNS<br/><small>sends</small>")]
+  lib_sql_postgresql[("PostgreSQL<br/><small>reads · writes</small>")]
+  lib_llm_openai[("OpenAI<br/><small>runs</small>")]
+  lib_redis_redis[("Redis<br/><small>writes</small>")]
+  event ==>|"its input"| f0
+  f0 --> f1
+  f0 --> f2
+  f0 --> f3
+  f0 --> f4
+  env -.->|"REDIS_HOST, RECEIPTS_TABLE"| start
+  env -.->|"DATABASE_URL"| f1
+  env -.->|"TOPIC_ARN"| f0
+  f0 -->|"PutItem"| aws_dynamodb
+  f0 -->|"Publish"| aws_sns
+  f2 -->|"SELECT products"| lib_sql_postgresql
+  f3 -->|"DELETE carts"| lib_sql_postgresql
+  f4 -->|"chat.completions.create gpt-4o-mini"| lib_llm_openai
+  f0 -->|"SETEX receipt:{customer}"| lib_redis_redis
+  start -->|"makes its DynamoDB client"| aws_dynamodb
+  start -->|"makes its SNS client"| aws_sns
+  start -->|"makes its OpenAI client"| lib_llm_openai
+  start -->|"makes its Redis client"| lib_redis_redis
+  f1 -->|"makes its PostgreSQL client"| lib_sql_postgresql
+  classDef warn stroke:#f59e0b,stroke-width:2px
+  class env,f0,f3,aws_dynamodb,aws_sns,lib_sql_postgresql,lib_llm_openai warn
+
+-- When Python imports it, once, before the first call --
+   13  from .assistant import summary
+           ↳ cart/assistant.py, run when it's imported
+    7          client = OpenAI()   # makes an OpenAI client · no timeout: a call waits up to 10 minutes a try (the SDK's default timeout), and it tries 3 times
+   15  cache = redis.Redis(host=os.environ['REDIS_HOST'], socket_timeout=2)   # env REDIS_HOST · makes a Redis client
+   16  receipts = boto3.resource('dynamodb').Table(os.environ['RECEIPTS_TABLE'])   # makes a DynamoDB resource · env RECEIPTS_TABLE · receipts: a DynamoDB Table
+   17  sns = boto3.client('sns')   # makes an SNS client
+
+-- What each call does, step by step from on_checkout() --
+   20  def on_checkout(event, context):   # cart/app.py
+   21    cart = json.loads(event['body'])   # event body · cart: event body (JSON)
+   22    customer = cart['customer']   # event body (JSON).customer
+   23    conn = db.connect()   # conn: a PostgreSQL connection
+   12        ↳ def connect():   # cart/db.py
+   14            return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=5)   # env DATABASE_URL · makes a PostgreSQL connection
+   25    for item in cart['items']:   # event body (JSON).items · item: each event body (JSON).items[]
+   26      total += db.price(conn, item['sku']) * item['quantity']   # event body (JSON).items[].sku · event body (JSON).items[].quantity
+   17          ↳ def price(conn, sku):   # cart/db.py
+   19              with conn.cursor() as cur:   # cur: a PostgreSQL cursor
+   20                cur.execute(PRICE, (sku,))   # PostgreSQL SELECT products (reads)
+   21                return cur.fetchone()[0]
+   27    db.clear_cart(conn, customer)
+   24        ↳ def clear_cart(conn, customer):   # cart/db.py
+   26            with conn.cursor() as cur:   # cur: a PostgreSQL cursor
+   27              cur.execute(f"DELETE FROM carts WHERE customer = '{customer}'")   # PostgreSQL DELETE carts (writes) · SQL injection
+   28    receipt = {'customer': customer, 'total': total, 'note': summary(cart['items'], total)}   # event body (JSON).items
+   10        ↳ def summary(items, total):   # cart/assistant.py
+   12            names = ', '.join((item['name'] for item in items))   # event body (JSON).items[].name
+   13            answer = client.chat.completions.create(model='gpt-4o-mini', messages=[{'role': 'user', 'content': f'One friendly sentence about an order o…   # OpenAI chat.completions.create gpt-4o-mini (runs)
+   17            return answer.choices[0].message.content
+   29    receipts.put_item(Item=receipt)   # DynamoDB PutItem (writes)
+   30    cache.setex(f'receipt:{customer}', 3600, json.dumps(receipt))   # Redis SETEX receipt:{customer} (writes)
+   31    sns.publish(TopicArn=os.environ['TOPIC_ARN'], Message=json.dumps(receipt))   # env TOPIC_ARN · SNS Publish (sends) · TopicArn ← env TOPIC_ARN
+   32    return {'statusCode': 200, 'body': json.dumps(receipt)}
+It reads the code with Python's ast module and runs none of it. It follows calls into the folder's own functions and the boto3 clients it makes; calls through a value handed in from elsewhere, or made inside a library, aren't followed, so there may be more than it lists. Where it runs comes from CheckoutFunction in template.yaml: its environment variables, timeout and what its role allows are checked against the code. Calls to PostgreSQL, OpenAI and Redis are read by code-node's library plugins.
+
+-- Findings --
+warn: RECEIPTS_TABLE and TOPIC_ARN aren't set on CheckoutFunction, and its code reads them with os.environ[...] (cart/app.py line 16 and cart/app.py line 31): that line fails with KeyError: 'RECEIPTS_TABLE', when Lambda loads the code, so every call fails. Add them to its environment variables (the console's Configuration tab, Environment variables).
+warn: PostgreSQL DELETE at cart/db.py line 27 in clear_cart() puts event body (JSON).customer into the SQL text itself, so whoever sends it can change the statement (SQL injection). Pass it as a parameter instead: execute("... WHERE id = %s", (value,)).
+info: PostgreSQL SELECT runs once per item in for item in cart['items'] (cart/db.py line 20), a round trip for each, where one query for all of them (WHERE ... IN (...), or a join) would need fewer.
+warn: The OpenAI client made at cart/assistant.py line 7 has no timeout, so a call through it waits up to 10 minutes a try (the SDK's default timeout), and it tries 3 times: if OpenAI doesn't answer, the run waits until Lambda stops it at its 15 s timeout, and you pay for the wait. Give it one where it's made: OpenAI(timeout=20, max_retries=1).
+info: It opens a new PostgreSQL connection on every call, at cart/db.py line 14 in connect(): that's a round trip or more before any work, and many runs at once can use up the server's connections. Make it once at module level (above the handler), so warm calls reuse it.
+warn: CheckoutFunction's role in template.yaml (it has DynamoDBReadPolicy) doesn't allow dynamodb:PutItem and sns:Publish, which DynamoDB PutItem at cart/app.py line 29 and SNS Publish at cart/app.py line 31 need: those calls fail with AccessDenied. Add DynamoDBWritePolicy and SNSPublishMessagePolicy to CheckoutFunction's Policies in template.yaml.

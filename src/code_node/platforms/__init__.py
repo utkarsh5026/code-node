@@ -110,6 +110,13 @@ class Platform:
         """
         return []
 
+    def denied(self, cmap: CodeMap) -> dict[str, str]:
+        """
+        The permissions its AWS calls need that where it runs is known not to allow, each with why, in a few words:
+        {'sns:Publish': 'not in its Policies in template.yaml'}. The graph marks those calls.
+        """
+        return {}
+
     def marks(self, cmap: CodeMap) -> dict[str, list[str]]:
         """
         Why a function's box in the graph is amber, for this platform's findings: {'etl.save': ['writes data.csv

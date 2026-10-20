@@ -76,6 +76,70 @@ class AwsCall:
 
 
 @dataclass
+class LibraryCall:
+    """
+    A call through a library a library plugin knows (code_node.libraries): a Redis GET, a SQL INSERT, an OpenAI
+    chat completion. Drawn as a box for its service, like an AWS service's.
+    """
+
+    library: str  # the plugin's name: 'redis', 'sql'
+    service: str  # what it reaches, as people name it: 'Redis', 'PostgreSQL', 'OpenAI'
+    operation: str  # 'GET', 'INSERT', 'chat.completions.create'
+    access: str  # 'reads', 'writes', 'sends' or 'runs', as for AWS calls
+    file: str
+    line: int
+    function: str  # where: 'cart.app.handler', or the module for code that runs when it's imported
+    code: str  # the call: "r.get(f'cart:{user}')"
+    target: str = ""  # what on: a key, a table, a collection, a model: 'cart:{user}', 'orders', 'gpt-4o'
+    icon: str = ""  # its box's icon: 'database', 'queue', 'key', 'send', 'spark', 'bucket', 'cloud'
+    loop: str = ""  # the loop it's in: 'for item in items:'
+    startup: bool = False  # made when the code is imported
+    flag: str = ""  # a warning about this call, in a few words: 'SQL built from the event'
+    why: str = ""  # ...and as a sentence, for the findings
+    batch: str = ""  # in a loop: the call that does many at once ('executemany()', 'a pipeline()')
+
+    @property
+    def label(self) -> str:
+        """
+        'Redis GET', 'PostgreSQL INSERT'.
+        """
+        return f"{self.service} {self.operation}"
+
+    @property
+    def row(self) -> str:
+        """
+        How its box lists it: 'GET cart:{user}', 'INSERT orders'.
+        """
+        return f"{self.operation} {self.target}".strip()
+
+
+@dataclass
+class Deployment:
+    """
+    What a deploy file says about where an entry point runs, read by a deploy plugin (code_node.deploys): a Lambda
+    function in a SAM template or serverless.yml, with its settings and what its role may call. Its platform's
+    checks run against it: variables that aren't set, AWS calls its role doesn't allow, the Python it runs on.
+    """
+
+    name: str  # the function's name in the file: 'CartFunction', 'checkout'
+    source: str  # the file that says so: 'template.yaml'
+    reader: str  # the deploy plugin that read it: 'sam'
+    file: str  # the Python file of its entry point: 'cart/app.py'
+    function: str  # the entry point's function in that file: 'on_checkout'
+    platform: str = "lambda"  # where it runs, a code_node.platforms name
+    line: int = 0  # where the file says so
+    runtime: str | None = None  # 'python3.12'
+    timeout: int | None = None  # seconds
+    memory: int | None = None  # MB
+    env_names: set[str] = field(default_factory=set)  # the environment variables it's given (names only)
+    env_error: str | None = None  # why its variables can't be known, when they can't (env_names is then partial)
+    layers: list[str] = field(default_factory=list)  # 'arn:aws:lambda:...:layer:pandas:3', 'DepsLayer'
+    permissions: set[str] | None = None  # the IAM actions its role allows ('s3:GetObject', 'dynamodb:*'); None when
+    # the file can't tell (a role made elsewhere, a policy it doesn't know)
+    policies: list[str] = field(default_factory=list)  # what gives them, as the file says: 'DynamoDBReadPolicy'
+
+
+@dataclass
 class EnvRead:
     """
     An environment variable the code reads. Its value is never read: only its name.
@@ -152,15 +216,19 @@ class CodeSpot:
     A line how_it_works()'s findings are about.
     """
 
-    kind: str  # 'http', 'sleep', 'write', 'secret', 'swallow', 'client', 'command', 'syntax'
+    kind: str  # 'http', 'sleep', 'write', 'secret', 'swallow', 'client', 'connect', 'command', 'syntax'
     file: str
     line: int
     function: str
     code: str
-    detail: str = ""  # http: the method; write: the path; secret: its name (never the value); client: the service
-    ok: bool = True  # http: has a timeout; client: made once and reused
+    detail: str = ""  # http: the method; write: the path; secret: its name (never the value); client: the service;
+    # connect: the service a library's client is for ('Redis'); command: what goes into it from the input
+    ok: bool = True  # http: has a timeout; client, connect: made once and reused; command: nothing from the input
     loop: str = ""
     startup: bool = False  # when the code is imported
+    waits: str = ""  # connect: how long a call through it waits when the service doesn't answer, when that's too long
+    # ('as long as Redis takes': no timeout); '' when it's given one
+    fix: str = ""  # connect: how to give it a timeout: 'Redis(..., socket_timeout=5)'
 
 
 @dataclass
@@ -171,7 +239,8 @@ class CodeMap:
     outside: AWS calls, environment variables, the fields of its input, libraries and HTTP.
     """
 
-    function: Any  # what the findings check against (a Lambda function in aws-analyzer); None here
+    function: Deployment | Any  # what the findings check against: where a deploy file says it runs (a Lambda function
+    # in template.yaml), else None
     handler: str | None  # the entry point as given: 'etl.handler'
     platform: str = ""  # the platform it runs on, by name ('lambda'): its checks and wording. '' is plain Python
     handler_file: str | None = None  # 'etl.py'
@@ -183,6 +252,7 @@ class CodeMap:
     steps: list[CodeStep] = field(default_factory=list)  # one 'def' step: the entry point's, with every step under it
     functions: list[CodeFunction] = field(default_factory=list)  # its own functions the entry point reaches, in order
     aws: list[AwsCall] = field(default_factory=list)
+    library_calls: list[LibraryCall] = field(default_factory=list)  # calls through the libraries plugins know
     env: list[EnvRead] = field(default_factory=list)
     event: list[EventField] = field(default_factory=list)
     imports: list[ImportUse] = field(default_factory=list)
@@ -198,6 +268,7 @@ class CodeMap:
     note: str | None = None  # why there's nothing to map: not Python, a container image, no entry point file
     handlers: list[str] = field(default_factory=list)  # when the entry point isn't in its file: the functions there
     # that could be (that take what its platform passes)
+    plugins: list[str] = field(default_factory=list)  # the library plugins whose calls it found, by title: 'Redis'
 
     @property
     def services(self) -> list[str]:

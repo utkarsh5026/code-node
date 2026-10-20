@@ -24,7 +24,8 @@ from .syntax import (
     _swallows, _target, _unparse,
 )
 from .aws_model import _access, _aws_model, _event_label, _iam_action, _service_name
-from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, EnvRead, EventField, ImportUse
+from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, EnvRead, EventField, ImportUse, LibraryCall
+from ..libraries import Call, Handle, Library, Use, _Argument, get_library, library_for
 from ..platforms import get_platform
 
 
@@ -33,6 +34,24 @@ _CLI_COMMANDS = ("command", "callback")  # @app.command(): a Typer or click comm
 _PROPERTIES = ("property", "cached_property")  # a method run when its attribute is read: obj.size
 
 _ACCESSORS = ("setter", "deleter", "getter")  # @size.setter: another method by the property's name, not its getter
+
+
+def _is_text(node: Any) -> bool:
+    """
+    Whether an expression is text written in the code or put together there: a literal, an f-string, or + / % on
+    one.
+    """
+    if isinstance(_const(node), str) or isinstance(node, ast.JoinedStr):
+        return True
+    return isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)) and (
+        _is_text(node.left) or _is_text(node.right))
+
+
+def _parse_text(code: str) -> Any:
+    try:
+        return ast.parse(code, mode="eval").body
+    except SyntaxError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -45,11 +64,14 @@ class _Sym:
     # instance of one of its classes), 'bound' (one's method), 'client', 'resource', 'res' (a resource object: a
     # Table), 'coll' (a resource collection), 'paginator', 'batch', 'method' (one of theirs), 'meta', 'event',
     # 'evmethod', 'context', 'env' (os.environ), 'envget', 'envval', 'logger', 'log', 'http', 'httpcall', 'builtin',
-    # 'enumerate', 'session' (a boto3 Session), 'super' (super() in a method of class `name`, its self or cls as inner)
+    # 'enumerate', 'session' (a boto3 Session), 'super' (super() in a method of class `name`, its self or cls as inner),
+    # 'lib' (a library plugin's handle: name is the plugin), 'libmember' (one's method `sub`, the handle as inner),
+    # 'text' (text the code put together: sub is its code, path what from the input went into it)
     name: str = ""
     sub: str = ""
     path: tuple[str, ...] = ()
     inner: _Sym | None = None
+    handle: Handle | None = None
 
 
 @dataclass
@@ -151,6 +173,7 @@ class _CodeReader:
         self.runs = 0  # function bodies read
         self.max_depth = _MAP_DEPTH  # calls followed from the entry point
         self.keywords: tuple[Any, dict[str, _Sym | None]] = (None, {})  # the call being read, and its keywords' values
+        self.values: tuple[Any, dict[int, _Sym | None]] = (None, {})  # ...and every argument's, by the node's id
 
     # ---------------------------------------------------------------- reading
 
@@ -349,6 +372,8 @@ class _CodeReader:
                 self.target = {t.id for t in targets if isinstance(t, ast.Name)}
                 value = self._eval(stmt.value, frame)
                 self.target = set()
+                if value is None and _is_text(stmt.value):  # QUERY = "SELECT ...": kept, for a call it's passed to
+                    value = _Sym("text", sub=_unparse(stmt.value, 400))
                 if stmt.value is not None:
                     for target in targets:
                         self._bind(target, value, frame)
@@ -357,7 +382,8 @@ class _CodeReader:
                 for child in ast.iter_child_nodes(stmt):
                     if isinstance(child, ast.expr):
                         self._eval(child, frame)
-        if (kind != "do" and not frame.top) or got.notes or got.calls:
+        tainted = any(what.startswith("text built from") for _, what in got.holds)  # where the input goes next
+        if (kind != "do" and not frame.top) or got.notes or got.calls or tainted:
             return [self._step(stmt, frame, _unparse(stmt), kind, got)]
         return []
 
@@ -705,6 +731,11 @@ class _CodeReader:
             "logger": "a logger", "http": f"{_a(name)} {name} session" if name else "an HTTP session",
             "own": f"the module {name}",
         }
+        if kind == "lib" and value.handle is not None:
+            library = get_library(name)
+            return library.describe(value.handle) if library is not None else ""
+        if kind == "text":
+            return f"text built from {', '.join(value.path)}" if value.path else ""
         return said.get(kind, "")
 
     def _item(self, items: _Sym | None) -> _Sym | None:
@@ -754,6 +785,11 @@ class _CodeReader:
             return value
         if isinstance(node, ast.Lambda):
             return None
+        if isinstance(node, (ast.JoinedStr, ast.BinOp)):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.expr):
+                    self._eval(child, frame)
+            return self._text(node, frame)
         if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
             saved = dict(frame.scope)
             depth = len(frame.loops)
@@ -831,6 +867,11 @@ class _CodeReader:
             return _Sym("log", attr)
         if kind == "http":
             return _Sym("httpcall", base.name, attr, inner=base)
+        if kind == "lib" and base.handle is not None:
+            library = get_library(base.name)
+            found = library.attribute(base.handle, attr) if library is not None else None
+            return _Sym("lib", base.name, handle=found) if found is not None else _Sym("libmember", base.name, attr,
+                                                                                        inner=base)
         return None
 
     def _subscript(self, node: ast.Subscript, frame: _Frame) -> _Sym | None:
@@ -852,6 +893,10 @@ class _CodeReader:
                 return _Sym("event", path=base.path + ("[]",))
             if isinstance(node.slice, ast.Slice):
                 return base
+        if base.kind == "lib" and base.handle is not None:
+            library = get_library(base.name)
+            found = library.item(base.handle, key) if library is not None else None
+            return _Sym("lib", base.name, handle=found) if found is not None else None
         return None
 
     def _call(self, node: ast.Call, frame: _Frame) -> _Sym | None:
@@ -865,6 +910,11 @@ class _CodeReader:
             if kw.arg:
                 kwargs[kw.arg] = value
         self.keywords = (node, kwargs)
+        self.values = (node, {id(a): v for a, v in zip(node.args, args)} | {
+            id(kw.value): kwargs.get(kw.arg) for kw in node.keywords if kw.arg})
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "format" and (
+                isinstance(_const(node.func.value), str) or (func is None and _is_text(node.func.value))):
+            return self._text(node, frame)  # "... {}".format(x)
         if func is None:
             return self._unknown_call(node, frame)
         kind = func.kind
@@ -908,6 +958,12 @@ class _CodeReader:
             if func.sub in _HTTP_METHODS:
                 self._http(func.name, func.sub, node, frame, given="timeout" in (func.inner.path if func.inner else ()))
             return None
+        if kind == "libmember" and func.inner is not None and func.inner.handle is not None:
+            library = get_library(func.name)
+            if library is None:
+                return None
+            view = self._view(func.sub, node, frame)
+            return self._library(library, library.call(func.inner.handle, func.sub, view), view, frame)
         return None
 
     def _super(self, node: ast.Call, frame: _Frame) -> _Sym | None:
@@ -952,6 +1008,10 @@ class _CodeReader:
         """
         first = args[0] if args else None
         last = name.rsplit(".", 1)[-1]
+        library = library_for(name.split(".")[0])
+        if library is not None:
+            view = self._view(name, node, frame)
+            return self._library(library, library.make(name, view), view, frame)
         if name.startswith("boto3") and last in ("client", "resource"):
             return self._make_client(last, node, frame)
         if name in ("boto3.Session", "boto3.session.Session"):
@@ -992,8 +1052,14 @@ class _CodeReader:
                                                                   (int, float)) else f"waits ({wait})")
             return None
         if name in _COMMANDS:
-            self._spot("command", frame.file, node.lineno, frame.function, _unparse(node, 80))
+            shell = name in ("os.system", "os.popen") or any(
+                kw.arg == "shell" and _const(kw.value) is True for kw in node.keywords)
+            inputs = self._inputs(node.args[0], frame) if node.args and shell else ()
+            self._spot("command", frame.file, node.lineno, frame.function, _unparse(node, 80), ", ".join(inputs),
+                       ok=not inputs)
             self.cur.note("command", "runs a command")
+            if inputs:
+                self.cur.note("warn", f"a shell command built from {inputs[0]}")
             return None
         if top == "pandas" and last.startswith("read_") and isinstance(_const(node.args[0] if node.args else None), str):
             if str(_const(node.args[0])).startswith("s3://"):
@@ -1040,8 +1106,7 @@ class _CodeReader:
         service = _const(node.args[0]) if node.args else next(
             (_const(kw.value) for kw in node.keywords if kw.arg == "service_name"), None)
         service = service if isinstance(service, str) else "?"
-        once = (self.loading > 0 or frame.cached or bool(self.target & frame.globals)
-                or any("None" in g or g.startswith("not ") for g in frame.guards))
+        once = self._once(frame)
         name = _service_name(service) if service != "?" else "an AWS"
         self._spot("client", frame.file, node.lineno, frame.function, _unparse(node, 80), service, ok=once,
                    loop=self._loop_of(frame))
@@ -1295,11 +1360,152 @@ class _CodeReader:
         self.cur.note("http", f"HTTP {verb}" + (f" {_clip(str(shown), 40)}" if isinstance(shown, str) else ""))
 
     def _spot(self, kind: str, file: str, line: int, function: str, code: str, detail: str = "", *, ok: bool = True,
-              loop: str = "") -> None:
+              loop: str = "", waits: str = "", fix: str = "") -> None:
         key = (kind, file, line, detail)
         if key not in self.seen:
             self.seen.add(key)
-            self.cmap.spots.append(CodeSpot(kind, file, line, function, code, detail, ok, loop, self.loading > 0))
+            self.cmap.spots.append(CodeSpot(kind, file, line, function, code, detail, ok, loop, self.loading > 0, waits,
+                                            fix))
+
+    # ---------------------------------------------------------------- libraries plugins know, and text from the input
+
+    def _once(self, frame: _Frame) -> bool:
+        """
+        Whether what this line makes is made once and kept: at import, in a cached function, kept in a global, or
+        made only when there isn't one yet (`if client is None:`).
+        """
+        return (self.loading > 0 or frame.cached or bool(self.target & frame.globals)
+                or any("None" in g or g.startswith("not ") for g in frame.guards))
+
+    def _view(self, name: str, node: ast.Call, frame: _Frame) -> Call:
+        """
+        A call as a library plugin is shown it.
+        """
+        known = self.values[1] if self.values[0] is node else {}
+        return Call(name, node, self._loop_of(frame), self.loading > 0, self._once(frame),
+                    lambda arg: self._argument(arg, frame, known))
+
+    def _argument(self, node: Any, frame: _Frame, known: dict[int, _Sym | None]) -> _Argument:
+        """
+        What's known about one argument: the handle it holds, the text it's built from, and what from the input goes
+        into it. known is what the call's arguments held when it was read.
+        """
+        held = known.get(id(node)) or self._peek(node, frame)
+        handle = held.handle if held is not None and held.kind == "lib" else None
+        if held is not None and held.kind == "text":
+            built = not isinstance(_const(_parse_text(held.sub)), str)
+            return _Argument(handle, held.sub, held.path, built)
+        built = isinstance(node, (ast.JoinedStr, ast.BinOp)) or (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "format")
+        return _Argument(handle, "", self._inputs(node, frame), built)
+
+    def _library(self, library: Library, found: Handle | Use | None, call: Call, frame: _Frame) -> _Sym | None:
+        """
+        What a library plugin said a call gives or does: a handle kept as what the name holds, or a call put in the
+        map, its step and its box.
+        """
+        node = call.node
+        if isinstance(found, Handle):
+            if found.opens:
+                service = found.service or library.title
+                self._spot("connect", frame.file, node.lineno, frame.function, _unparse(node, 80), service,
+                           ok=call.once, loop=call.loop, waits=found.waits, fix=found.fix)
+                self.cur.note("client", f"makes {library.describe(found)}")
+                if found.waits:
+                    self.cur.note("warn", f"no timeout: a call waits {found.waits}")
+            return _Sym("lib", library.name, handle=found)
+        if not isinstance(found, Use):
+            return None
+        service = found.service or library.title
+        record = LibraryCall(library.name, service, found.operation, found.access, frame.file, node.lineno,
+                             frame.function, _unparse(node, 120), found.target, found.icon or library.icon, call.loop,
+                             self.loading > 0, found.flag, found.why, found.batch)
+        key = ("library", service, found.operation, frame.file, node.lineno)
+        if key not in self.seen:
+            self.seen.add(key)
+            self.cmap.library_calls.append(record)
+            if library.title not in self.cmap.plugins:
+                self.cmap.plugins.append(library.title)
+        self.cur.note(f"lib-{found.access}", f"{service}: {record.row}")
+        if found.flag:
+            self.cur.note("warn", found.flag)
+        return _Sym("lib", library.name, handle=found.gives) if found.gives is not None else None
+
+    def _text(self, node: Any, frame: _Frame) -> _Sym | None:
+        """
+        Text the code puts together (an f-string, + or % on text, .format()) with something from the input in it:
+        kept with what went in, so a SQL statement or a command built from it says so wherever it's used.
+        """
+        if isinstance(node, ast.BinOp) and not (isinstance(node.op, (ast.Add, ast.Mod)) and (
+                _is_text(node.left) or _is_text(node.right) or self._held_text(node.left, frame)
+                or self._held_text(node.right, frame))):
+            return None
+        inputs = self._inputs(node, frame)
+        return _Sym("text", sub=_unparse(node, 400), path=inputs) if inputs else None
+
+    def _held_text(self, node: Any, frame: _Frame) -> bool:
+        held = self._peek(node, frame)
+        return held is not None and held.kind == "text"
+
+    def _inputs(self, node: Any, frame: _Frame) -> tuple[str, ...]:
+        """
+        What from the entry point's input goes into an expression, as said beside a step: ('event body.id',). Read
+        without running anything again.
+        """
+        found: list[str] = []
+
+        def visit(n: Any) -> None:
+            held = self._peek(n, frame)
+            if held is not None and held.kind == "event":
+                found.append(self._describe(held))
+                return
+            if held is not None and held.kind == "text":
+                found.extend(held.path)
+                return
+            if isinstance(n, ast.Name):
+                return
+            for child in ast.iter_child_nodes(n):
+                if isinstance(child, ast.expr):
+                    visit(child)
+
+        if node is not None:
+            visit(node)
+        return tuple(dict.fromkeys(found))
+
+    def _peek(self, node: Any, frame: _Frame) -> _Sym | None:
+        """
+        What an expression holds, for the few kinds that can be told without reading a call again: a name, part of
+        the input (event['body'], event.get('id'), json.loads(...) of it), or an attribute of one of its objects.
+        """
+        if isinstance(node, ast.Name):
+            return self._lookup(node.id, frame)
+        if isinstance(node, ast.Subscript):
+            base = self._peek(node.value, frame)
+            if base is not None and base.kind == "event":
+                key = _const(node.slice)
+                return _Sym("event", path=base.path + ((key,) if isinstance(key, str) else ("[]",)))
+            return None
+        if isinstance(node, ast.Attribute):
+            base = self._peek(node.value, frame)
+            if base is None:
+                return None
+            if base.kind == "event" and node.attr not in _DICT_METHODS:
+                return _Sym("event", path=base.path + (node.attr,))
+            if base.kind == "obj":
+                found = self._member(base.name, node.attr)
+                return found[1] if found and found[0] == "attr" else None
+            return None
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            base = self._peek(node.func.value, frame)
+            key = _const(node.args[0]) if node.args else None
+            if base is not None and base.kind == "event" and node.func.attr in ("get", "pop") and isinstance(key, str):
+                return _Sym("event", path=base.path + (key,))
+            dotted = _unparse(node.func, 60)
+            if (dotted in _JSON_LOADS or dotted in _B64_DECODES) and node.args:
+                inner = self._peek(node.args[0], frame)
+                if inner is not None and inner.kind == "event":
+                    return _Sym("event", path=inner.path + ("{json}" if dotted in _JSON_LOADS else "{base64}",))
+        return None
 
     def _secrets(self, mod: _Module) -> None:
         """

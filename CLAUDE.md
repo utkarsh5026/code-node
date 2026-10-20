@@ -46,15 +46,20 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/cli.py` | The command: argument parsing, picking the entry point (asking on a TTY), saving and opening the page (WSL-aware) |
 | `src/code_node/project.py` | A folder: `read_project` (files, module names Python would use, trees parsed lazily), `entry_points`, `entries_in_file`, `project_root`, `Project.libraries()` |
 | `src/code_node/analysis/` | **Pure, no I/O.** `reader.py` (`_CodeReader`, follows code from the entry point, tracking what each name holds as a `_Sym`), `mapping.py` (`map_code`), `model.py` (`CodeMap` and its dataclasses), `graph.py` (`code_graph` → `CodeGraph`), `findings.py`, `aws_model.py` (botocore service models), `syntax.py`, `terms.py` (constants and limits) |
-| `src/code_node/platforms/` | **Pure, no I/O.** `Platform` (plain Python: the base a plugin overrides), the registry (`register_platform`, `get_platform`, the `code_node.platforms` entry point group), and `aws_lambda.py` (`LambdaPlatform`: handlers, the event, its findings and wording) |
+| `src/code_node/platforms/` | **Pure, no I/O.** `Platform` (plain Python: the base a plugin overrides), the registry (`register_platform`, `get_platform`, the `code_node.platforms` entry point group), and `aws_lambda.py` (`LambdaPlatform`: handlers, the event, its findings and wording, IAM drift against a `Deployment`) |
+| `src/code_node/libraries/` | **Pure, no I/O.** `Library` (a library's clients: `make`, `attribute`, `item`, `call`), `Handle` (what a name holds), `Use` (what a call does), `Call` (the call as a plugin sees it), the registry (`code_node.libraries`), and `redis.py`, `sql.py`, `mongo.py`, `llm.py` |
+| `src/code_node/deploys/` | **Pure, no I/O.** `Deploy` (a kind of deploy file: `deployments(files, code)` → `Deployment`s, `grant`), the registry (`code_node.deploys`), YAML with CloudFormation tags, IAM policy helpers, and `sam.py`, `serverless.py` |
 | `src/code_node/pages.py` | `PageOptions`, `make_page` / `make_mermaid`: read the folder, map, draw (what the command and the server share) |
 | `src/code_node/serve.py` | `--serve`: `LivePage` (the latest page, a version, a Condition), a polling watcher thread, `ThreadingHTTPServer` with `/` and `/events` (Server-Sent Events) |
-| `src/code_node/report/` | Drawing: `graph.py` (the SVG layout), `walk.py` (Step by step: the steps in run order beside their code), `tabs.py` (the Graph / Step by step tabs), `outline.py` (the step tree, for text), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
+| `src/code_node/report/` | Drawing: `brands.py` (which logo each AWS service and library service gets, read from `logos/*.svg`, downloaded by `scripts/logos.py`: never edit them), `graph.py` (the SVG layout), `walk.py` (Step by step: the steps in run order beside their code), `tabs.py` (the Graph / Step by step tabs), `outline.py` (the step tree, for text), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
 | `src/code_node/kit/` | Report blocks (`_Title`, `_Cards`, `_Table`, `_Findings`, ...) and the HTML/text renderer, copied from aws-analyzer's `_kit` |
 | `examples/orders-service/` | A small Lambda service the screenshots and the CI smoke test run on. Never run |
+| `examples/cart-service/` | A Lambda function in a SAM template using PostgreSQL, Redis, OpenAI and boto3: every kind of plugin at once, for `tests/snapshots/cart-service.txt` and the Plugins page. Never run |
 | `Makefile`, `makefile.py` | The commands below by name; `makefile.py` is the same tasks in Python with rich, for any OS |
 | `scripts/shots.py` | Makes `docs/images/<figure>-{light,dark}.webp` |
 | `scripts/site_graph.py` | Makes the home page's graph (`docs/snippets/graph-trace.svg`) |
+| `scripts/docs_figures.py` | Draws the docs' plugin figures with the logos (`docs/images/plugins-mix-*.svg`, `reaches-*.svg`), light and dark. It checks each finding it shows is still one `examples/cart-service` makes; rerun it (`make figures`) after changing that example or the plugins |
+| `scripts/logos.py` | Downloads the pinned `@iconify-json/logos` (checked against its hash) and writes the logos `brands.py` names to `report/logos/`, one `.svg` each. Run it (`make logos`) after naming a new one |
 | `docs/`, `mkdocs.yml` | The docs site (MkDocs Material), published by `.github/workflows/pages.yml` |
 
 The two contracts are `CodeMap` (what the code does) and `CodeGraph` (boxes and arrows). Keep `analysis/` free of
@@ -67,8 +72,14 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
 - **Generic first, platforms as plugins.** The reader, findings, graph and page are for any Python. What's
   different where the code runs (entry points, what they're called with, findings, wording) is a `Platform` in
   `platforms/`, looked up with `get_platform(cmap.platform)`. `cmap.platform` comes from the entry point a platform
-  found (`EntryPoint.platform`), or `--platform` / `--lambda`. Never test `cmap.platform == "lambda"` outside
-  `platforms/aws_lambda.py`: add a hook to `Platform` instead, with plain-Python wording as its default.
+  found (`EntryPoint.platform`), a deploy file's `Deployment.platform`, or `--platform` / `--lambda`. Never test
+  `cmap.platform == "lambda"` outside `platforms/aws_lambda.py`: add a hook to `Platform` instead, with plain-Python
+  wording as its default.
+- **Plugins mix.** One platform per map, but libraries (`libraries/`) and deploy files (`deploys/`) stack. What
+  one library knows goes in its plugin, never in the reader: the reader only tracks `Handle`s and asks the plugin
+  (`_outside` → `make`, `_attribute` → `attribute`, `_call` → `call`). Checks that need two kinds at once (a
+  client's timeout against the platform's, permissions against the deploy file) go in `findings.py` or the
+  platform, through hooks (`Platform.hang`, `Platform.denied`), so any plugin of each kind gets them.
 - **Partial, never a traceback.** `map_code` catches what the reader can't follow and records it in `cmap.limited`.
   The page says what was cut short.
 - **No JavaScript in the page.** Interactivity is CSS (`:has()`, `<details>`, radio buttons), as in aws-analyzer.

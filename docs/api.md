@@ -25,6 +25,7 @@ print(code_graph(cmap).mermaid())                # the graph as Mermaid
 | `file` | the entry's file, if more than one could match |
 | `max_depth` | how deep to follow calls (8) |
 | `platform` | where it runs: `"lambda"` for the Lambda checks, `""` (default) for plain Python |
+| `deployment` | what a deploy file says about it (`find_deployment`), checked against the code |
 
 You get a `CodeMap`:
 
@@ -32,6 +33,7 @@ You get a `CodeMap`:
 | --- | --- |
 | `functions` | your functions that run |
 | `aws` | AWS calls, with IAM permissions |
+| `library_calls` | calls through the libraries plugins know: Redis, SQL, MongoDB, OpenAI... |
 | `env` | env var names (never values) |
 | `steps` | each call, step by step |
 | `imports`, `routes` | imports, web routes, CLI commands |
@@ -45,6 +47,8 @@ Boxes (`nodes`) and arrows (`edges`). `max_functions=24` and `max_depth=5` set h
 what it left out. `.mermaid()` writes it as Mermaid.
 
 ## Platforms { #platforms }
+
+Platforms are one of three kinds of plugin. Libraries and deploy files, which stack, are on [Plugins](plugins.md).
 
 The reader, the findings and the graph are for any Python. A platform adds what's different where the code runs:
 which functions are its entry points, what they're called with, its own findings, and the wording of the general

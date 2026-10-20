@@ -1,7 +1,7 @@
 """
-code-node --serve: the page on a local server, made again whenever a .py file under the folder changes, and the
-browser told to reload (keeping its scroll position, and the tab and step that were open). Standard library only: a
-polling watcher thread, a threaded HTTP server, and Server-Sent Events for the reload.
+code-node --serve: the page on a local server, made again whenever a .py file (or a deploy file, like template.yaml)
+under the folder changes, and the browser told to reload (keeping its scroll position, and the tab and step that were
+open). Standard library only: a polling watcher thread, a threaded HTTP server, and Server-Sent Events for the reload.
 
 The saved pages have no JavaScript; the served one gets a few lines (_LIVE_SCRIPT) to reload and to say when the
 server has stopped.
@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from .deploys import deploy_file_names
 from .pages import PageOptions, make_page
 from .project import _SKIPPED_FOLDERS, EntryPoint
 from .report.style import FAVICON_LINK, FAVICON_SVG
@@ -69,13 +70,15 @@ padding:6px 10px;border-radius:999px;background:rgba(127,127,127,.14);backdrop-f
 
 def snapshot(root: Path) -> dict[str, tuple[int, int]]:
     """
-    Every .py file under root (skipping what read_project skips) with its modified time and size.
+    Every .py file under root (skipping what read_project skips), and every deploy file (template.yaml,
+    serverless.yml), with its modified time and size.
     """
     found: dict[str, tuple[int, int]] = {}
+    deploy_names = deploy_file_names()
     for folder, subfolders, names in os.walk(root):
         subfolders[:] = [d for d in subfolders if d not in _SKIPPED_FOLDERS and not d.endswith(".egg-info")]
         for name in names:
-            if not name.endswith(".py"):
+            if not name.endswith(".py") and name not in deploy_names:
                 continue
             path = os.path.join(folder, name)
             try:

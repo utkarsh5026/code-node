@@ -32,31 +32,34 @@ class _Outline:
 _NOTE_TIPS = {  # what an outline tag means, on hover
     "aws-reads": "an AWS call that reads", "aws-writes": "an AWS call that writes",
     "aws-sends": "an AWS call that sends a message or an event", "aws-runs": "an AWS call that runs something",
-    "aws-signs": "a signed link for this AWS call: no request is sent now", "client": "a boto3 client or resource",
+    "aws-signs": "a signed link for this AWS call: no request is sent now", "client": "a client for AWS or a service",
+    "lib-reads": "a call that reads", "lib-writes": "a call that writes", "lib-sends": "a call that sends a message",
+    "lib-runs": "a call that runs something",
     "env": "an environment variable it reads", "event": "a field of the event it reads", "http": "an HTTP request",
     "log": "a log line", "file": "a file it writes", "sleep": "a pause",
     "command": "a command run as another process", "warn": "worth a look", "route": "a web route",
     "more": "",
 }
 
-_FOLDED_KINDS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "env", "http", "warn", "file", "sleep",
-                 "command")  # the tags a folded function shows of what's inside it
+_FOLDED_KINDS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "lib-reads", "lib-writes", "lib-sends",
+                 "lib-runs", "env", "http", "warn", "file", "sleep", "command")  # the tags a folded function shows of what's inside it
 
 
 def _note_text(kind: str, text: str) -> str:
     """
     An outline tag in words: 'S3 GetObject (reads)', 'env DB_HOST', 'event Records[].body'.
     """
-    if kind.startswith("aws-"):
-        return f"{text} ({kind[4:]})"
+    if kind.startswith(("aws-", "lib-")):
+        return f"{text.replace(': ', ' ', 1) if kind.startswith('lib-') else text} ({kind[4:]})"
     return f"{kind} {text}" if kind in ("env", "event") else text
 
 
 def _chips_html(notes: Iterable[tuple[str, str]]) -> str:
     out = []
     for kind, text in notes:
-        word = f"<i>{_esc(kind[4:])}</i>" if kind.startswith("aws-") else ""
-        label = f"{kind} {text}" if kind in ("env", "event") else text
+        word = f"<i>{_esc(kind[4:])}</i>" if kind.startswith(("aws-", "lib-")) else ""
+        label = f"{kind} {text}" if kind in ("env", "event") else text.replace(": ", " ", 1) if kind.startswith(
+            "lib-") else text
         out.append(f'<span class="nt n-{_esc(kind)}" title="{_esc(_NOTE_TIPS.get(kind, ""))}">{_esc(label)}{word}</span>')
     return "".join(out)
 

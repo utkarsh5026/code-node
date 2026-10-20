@@ -8,8 +8,13 @@ to, like the real page, and docs/javascripts/graph.js lights up the path each li
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from code_node.report.brands import logo  # noqa: E402  the same logos as code-node's graph
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "snippets"
 
@@ -19,11 +24,6 @@ ICONS = {  # 16 x 16 line drawings, the same as code-node's graph (src/code_node
     "event": "M9.2 1.8 3.6 9h4.2l-1 5.2L12.4 7H8.2z",
     "env": "M2.5 4.5h1.6M7.1 4.5h6.4M2.5 8h6.4M11.9 8h1.6M2.5 11.5h3M8.5 11.5h5M5.6 3v3M10.4 6.5v3M7 10v3",
     "http": "M8 2a6 6 0 1 0 0 12A6 6 0 1 0 8 2zM2.2 8h11.6M8 2c-2.1 2.2-2.1 9.8 0 12M8 2c2.1 2.2 2.1 9.8 0 12",
-    "database": "M3 4c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2zM3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4"
-                "M3 8c0 1.1 2.2 2 5 2s5-.9 5-2",
-    "bucket": "M2.4 4.2c0 1 2.5 1.8 5.6 1.8s5.6-.8 5.6-1.8S11.1 2.4 8 2.4 2.4 3.2 2.4 4.2zM2.4 4.2l1.5 8.5"
-              "c.2 1 1.9 1.6 4.1 1.6s3.9-.6 4.1-1.6l1.5-8.5",
-    "send": "M13.8 2.2 6.9 9.1M13.8 2.2 9.6 13.8 6.9 9.1 2.2 6.4z",
 }
 
 COLUMNS = [(20, "COMES IN"), (226, "ENTRY"), (432, "CALLS"), (638, "REACHES")]
@@ -39,7 +39,7 @@ class Node:
     sub: str
     column: int
     y: int
-    icon: str
+    icon: str  # a line drawing in ICONS, or a logo's name ('aws-s3')
     tone: str = ""
     h: int = 58
 
@@ -63,9 +63,9 @@ NODES = [
     Node("save", "function", "OrderStore.save()", "store.py line 16", 2, 126, "function"),
     Node("announce", "function", "announce()", "notify.py line 14", 2, 220, "function"),
     Node("chat", "function", "post_to_chat()", "notify.py line 20", 2, 326, "function", "warn"),
-    Node("s3", "aws", "S3", "reads · writes", 3, 32, "bucket"),
-    Node("ddb", "aws", "DynamoDB", "writes", 3, 126, "database"),
-    Node("sns", "aws", "SNS", "sends", 3, 220, "send"),
+    Node("s3", "aws", "S3", "reads · writes", 3, 32, "aws-s3"),
+    Node("ddb", "aws", "DynamoDB", "writes", 3, 126, "aws-dynamodb"),
+    Node("sns", "aws", "SNS", "sends", 3, 220, "aws-sns"),
     Node("web", "http", "The web", "POST · no timeout", 3, 326, "http", "warn"),
 ]
 
@@ -123,6 +123,21 @@ def _head(end: tuple[float, float], direction: tuple[int, int]) -> str:
     return f"M{x - 7:.1f},{y - 4.5:.1f}L{x - 1:.1f},{y:.1f}L{x - 7:.1f},{y + 4.5:.1f}"
 
 
+def _badge(node: Node) -> str:
+    """
+    A box's badge: its service's logo on a plain tile, else a line drawing in the box's colour.
+    """
+    x, y = node.x, node.y
+    found = logo(node.icon)
+    if found is None:
+        return (f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
+                f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>')
+    width, height, body = found
+    return (f'<rect class="bd lg" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
+            f'<svg class="logo" x="{x + 14}" y="{y + 14}" width="18" height="18" viewBox="0 0 {width} {height}" '
+            f'fill="currentColor">{body}</svg>')
+
+
 def _node_svg(node: Node) -> str:
     x, y = node.x, node.y
     mono = node.kind in ("handler", "function")
@@ -131,9 +146,8 @@ def _node_svg(node: Node) -> str:
     return (f'<g class="n k-{node.kind} n-{node.id} {neighbours}{" warn" if node.tone else ""}" '
             f'data-node="{node.id}">'
             f'<rect class="bg" x="{x}" y="{y}" width="{BOX_W}" height="{node.h}" rx="12"/>'
-            f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
-            f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>'
-            f'<text class="lb{" mono" if mono else ""}" x="{x + 44}" y="{y + 24}">{node.label}</text>'
+            + _badge(node)
+            +             f'<text class="lb{" mono" if mono else ""}" x="{x + 44}" y="{y + 24}">{node.label}</text>'
             f'<text class="sb" x="{x + 44}" y="{y + 41}">{node.sub}</text>'
             + ('<circle class="wd" cx="{:.0f}" cy="{:.0f}" r="7"/><path class="wm" d="M{:.0f},{:.0f}v4.6M{:.0f},{:.0f}v.4"/>'
                .format(x + BOX_W - 2, y + 2, x + BOX_W - 2, y - 1.4, x + BOX_W - 2, y + 5.4)

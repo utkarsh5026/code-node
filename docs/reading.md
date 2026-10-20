@@ -19,7 +19,7 @@ Read it left to right.
 | **Comes in** | What the code gets: its input, env vars |
 | **Entry** | Where it starts, plus what runs at import |
 | **Calls** | Your functions. Further right means deeper |
-| **Reaches** | AWS services and the web |
+| **Reaches** | AWS services, the services its libraries reach (Redis, PostgreSQL, OpenAI), and the web |
 
 ![A code-node graph](images/graph-light.webp#only-light){ loading=lazy }
 ![A code-node graph](images/graph-dark.webp#only-dark){ loading=lazy }

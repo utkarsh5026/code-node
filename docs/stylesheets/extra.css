@@ -165,6 +165,8 @@
 .cn-shot { margin: 1.2em 0 0; }
 .md-typeset .cn-shot p { max-width: none; }
 .md-typeset .cn-shot img { width: 100%; border: 1px solid var(--cn-rule); border-radius: 6px; }
+.md-typeset p:has(> img.cn-figure) { max-width: none; }  /* a figure takes the column, not the reading width */
+.md-typeset img.cn-figure { width: 100%; height: auto; }
 
 /* ---------- the graph (scripts/site_graph.py), drawn like code-node's own ---------- */
 
@@ -175,6 +177,8 @@
 .cn-graph .n .bg { fill: var(--cn-paper); stroke: var(--cn-rule); stroke-width: 1.2; }
 .cn-graph .n:hover .bg { stroke: var(--cn-dim); }
 .cn-graph .n .bd { fill: color-mix(in srgb, var(--c) 15%, transparent); }
+.cn-graph .n .bd.lg { fill: #fff; stroke: var(--cn-rule); }
+.cn-graph .n .logo { color: #1b1d22; }
 .cn-graph .n .ic { fill: none; stroke: var(--c); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .cn-graph .n .lb { font-size: 12.5px; font-weight: 600; fill: var(--cn-fg); }
 .cn-graph .n .lb.mono { font: 600 10.4px var(--md-code-font-family); }

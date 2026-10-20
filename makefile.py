@@ -231,6 +231,16 @@ def site_graph(options: Options) -> None:
     python("scripts/site_graph.py")
 
 
+@task("logos", "🏷", "download the pinned logos into src/code_node/report/logos/", "Docs")
+def logos(options: Options) -> None:
+    python("scripts/logos.py")
+
+
+@task("figures", "🖼", "remake the docs' plugin figures (docs/images/plugins-mix-*.svg, reaches-*.svg)", "Docs")
+def figures(options: Options) -> None:
+    python("scripts/docs_figures.py")
+
+
 # Release
 
 @task("package", "🎁", "build the sdist and wheel, and check them as PyPI would", "Release")

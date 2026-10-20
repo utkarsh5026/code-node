@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .analysis.syntax import _parse
+from .deploys import all_deployments, deploy_file_names
 from .platforms import platforms
 
 _SKIPPED_FOLDERS = frozenset({
@@ -57,6 +58,8 @@ class Project:
     skipped: list[str] = field(default_factory=list)
     limited: bool = False
     configs: list[str] = field(default_factory=list)  # its pyproject.toml files, the root's first
+    deploy_files: dict[str, str] = field(default_factory=dict)  # files deploy plugins read (template.yaml,
+    # serverless.yml): {path from the folder: text}
     _trees: dict[str, ast.Module] | None = None
 
     @property
@@ -113,11 +116,15 @@ def read_project(root: str | os.PathLike[str]) -> Project:
     """
     base = Path(root).resolve()
     project = Project(base)
+    deploy_names = deploy_file_names()
     for folder, subfolders, names in os.walk(base):
         subfolders[:] = sorted(d for d in subfolders if d not in _SKIPPED_FOLDERS and not d.endswith(".egg-info"))
         for name in sorted(names):
             if name == "pyproject.toml":
                 project.configs.append((Path(folder) / name).relative_to(base).as_posix())
+            if name in deploy_names and (Path(folder) / name).stat().st_size <= _MAX_FILE_BYTES:
+                rel = (Path(folder) / name).relative_to(base).as_posix()
+                project.deploy_files[rel] = (Path(folder) / name).read_text("utf-8", "replace")
             if not name.endswith(".py"):
                 continue
             path = Path(folder) / name
@@ -238,6 +245,12 @@ def entry_points(project: Project) -> list[EntryPoint]:
             add(EntryPoint(f"{module}.{runs[0]}", f"{command} ({kind})", rel, line))
         add(EntryPoint(f"{module}.{function}", command, rel, getattr(node, "lineno", 0)))
     code = {rel: tree for rel, tree in project.trees.items() if not _is_test(rel)}
+    for deployed in all_deployments(project.deploy_files, project.files):
+        tree = project.trees.get(deployed.file)
+        node = _module_functions(tree).get(deployed.function) if tree is not None else None
+        if node is not None:
+            add(EntryPoint(f"{project.modules[deployed.file]}.{deployed.function}",
+                           f"{deployed.name} in {deployed.source}", deployed.file, node.lineno, deployed.platform))
     for rel, tree in code.items():
         module = project.modules[rel]
         for platform in platforms():

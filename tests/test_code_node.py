@@ -483,3 +483,269 @@ def test_what_names_hold_where_arguments_come_from_and_when_calls_run(tmp_path: 
     assert deploy.when == "command == 'deploy'"  # the graph says the if nearest around the call
     assert any(e.kind == "call" and e.when == deploy.when for e in graph.edges)
     assert '|"when command == \'deploy\'"|' in graph.mermaid()
+
+
+STORES = '''
+import json
+import os
+import subprocess
+
+import pymongo
+import redis
+import sqlite3
+from anthropic import Anthropic
+
+cache = redis.Redis(host="cache")
+mongo = pymongo.MongoClient(os.environ["MONGO_URL"])
+orders = mongo.shop["orders"]
+claude = Anthropic(timeout=20)
+LOOKUP = "SELECT name FROM users WHERE id = ?"
+
+
+def handler(event, context):
+    body = json.loads(event["body"])
+    user = body["user"]
+    db = sqlite3.connect("/tmp/app.db")
+    name = db.execute(LOOKUP, (user,)).fetchone()
+    query = "DELETE FROM sessions WHERE user = '" + user + "'"
+    db.execute(query)
+    for key in cache.keys("session:*"):
+        cache.delete(key)
+    orders.insert_one({"user": user})
+    found = mongo.get_database("shop").users.find_one({"id": user})
+    claude.messages.create(model="claude-sonnet-5-5", max_tokens=200, messages=[])
+    subprocess.run(f"echo {body['note']}", shell=True)
+    return name, found
+'''
+
+
+def test_library_plugins_follow_their_clients_and_flag_what_the_input_reaches(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+
+    project = read_project(write(tmp_path, {"app.py": STORES}))
+    cmap = map_code(project.files, "app.handler", libraries=project.libraries(), platform="lambda")
+    calls = {(c.service, c.operation, c.target): c for c in cmap.library_calls}
+    assert set(calls) == {
+        ("SQLite", "SELECT", "users"), ("SQLite", "DELETE", "sessions"), ("Redis", "KEYS", "session:*"),
+        ("Redis", "DELETE", "key"), ("MongoDB", "insert_one", "orders"), ("MongoDB", "find_one", "users"),
+        ("Anthropic", "messages.create", "claude-sonnet-5-5")}
+    # the user id went from the event, through a name and a + on text, into the SQL: flagged where it's run
+    assert calls[("SQLite", "DELETE", "sessions")].flag == "SQL injection"
+    assert not calls[("SQLite", "SELECT", "users")].flag  # a parameter, in a constant statement
+    assert calls[("Redis", "KEYS", "session:*")].flag == "KEYS blocks Redis"
+    assert calls[("Redis", "DELETE", "key")].loop == "for key in cache.keys('session:*'):"
+    assert cmap.plugins == ["SQL", "Redis", "MongoDB", "OpenAI and Anthropic"]
+    said = " ".join(message for _, message in code_map_findings(cmap))
+    assert "puts event body (JSON).user into the SQL text itself" in said
+    assert "shell command with event body (JSON).note in it" in said
+    assert "The Redis client made at app.py line 11 has no timeout" in said  # Anthropic's has one
+    assert "a new SQLite connection" not in said  # a file on disk: nothing to reuse
+    graph = code_graph(cmap)
+    boxes = {n.label: n for n in graph.nodes if n.kind == "service"}
+    assert set(boxes) == {"SQLite", "Redis", "MongoDB", "Anthropic"}
+    assert boxes["SQLite"].flags == {"DELETE sessions": "SQL injection"} and boxes["SQLite"].tone == "warn"
+    assert boxes["Anthropic"].icon == "spark" and boxes["Anthropic"].sub == "runs"
+    step = next(s for s in cmap.steps[0].walk() if s.code.startswith("query ="))
+    assert step.holds == [("query", "text built from event body (JSON).user")]
+
+
+def test_a_library_plugin_from_another_package(tmp_path: Path, monkeypatch) -> None:
+    from code_node import libraries as librariesmod
+    from code_node.libraries import Handle, Library, Use
+
+    class Kafka(Library):
+        name = "kafka"
+        title = "Kafka"
+        modules = ("kafka",)
+        icon = "queue"
+
+        def make(self, name, call):
+            return Handle("producer", "Kafka", opens=True) if name == "kafka.KafkaProducer" else None
+
+        def call(self, handle, method, call):
+            return Use("send", "sends", call.shown(0, "topic")) if method == "send" else None
+
+    librariesmod.libraries()
+    monkeypatch.setitem(librariesmod._libraries, "kafka", Kafka())
+    code = ("from kafka import KafkaProducer\n\nproducer = KafkaProducer()\n\n\n"
+            "def main():\n    producer.send('orders', b'1')\n")
+    project = read_project(write(tmp_path, {"app.py": code}))
+    cmap = map_code(project.files, "app.main", libraries=project.libraries())
+    assert [(c.service, c.operation, c.access, c.target) for c in cmap.library_calls] == [
+        ("Kafka", "send", "sends", "orders")]
+    box = next(n for n in code_graph(cmap).nodes if n.kind == "service")
+    assert (box.label, box.icon, box.lines) == ("Kafka", "queue", ["send orders"])
+
+
+SAM = {
+    "template.yaml": '''
+Transform: AWS::Serverless-2016-10-31
+Globals:
+  Function:
+    Runtime: python3.13
+    Environment:
+      Variables:
+        STAGE: prod
+Resources:
+  ResizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: images.resize.run
+      Timeout: 20
+      Layers:
+        - !Ref PillowLayer
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref Uploads
+        - Statement:
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: "*"
+  Uploads:
+    Type: AWS::S3::Bucket
+''',
+    "src/images/__init__.py": "",
+    "src/images/resize.py": '''
+import os
+import boto3
+import PIL
+
+s3 = boto3.client("s3")
+
+
+def run(event, context):
+    s3.get_object(Bucket=os.environ["BUCKET"], Key="a")
+    s3.put_object(Bucket=os.environ["STAGE"], Key="b", Body=b"")
+    boto3.client("sqs").send_message(QueueUrl="q", MessageBody="done")
+''',
+}
+
+
+def test_a_sam_template_names_the_entry_point_and_what_its_role_allows(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+    from code_node.pages import PageOptions, map_entry
+
+    root = write(tmp_path, SAM)
+    project = read_project(root)
+    assert list(project.deploy_files) == ["template.yaml"]
+    found = entry_points(project)
+    # run() isn't named like a handler: the template is what says it is one
+    assert [(e.name, e.why, e.platform) for e in found] == [
+        ("images.resize.run", "ResizeFunction in template.yaml", "lambda")]
+    cmap, _ = map_entry(root, found[0], PageOptions())
+    fn = cmap.function
+    assert (fn.name, fn.runtime, fn.timeout, fn.env_names, fn.layers) == (
+        "ResizeFunction", "python3.13", 20, {"STAGE"}, ["PillowLayer"])
+    assert {i.top: i.source for i in cmap.imports}["PIL"] == "package"
+    said = " ".join(message for _, message in code_map_findings(cmap))
+    assert "BUCKET isn't set on ResizeFunction" in said and "STAGE isn't" not in said
+    assert ("ResizeFunction's role in template.yaml (it has S3ReadPolicy and an inline statement) doesn't allow "
+            "s3:PutObject") in said
+    assert "Add S3WritePolicy to ResizeFunction's Policies in template.yaml" in said
+    s3 = next(n for n in code_graph(cmap).nodes if n.label == "S3")
+    assert s3.flags == {"PutObject": "not allowed"} and s3.tone == "warn"
+    assert next(n for n in code_graph(cmap).nodes if n.label == "SQS").tone == ""  # the inline statement allows it
+
+
+def test_a_role_it_cant_read_leaves_permissions_unchecked(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+    from code_node.pages import PageOptions, map_entry
+
+    files = dict(SAM)
+    files["template.yaml"] = files["template.yaml"].replace(
+        "      Policies:", "      Role: arn:aws:iam::123456789012:role/shared\n      Policies:")
+    root = write(tmp_path, files)
+    cmap, _ = map_entry(root, entry_points(read_project(root))[0], PageOptions())
+    assert cmap.function.permissions is None
+    assert "doesn't allow" not in " ".join(message for _, message in code_map_findings(cmap))
+
+
+def test_serverless_yml_names_the_entry_point(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+    from code_node.pages import PageOptions, map_entry
+
+    root = write(tmp_path, {
+        "serverless.yml": '''
+service: jobs
+provider:
+  name: aws
+  runtime: python3.12
+  environment:
+    TABLE: jobs
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: [dynamodb:GetItem, dynamodb:Query]
+          Resource: "*"
+functions:
+  sweep:
+    handler: jobs/sweep.go
+''',
+        "jobs/__init__.py": "",
+        "jobs/sweep.py": ('import os\nimport boto3\n\n\ndef go(event, context):\n'
+                          '    boto3.resource("dynamodb").Table(os.environ["TABLE"]).delete_item(Key={})\n'),
+    })
+    found = entry_points(read_project(root))
+    assert [(e.name, e.why) for e in found] == [("jobs.sweep.go", "sweep in serverless.yml")]
+    cmap, _ = map_entry(root, found[0], PageOptions())
+    assert (cmap.function.timeout, cmap.function.env_names) == (6, {"TABLE"})
+    said = " ".join(message for _, message in code_map_findings(cmap))
+    assert "sweep's role in serverless.yml" in said and "dynamodb:DeleteItem" in said
+    assert "Add a statement that allows dynamodb:DeleteItem to provider.iam.role.statements" in said
+
+
+def test_the_command_lists_its_plugins(capsys) -> None:
+    assert main(["--plugins"]) == 0
+    out = capsys.readouterr().out
+    assert "lambda  AWS Lambda" in out and "redis    Redis  (redis)" in out and "sam         AWS SAM" in out
+
+
+CART_SNAPSHOT = Path(__file__).parent / "snapshots" / "cart-service.txt"
+
+
+def test_the_cart_example_matches_its_snapshot() -> None:
+    """
+    The cart example, which every kind of plugin reads (its SAM template, Redis, PostgreSQL, OpenAI and boto3 on
+    Lambda): its page as text, then its findings, against tests/snapshots/cart-service.txt.
+    UPDATE_SNAPSHOTS=1 uv run pytest writes it anew.
+    """
+    from code_node.analysis.findings import code_map_findings
+    from code_node.kit.render import _render_text
+    from code_node.pages import PageOptions, map_entry
+    from code_node.report.build import page_blocks
+
+    root = Path(__file__).parent.parent / "examples" / "cart-service"
+    entry = entry_points(read_project(root))[0]
+    cmap, project = map_entry(root, entry, PageOptions())
+    text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
+                                    sources=project.files), 100)
+    text += "\n\n-- Findings --\n" + "\n".join(f"{level}: {message}" for level, message in code_map_findings(cmap))
+    text += "\n"
+    if os.environ.get("UPDATE_SNAPSHOTS"):
+        CART_SNAPSHOT.write_text(text)
+    assert text.replace("'", '"') == CART_SNAPSHOT.read_text().replace("'", '"')
+
+
+def test_services_show_their_real_logos(tmp_path: Path) -> None:
+    from code_node.report.brands import logo, logo_names
+    from code_node.report.graph import _g_logo
+
+    assert all(logo(name) is not None for name in logo_names())  # logos/ has a .svg for each one brands.py names
+    project = read_project(write(tmp_path, {"app.py": STORES}))
+    graph = code_graph(map_code(project.files, "app.handler", libraries=project.libraries(), platform="lambda"))
+    boxes = {n.label: n for n in graph.nodes}
+    assert _g_logo(boxes["Redis"]) == logo("redis") and _g_logo(boxes["SQLite"]) == logo("sqlite")
+    assert _g_logo(boxes["handler()"]) is None  # its own functions keep their line drawing
+    page = render_page(page_blocks_for(project, "app.handler"), "x")
+    assert page.count('<svg class="logo"') == 4  # SQLite, Redis, MongoDB, Anthropic
+    assert 'id="cnl-sqlite-' in page  # each logo's gradient ids get its own prefix, so two logos never share one
+    assert "fill=\"#181818\"" not in page  # Anthropic's black follows the text colour, for dark mode
+
+
+def page_blocks_for(project, entry: str) -> list:
+    from code_node.report.build import page_blocks
+
+    cmap = map_code(project.files, entry, libraries=project.libraries(), platform="lambda")
+    return page_blocks(cmap, project="x", max_functions=24, max_depth=5, sources=project.files)

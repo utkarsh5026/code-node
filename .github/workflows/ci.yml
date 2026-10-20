@@ -55,3 +55,5 @@ jobs:
           uv venv "$RUNNER_TEMP/wheel"
           uv pip install --python "$RUNNER_TEMP/wheel" dist/*.whl
           "$RUNNER_TEMP/wheel/bin/code-node" examples/orders-service --no-open -o "$RUNNER_TEMP/page.html"
+          "$RUNNER_TEMP/wheel/bin/code-node" examples/cart-service --no-open -o "$RUNNER_TEMP/cart.html" \
+            | grep "Deployed as CheckoutFunction in template.yaml"

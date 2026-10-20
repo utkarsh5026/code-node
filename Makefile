@@ -8,7 +8,7 @@ OUT    ?= /tmp/code-node-page.html
 PORT   ?= 8765
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint fix try serve mermaid shots site-graph docs docs-serve package check \
+.PHONY: help install test lint fix try serve mermaid shots site-graph logos figures docs docs-serve package check \
 	tool clean
 
 help: ## list the targets
@@ -42,6 +42,12 @@ shots: ## remake docs/images/ (needs Chrome)
 
 site-graph: ## remake the home page's graph (docs/snippets/graph-trace.svg)
 	$(RUN) python scripts/site_graph.py
+
+logos: ## download the pinned logos into src/code_node/report/logos/
+	$(RUN) python scripts/logos.py
+
+figures: ## remake the docs' plugin figures (docs/images/plugins-mix-*.svg, reaches-*.svg)
+	$(RUN) python scripts/docs_figures.py
 
 docs: ## build the docs site, failing on a broken link
 	$(RUN) mkdocs build --strict
