@@ -118,7 +118,8 @@ def test_a_function_whose_calls_are_left_out_has_a_graph_of_its_own(tmp_path: Pa
     assert [n.label for n in opened.nodes if n.kind == "aws"] == ["S3"]  # what's below it still reaches S3
     views = graph_views(cmap, graph, max_functions=4)
     assert views[0].name == "app.route" and views[0].path == ["app.lambda_handler", "app.route"]
-    assert everything_graph(cmap, graph).hidden == 0
+    everything = everything_graph(cmap, graph)
+    assert everything is not None and everything.hidden == 0
 
 
 def test_the_page_opens_a_box_s_calls_with_javascript_and_works_without(tmp_path: Path) -> None:
