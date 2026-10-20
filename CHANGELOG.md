@@ -4,6 +4,8 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Fixed
 
 - Modules beside the entry point's file are read as its own code when it imports them by their own names, as a
@@ -191,7 +193,8 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 - `--platform NAME` runs a platform's checks whatever the entry point is; `--lambda` is short for
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
-[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/utkarsh5026/code-node/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/utkarsh5026/code-node/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/utkarsh5026/code-node/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/utkarsh5026/code-node/releases/tag/v0.1.0
