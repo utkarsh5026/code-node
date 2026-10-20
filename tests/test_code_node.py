@@ -744,6 +744,19 @@ def test_services_show_their_real_logos(tmp_path: Path) -> None:
     assert "fill=\"#181818\"" not in page  # Anthropic's black follows the text colour, for dark mode
 
 
+def test_logos_come_in_two_sizes_as_favicons_do(tmp_path: Path) -> None:
+    from code_node.report.brands import AWS_GLYPHS, fills, logo, logo_for, small_logo
+
+    # AWS's detailed icons have a small mark for 16 to 32 px; other brands' logos are simple enough as they are
+    assert all(small_logo(name) is not None for name in AWS_GLYPHS if logo(name) is not None and fills(logo(name)))
+    assert small_logo("redis") is None and logo_for("redis", 16) == logo("redis")
+    assert logo_for("aws-s3", 24) == small_logo("aws-s3") and logo_for("aws-s3", 64) == logo("aws-s3")
+    project = read_project(write(tmp_path, {"app.py": HANDLER}))
+    page = render_page(page_blocks_for(project, "app.lambda_handler"), "x")
+    assert page.count('class="logo lgs"') == page.count('class="logo lgf"') == 1  # S3: both, the screen picks
+    assert "@media (min-resolution:2dppx)" in page
+
+
 def page_blocks_for(project, entry: str) -> list:
     from code_node.report.build import page_blocks
 

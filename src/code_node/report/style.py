@@ -135,6 +135,8 @@ _EXTRA_CSS = """\
 .cnd .cg .k-service{--c:#0891b2;--t:rgba(8,145,178,.12)}
 .cnd .cg .bdg.lg{fill:#fff;stroke:rgba(127,127,127,.35);stroke-opacity:1}
 .cnd .cg .logo{color:#1b1d22}
+.cnd .cg .logo.lgf{display:none}
+@media (min-resolution:2dppx){.cnd .cg .logo.lgs{display:none}.cnd .cg .logo.lgf{display:inline}}
 .cnd .cg .k-start{--c:#64748b;--t:rgba(100,116,139,.13)}
 .cnd .cg .k-function{--c:currentColor;--t:rgba(127,127,127,.12)}
 .cnd .cg .k-function .ico{stroke-opacity:.72}

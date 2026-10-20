@@ -18,7 +18,7 @@ from ..kit.render import _prose
 from ..kit.text import _esc
 
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode
-from .brands import AWS_LOGOS, SERVICE_LOGOS, logo
+from .brands import AWS_LOGOS, SERVICE_LOGOS, fills, logo, small_logo
 from .editor import editor_name, open_at
 from .style import _ROOT
 
@@ -177,36 +177,62 @@ def _g_wrap(text: str, room: float, measure: Callable[[str], float], most: int =
     return [_g_fit(x, room, measure) for x in lines[:most]]
 
 
-def _g_logo(n: GraphNode) -> tuple[int, int, str] | None:
+def _g_logo_name(n: GraphNode) -> str | None:
     """
-    The real logo a box shows, when it has one: the one its plugin names as its icon, else its AWS service's
-    ('aws-s3'), else its service's by name (Redis, PostgreSQL, OpenAI). None for a box drawn with a line icon.
+    The name of the real logo a box shows, when it has one: the one its plugin names as its icon, else its AWS
+    service's ('aws-s3'), else its service's by name (Redis, PostgreSQL, OpenAI). None for a box drawn with a line
+    icon.
     """
-    if n.icon:
-        found = logo(n.icon)
-        if found is not None:
-            return found
+    if n.icon and logo(n.icon) is not None:
+        return n.icon
     if n.kind == "aws":
         name = AWS_LOGOS.get(n.id.removeprefix("aws-"))
     elif n.kind == "service":
         name = SERVICE_LOGOS.get(n.label.lower())
     else:
         return None
+    return name if name and logo(name) is not None else None
+
+
+def _g_logo(n: GraphNode) -> tuple[int, int, str] | None:
+    """
+    The full art of the logo a box shows, or None.
+    """
+    name = _g_logo_name(n)
     return logo(name) if name else None
+
+
+def _g_logo_svg(found: tuple[int, int, str], x: float, y: float, size: float, css: str) -> str:
+    width, height, body = found
+    return (f'<svg class="logo{" " + css if css else ""}" x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}" '
+            f'viewBox="0 0 {width} {height}" fill="currentColor" aria-hidden="true">{body}</svg>')
+
+
+_G_BADGE = 32  # a box's badge, square: a logo needs the pixels, or its fine lines blur together on a 1x screen
 
 
 def _g_badge(n: GraphNode, badge_y: float) -> str:
     """
-    A box's badge: its service's logo on a plain tile, else a line icon in the box's colour.
+    A box's badge: an AWS service's icon filling it, another service's logo on a white tile, else a line icon in the
+    box's colour.
     """
+    size = _G_BADGE
     found = _g_logo(n)
     if found is None:
-        return (f'<rect class="bdg" x="12" y="{badge_y}" width="28" height="28" rx="8"/>'
-                f'<path class="ico" transform="translate(18,{badge_y + 6})" d="{_G_ICONS[_g_icon(n)]}"/>')
-    width, height, body = found
-    return (f'<rect class="bdg lg" x="12" y="{badge_y}" width="28" height="28" rx="8"/>'
-            f'<svg class="logo" x="16" y="{badge_y + 4}" width="20" height="20" viewBox="0 0 {width} {height}" '
-            f'fill="currentColor" aria-hidden="true">{body}</svg>')
+        icon = 18  # the 16-unit drawings, a little larger
+        return (f'<rect class="bdg" x="12" y="{badge_y}" width="{size}" height="{size}" rx="8"/>'
+                f'<path class="ico" transform="translate({12 + (size - icon) / 2:g},{badge_y + (size - icon) / 2:g}) '
+                f'scale({icon / 16:g})" d="{_G_ICONS[_g_icon(n)]}"/>')
+    small = small_logo(_g_logo_name(n) or "")
+    if fills(found):  # AWS's: both sizes fill the badge, the small mark on a 1x screen and the full art on a 2x one
+        clip = f"cn-badge-{n.id}"
+        art = (_g_logo_svg(small, 12, badge_y, size, "lgs") + _g_logo_svg(found, 12, badge_y, size, "lgf")
+               if small is not None else _g_logo_svg(found, 12, badge_y, size, ""))
+        return (f'<clipPath id="{clip}"><rect x="12" y="{badge_y}" width="{size}" height="{size}" rx="8"/></clipPath>'
+                f'<g clip-path="url(#{clip})">{art}</g>')
+    pad = 4
+    return (f'<rect class="bdg lg" x="12" y="{badge_y}" width="{size}" height="{size}" rx="8"/>'
+            + _g_logo_svg(found, 12 + pad, badge_y + pad, size - 2 * pad, ""))
 
 
 def _g_icon(n: GraphNode) -> str:
@@ -679,7 +705,7 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
     if n.sub:
         parts.append(f'<text class="sb" x="52" y="{45 + _GRAPH_LABEL_LINE * (len(card.label) - 1)}">'
                      f"{_g_sub_svg(n, w - 52 - 12)}</text>")
-    badge_y = 13 if n.sub else 11
+    badge_y = 11 if n.sub else 9
     parts.append(_g_badge(n, badge_y))
     top = card.head
     if card.route:
@@ -726,7 +752,7 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
         parts.append(f'<text class="pr mo" x="14" y="{top + 13 + _GRAPH_PROSE * len(card.prose):.1f}">'
                      f"{_esc(said)}</text>")
     if warn:
-        parts.append(f'<g class="wb" transform="translate({w - 21:.0f},{badge_y + 14})"><circle r="8.5"/>'
+        parts.append(f'<g class="wb" transform="translate({w - 21:.0f},{badge_y + _G_BADGE / 2:.0f})"><circle r="8.5"/>'
                      '<path d="M0,-4.2V.6M0,3.9V4"/></g>')
     classes = " ".join(["cn", f"k-{n.kind}", f"n-{n.id}", *(f"a-{m}" for m in neighbours)]) + (" warn" if warn else "")
     return (f'<g class="{_esc(classes)}" transform="translate({x:.1f},{y:.1f})"><title>{_esc(n.tip or n.label)}</title>'
