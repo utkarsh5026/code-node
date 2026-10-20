@@ -266,7 +266,7 @@ def figures(options: Options) -> None:
 # Release
 
 
-@task("package", "🎁", "build the sdist and wheel, and check them as PyPI would", "Release")
+@task("package", "🎁", "build the sdist and wheel, check them, and install that wheel on your PATH", "Release")
 def package(options: Options) -> None:
     shutil.rmtree(ROOT / "dist", ignore_errors=True)
     python("-m", "build", "-q")
@@ -274,6 +274,8 @@ def package(options: Options) -> None:
     if not built:
         raise TaskFailed("the build left nothing in dist/")
     python("-m", "twine", "check", "--strict", *built)
+    if UV:
+        run(UV, "tool", "install", "--force", "--reinstall", *(path for path in built if path.suffix == ".whl"))
 
 
 def show_tasks() -> None:

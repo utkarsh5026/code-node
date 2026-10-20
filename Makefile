@@ -57,10 +57,11 @@ docs: ## build the docs site, failing on a broken link
 docs-serve: ## serve the docs site locally
 	$(RUN) mkdocs serve
 
-package: ## build the sdist and wheel, and check them as PyPI would
+package: ## build the sdist and wheel, check them, and install that wheel on your PATH
 	rm -rf dist
 	$(RUN) python -m build -q
 	$(RUN) twine check --strict dist/*
+	uv tool install --force --reinstall dist/*.whl
 
 check: lint test try docs package ## everything CI runs
 
