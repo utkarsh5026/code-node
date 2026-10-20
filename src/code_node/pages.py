@@ -6,13 +6,14 @@ once, and the server makes it again on every change.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .analysis.graph import code_graph
 from .analysis.mapping import entry_file, map_code
 from .analysis.model import CodeMap
 from .deploys import find_deployment
+from .history import read_history
 from .project import EntryPoint, Project, read_project
 from .report.build import page_blocks
 from .report.editor import editor_link
@@ -38,6 +39,7 @@ class PageOptions:
     depth: int = GRAPH_DEPTH
     platform: str = ""  # --platform: its checks run whatever the entry point is ('' leaves it to the entry point)
     editor: str = "vscode"  # --editor: the editor its line links open ('vscode', 'cursor'; 'none' for no links)
+    git: bool = True  # what git says about each function (--no-git leaves it out)
 
     @property
     def limits(self) -> tuple[int, int]:
@@ -63,6 +65,8 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
         platform=options.platform or entry.platform,
         deployment=deployment,
     )
+    if options.git:
+        read_history(project.root, cmap.functions)
     return cmap, project
 
 
@@ -87,6 +91,6 @@ def make_mermaid(root: Path, entry: EntryPoint, options: PageOptions) -> str:
     """
     The graph as Mermaid.
     """
-    cmap, _ = map_entry(root, entry, options)
+    cmap, _ = map_entry(root, entry, replace(options, git=False))  # Mermaid has nowhere to say it
     max_functions, max_depth = options.limits
     return code_graph(cmap, max_functions=max_functions, max_depth=max_depth).mermaid()

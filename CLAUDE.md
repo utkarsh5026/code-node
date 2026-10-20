@@ -51,6 +51,7 @@ Slash commands in `.claude/commands/`: `/check` (lint, tests, docs, package), `/
 | `src/code_node/libraries/` | **Pure, no I/O.** `Library` (a library's clients: `make`, `attribute`, `item`, `call`), `Handle` (what a name holds), `Use` (what a call does), `Call` (the call as a plugin sees it), the registry (`code_node.libraries`), and `redis.py`, `sql.py`, `mongo.py`, `llm.py` |
 | `src/code_node/deploys/` | **Pure, no I/O.** `Deploy` (a kind of deploy file: `deployments(files, code)` → `Deployment`s, `grant`), the registry (`code_node.deploys`), YAML with CloudFormation tags, IAM policy helpers, and `sam.py`, `serverless.py` |
 | `src/code_node/pages.py` | `PageOptions`, `make_page` / `make_mermaid`: read the folder, map, draw (what the command and the server share) |
+| `src/code_node/history.py` | What git says about each function shown (`read_history`: `git blame` once per file, onto `CodeFunction.history`). Read-only git, with no file system monitor or text conversion, and none at all when the folder's own config names a filter command |
 | `src/code_node/serve.py` | `--serve`: `LivePage` (the latest page, a version, a Condition), a polling watcher thread, `ThreadingHTTPServer` with `/` and `/events` (Server-Sent Events) |
 | `src/code_node/report/` | Drawing: `brands.py` (which logo each AWS service and library service gets, read from `logos/*.svg` and, for AWS's, a small mark in `logos/small/` for 16 to 32 px; `logo_for(name, pixels)` picks, and the page's graph has both and picks by screen density. Written by `scripts/logos.py`: never edit them), `graph.py` (the SVG layout), `walk.py` (Step by step: the steps in run order beside their code), `tabs.py` (the Graph / Step by step tabs), `outline.py` (the step tree, for text), `build.py` (`page_blocks`, the page), `style.py` (CSS, `render_page`) |
 | `src/code_node/kit/` | Report blocks (`_Title`, `_Cards`, `_Table`, `_Findings`, ...) and the HTML/text renderer, copied from aws-analyzer's `_kit` |
@@ -69,7 +70,8 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
 
 ## Rules
 
-- **Never run the code being read.** No `import`, `exec` or subprocess on it. botocore is read for its service models
+- **Never run the code being read.** No `import`, `exec` or subprocess on it. The one subprocess is git, in
+  `history.py`, to read blame, never with anything the folder's own config could make it run. botocore is read for its service models
   only, and it stays optional at run time (`_aws_model` returns None without it).
 - **Generic first, platforms as plugins.** The reader, findings, graph and page are for any Python. What's
   different where the code runs (entry points, what they're called with, findings, wording) is a `Platform` in

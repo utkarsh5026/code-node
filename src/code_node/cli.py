@@ -99,6 +99,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default="vscode",
         help="the editor the page's line links open (default vscode; none for no links)",
     )
+    parser.add_argument(
+        "--no-git", action="store_true", help="leave out what git says about each function (who changed it, when)"
+    )
     return parser.parse_args(argv)
 
 
@@ -286,7 +289,12 @@ def main(argv: list[str] | None = None) -> int:
     if entry is None:
         return 1
     options = PageOptions(
-        draw_all=args.all, functions=args.functions, depth=args.depth, platform=args.platform, editor=args.editor
+        draw_all=args.all,
+        functions=args.functions,
+        depth=args.depth,
+        platform=args.platform,
+        editor=args.editor,
+        git=not args.no_git,
     )
     if args.mermaid:
         print(make_mermaid(project.root, entry, options))

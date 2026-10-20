@@ -19,6 +19,7 @@ from ..kit.text import _esc
 
 from ..analysis.findings import _short_name
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode, GraphView
+from .changes import history_html
 from .brands import AWS_LOGOS, SERVICE_LOGOS, fills, logo, small_logo
 from .editor import editor_name, open_at
 from .style import _ROOT
@@ -1195,6 +1196,7 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
             if n.kind in ("handler", "function", "start")
             else '<p class="csd csl">The lit lines are where the code uses it.</p>'
         )
+    said += history_html(n.history)
     mono = " mono" if n.kind in ("handler", "function") else ""
     return (
         f'<aside class="cside" id="{_esc(panel or _g_panel_id(n))}" aria-label="{_esc("The code of " + n.label)}">'
@@ -1300,6 +1302,10 @@ def _g_tip(n: GraphNode, lines_of: Callable[[str], list[str]], opens: bool) -> t
         else:
             body.append(f'<p class="ctp">{_g_tip_text(line)}</p>')
             tall += 23 * math.ceil(len(line) / 42) + 10
+    changed = history_html(n.history, short=True)
+    if changed:
+        body.append(changed)
+        tall += 23 * math.ceil(len(re.sub(r"<[^>]*>", "", changed)) / 42) + 14
     if warnings:
         body.append(
             '<div class="ctw"><b>Warning</b><ul>'

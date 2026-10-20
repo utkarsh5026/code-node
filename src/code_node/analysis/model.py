@@ -174,6 +174,50 @@ class EventField:
 
 
 @dataclass
+class Commit:
+    """
+    A commit, as git blame tells it.
+    """
+
+    sha: str
+    author: str
+    time: int  # when it was made, in seconds since 1970
+    subject: str  # its message's first line
+    url: str = ""  # its page on the repository's host, when that's GitHub or GitLab
+
+    @property
+    def short(self) -> str:
+        return self.sha[:7]
+
+
+@dataclass
+class History:
+    """
+    What git says about a function's lines as they are now: the commit that last changed one of them, how many commits
+    and people they come from, and how many have changed since the last commit. Read by history.py; None on a
+    function when the folder isn't in git.
+    """
+
+    last: Commit | None  # the newest commit among its lines; None when none of them is committed yet
+    commits: int  # the commits its lines come from
+    authors: list[str]  # who wrote them, most lines first
+    first: int  # when the oldest of them was made (about when the function was written), in seconds since 1970
+    uncommitted: int  # its lines changed since the last commit
+    now: int  # when this was read, for 'three days ago'
+
+    def ago(self, time: int) -> str:
+        """
+        'today', '3 days ago', '2 months ago', '1 year ago'.
+        """
+        days = max(0, self.now - time) // 86_400
+        for size, unit in ((365, "year"), (30, "month"), (7, "week"), (1, "day")):
+            if days >= size:
+                count = days // size
+                return f"{count} {unit}{'' if count == 1 else 's'} ago"
+        return "today"
+
+
+@dataclass
 class CodeFunction:
     """
     One of the code's own functions that runs when the entry point does.
@@ -190,6 +234,7 @@ class CodeFunction:
     # nearest around the call, else the nearest `if x: return` above it ('args.serve', not every check before it)
     depth: int = 0  # calls from the entry point (the entry point is 0)
     is_async: bool = False  # async def: a call that blocks in it holds up everything else on its event loop
+    history: History | None = None  # what git says about its lines, when the folder is in git (history.py)
 
 
 @dataclass
