@@ -218,8 +218,9 @@ def _note_said(kind: str, text: str) -> str:
         return f"Sends an HTTP {_esc(verb)} request" + (f" to {_code(where)}" if where else "")
     if kind == "env":
         return f"Reads the environment variable {_code(text)}"
-    if kind == "event":
-        return f"Reads {_code(text)} from the event"
+    if kind == "event":  # 'request query.q': the platform's word for its input, then the field
+        word, _, part = text.partition(" ")
+        return f"Reads {_code(part)} from the {_esc(word)}"
     return _esc(text[:1].upper() + text[1:])
 
 

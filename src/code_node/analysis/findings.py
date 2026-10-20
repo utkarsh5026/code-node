@@ -252,7 +252,8 @@ def _code_summary(cmap: CodeMap) -> list[str]:
     if cmap.entry is None:
         return out
     entry = cmap.entry.rsplit(".", 1)[-1]
-    out.append(f"Each call runs {entry}() in {file}.")
+    if any(f.name == cmap.entry for f in cmap.functions):  # not an app object: its routes are said below
+        out.append(f"Each call runs {entry}() in {file}.")
     labels = [f.label for f in cmap.event]
     leaves = [label for label in labels if not any(
         other.startswith((label + "[", label + ".", label + " (")) for other in labels)]

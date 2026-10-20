@@ -153,7 +153,7 @@ _EXTRA_CSS = """\
 .cnd .cg .k-aws{--c:#3b82f6;--t:rgba(59,130,246,.12)}
 .cnd .cg .k-http{--c:#db2777;--t:rgba(219,39,119,.11)}
 .cnd .cg .k-service{--c:#0891b2;--t:rgba(8,145,178,.12)}
-.cnd .cg .bdg.lg{fill:#fff;stroke:rgba(127,127,127,.35);stroke-opacity:1}
+.cnd .cg .cn .bdg.lg{fill:#fff;stroke:rgba(127,127,127,.35);stroke-opacity:1}
 .cnd .cg .logo{color:#1b1d22}
 .cnd .cg .logo.lgf{display:none}
 @media (min-resolution:2dppx){.cnd .cg .logo.lgs{display:none}.cnd .cg .logo.lgf{display:inline}}

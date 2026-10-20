@@ -18,6 +18,7 @@ from .terms import (
     _ADDED_MODULES, _AWS_KEY_RE, _B64_DECODES, _CACHES, _COLLECTIONS, _COMMANDS, _DEFAULT_TIMEOUTS, _DICT_METHODS,
     _FILE_WRITERS, _GUESSES, _HTTP_METHODS, _HTTP_SESSIONS, _JSON_LOADS, _LOG_LEVELS, _MAP_DEPTH, _MAP_FILES,
     _MAP_RUNS, _MAP_STEPS, _REMOVED_MODULES, _RESOURCE_ACTIONS, _ROUTE_METHODS, _RUNTIME_MODULES, _TRANSFERS,
+    _URL_INCLUDES, _URL_PATHS, _VIEW_METHODS, _VIEW_VERBS, _VIEWSET_ACTIONS,
 )
 from .syntax import (
     _a, _const, _def_line, _doc_line, _ends_early, _is_main_guard, _names_in, _negated, _parse, _secret_spots,
@@ -66,7 +67,8 @@ class _Sym:
     # 'evmethod', 'context', 'env' (os.environ), 'envget', 'envval', 'logger', 'log', 'http', 'httpcall', 'builtin',
     # 'enumerate', 'session' (a boto3 Session), 'super' (super() in a method of class `name`, its self or cls as inner),
     # 'lib' (a library plugin's handle: name is the plugin), 'libmember' (one's method `sub`, the handle as inner),
-    # 'text' (text the code put together: sub is its code, path what from the input went into it)
+    # 'text' (text the code put together: sub is its code, path what from the input went into it), 'urls' (Django's
+    # include(...): name is the routes' router, the URL conf's module or 'module.router')
     name: str = ""
     sub: str = ""
     path: tuple[str, ...] = ()
@@ -137,6 +139,7 @@ class _CodeReader:
     def __init__(self, texts: dict[str, str], names: list[str], root: str, cmap: CodeMap,
                  version: tuple[int, int] | None, libraries: set[str], layers: bool):
         self.texts, self.root, self.cmap, self.version, self.layers = texts, root, cmap, version, layers
+        self.platform = get_platform(cmap.platform)
         self.tops: set[str] = set()  # what's at the package's top: folders and modules
         for name in names:
             if name.startswith(root):
@@ -212,9 +215,11 @@ class _CodeReader:
             cmap.params = [a.arg + ("=…" if i >= plain else "") for i, a in enumerate(positional)]
             cmap.params += ["*" + node.args.vararg.arg] if node.args.vararg else []
             cmap.is_async = isinstance(node, ast.AsyncFunctionDef)
+            route = next((path for _, path, routed, _ in self.routes if routed == key), None)
+            given = self._route_args(key, route) if route is not None else {}  # a route's parameters, by name
+            inputs: list[_Sym | None] = [] if given else [_Sym(kind) for kind in self.platform.inputs]
             with self._collecting() as got:
-                given = [_Sym(kind) for kind in get_platform(cmap.platform).inputs]
-                self._run(key, given, {}, None, None, bound=bound)
+                self._run(key, inputs, given, None, None, bound=bound)
             cmap.steps = got.calls
         elif not cls_name and (name in mod.scope or self.routes):
             assigned = next((n for n in (mod.tree.body if mod.tree else []) if isinstance(n, ast.Assign) and any(
@@ -224,15 +229,17 @@ class _CodeReader:
                             name=cmap.entry)
             frame = _Frame(mod.name, file, cmap.entry, {}, node=assigned)
             with self._collecting() as got:
-                for method, path, key, _ in self.routes:
-                    self._run(key, [], {}, frame, None, label=f"{method} {path}")
+                for method, path, key, _ in list(self.routes):
+                    cls = self.defs[key][2]
+                    self._run(key, [], self._route_args(key, path), frame, None,
+                              bound=_Sym("obj", cls) if cls else None, label=f"{method} {path}")
             step.steps = [CodeStep(c.file, c.line, c.code, "def", c.notes, c.steps, c.calls, c.name, c.seen)
                           for c in got.calls]
             if not self.routes:
                 step.notes.append(("more", "an object this can't follow, not a function"))
             cmap.steps = [step]
         if cmap.entry is None and mod.tree is not None:
-            takes = len(get_platform(cmap.platform).inputs)
+            takes = len(self.platform.inputs)
             cmap.handlers = [f"{n.name}()" for n in mod.tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                              and (not takes or len(n.args.posonlyargs + n.args.args) == takes)]
         cmap.functions = list(self.reached.values())
@@ -556,6 +563,89 @@ class _CodeReader:
                 self.routes.append(("CLI", command, key, _unparse(d.func.value, 60)))
         return key
 
+    def _route_args(self, key: str, path: str) -> dict[str, _Sym | None]:
+        """
+        What a function a route runs is called with, by parameter, as its platform says (FastAPI's order_id from
+        /orders/{order_id}, Django's request): each is part of the input, and listed as read from it.
+        """
+        module, node, cls = self.defs[key]
+        imports = {v.name.split(".")[0] for v in self.modules[module].scope.values() if v is not None and v.kind == "mod"}
+        found = self.platform.route_inputs(node, path, imports, bound=cls is not None)
+        a = node.args
+        positional = a.posonlyargs + a.args
+        optional = {p.arg for p in positional[len(positional) - len(a.defaults):]} | {
+            p.arg for p, default in zip(a.kwonlyargs, a.kw_defaults) if default is not None}
+        for name, part in found.items():
+            if part and part not in self.event_reads:
+                self.event_reads[part] = EventField(part, self.modules[module].file or "", node.lineno,
+                                                    name not in optional)
+        return {name: _Sym("event", path=part) for name, part in found.items()}
+
+    def _url(self, name: str, node: ast.Call, args: list[_Sym | None], frame: _Frame) -> None:
+        """
+        A Django URL conf's path('orders/<int:pk>/', view): a route for a view function, for each method of a
+        class-based view (View.as_view()), or, for include(...), the included routes under this path.
+        """
+        route = _const(node.args[0]) if node.args else None
+        view = node.args[1] if len(node.args) > 1 else None
+        if not isinstance(route, str) or view is None:
+            return
+        if name != "django.urls.path":
+            route = route.removeprefix("^").removesuffix("$")
+        held = args[1] if len(args) > 1 else None
+        if held is not None and held.kind == "urls":
+            self.routes = [(method, f"/{route}{path[1:]}", key, frame.module) if router == held.name else
+                           (method, path, key, router) for method, path, key, router in self.routes]
+        elif held is not None and held.kind == "func":
+            verbs = ""
+            for d in self.defs[held.name][1].decorator_list:
+                called = d.func if isinstance(d, ast.Call) else d
+                said = called.id if isinstance(called, ast.Name) else getattr(called, "attr", "")
+                listed = d.args[0] if isinstance(d, ast.Call) and d.args else None
+                if said in _VIEW_VERBS:
+                    verbs = _VIEW_VERBS[said]
+                elif said in ("require_http_methods", "api_view"):
+                    verbs = ", ".join(str(_const(e)) for e in getattr(listed, "elts", []) if _const(e)) or "GET"
+            self.routes.append((verbs or "ANY", f"/{route}", held.name, frame.module))
+        elif isinstance(view, ast.Call) and isinstance(view.func, ast.Attribute) and view.func.attr == "as_view":
+            cls = self._eval(view.func.value, frame)
+            if cls is None or cls.kind != "class":
+                return
+            for method in _VIEW_METHODS:
+                found = self._member(cls.name, method)
+                if found and found[0] == "method":
+                    self.routes.append((method.upper(), f"/{route}", found[1], frame.module))
+
+    def _include(self, node: ast.Call, frame: _Frame) -> _Sym | None:
+        """
+        Django's include('shop.urls') (or include(router.urls)): the URL conf it reads, loaded so its routes are
+        found, for the path() it's given to put them under.
+        """
+        target = node.args[0] if node.args else None
+        if isinstance(target, ast.Tuple) and target.elts:
+            target = target.elts[0]
+        module = _const(target)
+        if isinstance(module, str) and module in self.sources:
+            self._load_chain(module)
+            return _Sym("urls", module)
+        if isinstance(target, ast.Attribute) and target.attr == "urls":
+            return _Sym("urls", f"{frame.module}.{_unparse(target.value, 60)}")
+        return None
+
+    def _viewset(self, prefix: str, node: ast.Call, router: str, frame: _Frame) -> None:
+        """
+        A Django REST framework router's register('orders', OrderViewSet): a route for each of the ViewSet's own
+        actions (list, retrieve...) and each method of an APIView.
+        """
+        cls = self._eval(node.args[1], frame)
+        if cls is None or cls.kind != "class":
+            return
+        actions = {**_VIEWSET_ACTIONS, **{method: (method.upper(), False) for method in _VIEW_METHODS}}
+        for action, (verb, detail) in actions.items():
+            found = self._member(cls.name, action)
+            if found and found[0] == "method":
+                self.routes.append((verb, f"/{prefix}/" + ("<pk>/" if detail else ""), found[1], router))
+
     def _define_class(self, node: ast.ClassDef, frame: _Frame) -> list[CodeStep]:
         key = f"{frame.module if frame.top else frame.function}.{node.name}"
         info: dict[str, Any] = {"methods": {}, "attrs": {}, "bases": []}
@@ -641,7 +731,7 @@ class _CodeReader:
                 elif own:
                     value = self.modules[base].scope.get(alias.name) if base in self.modules else None
                 else:
-                    value = _Sym("mod", sub)
+                    value = _Sym("event") if sub in self.platform.input_objects else _Sym("mod", sub)
                 frame.scope[alias.asname or alias.name] = value
         loaded = [self.modules[name] for name in self.modules if name not in before]
         calls = [step for mod in loaded for step in self._module_step(mod)]
@@ -721,7 +811,7 @@ class _CodeReader:
         service = _service_name(name) if name and name != "?" else "boto3"
         last = name.rsplit(".", 1)[-1]
         said = {
-            "event": f"event {_event_label(value.path)}" if value.path else "the event",
+            "event": self._input_label(value.path) if value.path else f"the {self.platform.input_word}",
             "envval": f"env {name}", "env": "os.environ", "context": "its context",
             "client": f"{_a(service)} {service} client", "resource": f"{_a(service)} {service} resource",
             "res": f"{_a(service)} {service} {value.sub or 'resource object'}",
@@ -820,6 +910,8 @@ class _CodeReader:
         kind = base.kind
         if kind == "mod":
             dotted = f"{base.name}.{attr}"
+            if dotted in self.platform.input_objects:
+                return _Sym("event")
             return _Sym("env") if dotted == "os.environ" else _Sym("mod", dotted)
         if kind == "own":
             sub = f"{base.name}.{attr}"
@@ -848,7 +940,7 @@ class _CodeReader:
         if kind == "event":
             if attr in _DICT_METHODS:
                 return _Sym("evmethod", attr, path=base.path)
-            path = base.path + (attr,)
+            path = base.path + (attr if base.path else self.platform.input_aliases.get(attr, attr),)
             self._event_read(path, node, frame, required=True)
             return _Sym("event", path=path)
         if kind == "env":
@@ -934,6 +1026,8 @@ class _CodeReader:
             return self._builtin(func.name, node, args, frame)
         if kind == "method":
             return self._aws_method(func, node, frame)
+        if kind == "event":  # a method of the input that gives a part of it: request.get_json(), request.json()
+            return func
         if kind == "envget":
             name = _const(node.args[0]) if node.args else None
             if isinstance(name, str):
@@ -996,6 +1090,8 @@ class _CodeReader:
             self._write(node.args[0], node, frame)
         elif attr in _LOG_LEVELS and "log" in receiver.lower():
             self.cur.note("log", _LOG_LEVELS[attr])
+        elif attr == "register" and len(node.args) >= 2 and isinstance(_const(node.args[0]), str):
+            self._viewset(str(_const(node.args[0])), node, f"{frame.module}.{receiver}", frame)
         elif attr == "resolve" and any(router == receiver for *_, router in self.routes):
             for method, path, key, router in self.routes:
                 if router == receiver:
@@ -1008,6 +1104,11 @@ class _CodeReader:
         """
         first = args[0] if args else None
         last = name.rsplit(".", 1)[-1]
+        if name in _URL_INCLUDES:
+            return self._include(node, frame)
+        if name in _URL_PATHS:
+            self._url(name, node, args, frame)
+            return None
         library = library_for(name.split(".")[0])
         if library is not None:
             view = self._view(name, node, frame)
@@ -1189,7 +1290,8 @@ class _CodeReader:
         if info is None:
             end = getattr(node, "end_lineno", None) or node.lineno
             info = self.reached[key] = CodeFunction(key, file, node.lineno, end - node.lineno + 1,
-                                                    _unparse(node.args, 100), _doc_line(node), depth=depth)
+                                                    _unparse(node.args, 100), _doc_line(node), depth=depth,
+                                                    is_async=isinstance(node, ast.AsyncFunctionDef))
         info.depth = min(info.depth, depth)
         if caller is not None and call is not None:
             where = f"{caller.function} line {call.lineno}"
@@ -1343,7 +1445,14 @@ class _CodeReader:
             self.event_reads[path] = EventField(path, frame.file, node.lineno, required)
         elif required and not found.required:
             found.required = True
-        self.cur.note("event", _event_label(path))
+        self.cur.note("event", self._input_label(path))
+
+    def _input_label(self, path: tuple[str, ...]) -> str:
+        """
+        A field of the input as said beside a step, in its platform's word: 'event Records[].body', 'request
+        query.q'.
+        """
+        return f"{self.platform.input_word} {_event_label(path)}"
 
     def _http(self, library: str, method: str, node: ast.Call, frame: _Frame, given: bool = False) -> None:
         args = list(node.args)
@@ -1490,7 +1599,8 @@ class _CodeReader:
             if base is None:
                 return None
             if base.kind == "event" and node.attr not in _DICT_METHODS:
-                return _Sym("event", path=base.path + (node.attr,))
+                attr = node.attr if base.path else self.platform.input_aliases.get(node.attr, node.attr)
+                return _Sym("event", path=base.path + (attr,))
             if base.kind == "obj":
                 found = self._member(base.name, node.attr)
                 return found[1] if found and found[0] == "attr" else None
@@ -1500,6 +1610,8 @@ class _CodeReader:
             key = _const(node.args[0]) if node.args else None
             if base is not None and base.kind == "event" and node.func.attr in ("get", "pop") and isinstance(key, str):
                 return _Sym("event", path=base.path + (key,))
+            if base is not None and base.kind == "event" and node.func.attr not in _DICT_METHODS:
+                return self._peek(node.func, frame)  # request.get_json()
             dotted = _unparse(node.func, 60)
             if (dotted in _JSON_LOADS or dotted in _B64_DECODES) and node.args:
                 inner = self._peek(node.args[0], frame)

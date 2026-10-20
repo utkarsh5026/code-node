@@ -189,6 +189,7 @@ class CodeFunction:
     when: dict[str, str] = field(default_factory=dict)  # a place in called_from -> the test it's called under: the if
     # nearest around the call, else the nearest `if x: return` above it ('args.serve', not every check before it)
     depth: int = 0  # calls from the entry point (the entry point is 0)
+    is_async: bool = False  # async def: a call that blocks in it holds up everything else on its event loop
 
 
 @dataclass

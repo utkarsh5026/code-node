@@ -8,17 +8,17 @@ file in the folder, and how to write your own.
 
 | Kind | How many | Answers | Built in |
 | --- | --- | --- | --- |
-| **Platform** | one per entry point | where it runs: its entry points, what they're called with, its checks | AWS Lambda |
-| **Library** | every one the code imports | what a library's calls reach: a box for each service, with what each call does | Redis, SQL (sqlite3, psycopg2, psycopg, PyMySQL, mysql-connector, asyncpg, SQLAlchemy), MongoDB (PyMongo, Motor), OpenAI and Anthropic |
+| **Platform** | one per entry point | where it runs: its entry points, what they're called with, its checks | AWS Lambda, web apps (FastAPI, Flask, Django) |
+| **Library** | every one the code imports | what a library's calls reach: a box for each service, with what each call does | Redis, SQL (sqlite3, psycopg2, psycopg, PyMySQL, mysql-connector, asyncpg, SQLAlchemy, Django's `connection`), MongoDB (PyMongo, Motor), OpenAI and Anthropic |
 | **Deploy file** | every one in the folder | what the deploy says: the handler, the Python, the timeout, the variables, what the role allows | AWS SAM / CloudFormation (`template.yaml`), Serverless Framework (`serverless.yml`) |
 
 None of them needs a flag. A library plugin turns on when the code imports one of its modules, and a deploy plugin
 when its file is in the folder. `code-node --plugins` lists what's installed.
 
 ![What code-node knows: AWS through boto3, PostgreSQL, MySQL, SQLite, MongoDB, Redis, OpenAI, Anthropic, AWS Lambda,
-plain Python, AWS SAM and Serverless](images/reaches-light.svg#only-light){ .cn-figure loading=lazy }
+FastAPI, Flask, Django, plain Python, AWS SAM and Serverless](images/reaches-light.svg#only-light){ .cn-figure loading=lazy }
 ![What code-node knows: AWS through boto3, PostgreSQL, MySQL, SQLite, MongoDB, Redis, OpenAI, Anthropic, AWS Lambda,
-plain Python, AWS SAM and Serverless](images/reaches-dark.svg#only-dark){ .cn-figure loading=lazy }
+FastAPI, Flask, Django, plain Python, AWS SAM and Serverless](images/reaches-dark.svg#only-dark){ .cn-figure loading=lazy }
 
 ## What they find together { #together }
 
@@ -61,6 +61,36 @@ built from event body (JSON).user"), and each step it reaches is flagged.
 !!! tip "Worth knowing"
     A role code-node can't read (one made elsewhere, a managed policy it doesn't know, a SAM connector) leaves
     permissions unchecked rather than guessed: it never says a call is denied unless the file says so.
+
+## Web apps { #web }
+
+A FastAPI, Flask or Django app is an entry point of the web platform, and each route is called with the request.
+What the code takes from it is followed like a Lambda handler's event: into SQL, shell commands and the calls it
+reaches, and listed in the graph's first box, "The request".
+[`examples/books-api`](https://github.com/utkarsh5026/code-node/tree/main/examples/books-api) is a FastAPI app with
+one of each finding below.
+
+| Framework | Routes from | The request is |
+| --- | --- | --- |
+| FastAPI | `@app.get("/orders/{order_id}")`, on an app or an `APIRouter` | each parameter: `path.order_id`, `query.q`, the body (a model), or where `Query()`, `Header()`, `Cookie()`, `Form()`, `File()` say (`Annotated[...]` too). `Depends()` isn't from the request. A `Request` is all of it |
+| Flask | `@app.route("/users/<int:user_id>")`, on an app or a `Blueprint` | each URL value (`path.user_id`), and `flask.request`: `args.q`, `form.x`, `json.x` (`get_json()`) |
+| Django | `urlpatterns` in a `urls.py`: `path()`, `re_path()`, `include()`, `View.as_view()`, Django REST framework's `router.register()` | the view's first parameter (`GET.status`, `POST.x`, `body`) and each URL value (`path.pk`) |
+
+```console
+$ code-node examples/books-api --no-open
+books.main.app: 9 functions, 1 AWS calls, 6 through libraries (Redis, PostgreSQL)
+```
+
+| It finds | Because |
+| --- | --- |
+| SQL injection | an f-string, `+` or `%` puts the request into the statement: `search()` builds its `SELECT` from `request query.q` |
+| Shell injection | `export()` runs `pandoc` with `shell=True` and `request query.fmt` in the command |
+| A blocked event loop | `requests.get()`, `time.sleep()` or a boto3 call in an `async def` route holds up every other request on that worker |
+| A connection on every request | a database connection opened in the route rather than once, as a pool |
+
+!!! tip "Worth knowing"
+    The site's `urls.py` is offered before an app's it includes, and its routes come out under the path they're
+    included at (`/api/orders/`). Start from an app's `urls.py` to see only its own.
 
 ## Write a library plugin { #library }
 

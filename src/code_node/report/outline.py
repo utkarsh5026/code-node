@@ -35,7 +35,7 @@ _NOTE_TIPS = {  # what an outline tag means, on hover
     "aws-signs": "a signed link for this AWS call: no request is sent now", "client": "a client for AWS or a service",
     "lib-reads": "a call that reads", "lib-writes": "a call that writes", "lib-sends": "a call that sends a message",
     "lib-runs": "a call that runs something",
-    "env": "an environment variable it reads", "event": "a field of the event it reads", "http": "an HTTP request",
+    "env": "an environment variable it reads", "event": "a field of its input it reads", "http": "an HTTP request",
     "log": "a log line", "file": "a file it writes", "sleep": "a pause",
     "command": "a command run as another process", "warn": "worth a look", "route": "a web route",
     "more": "",
@@ -47,18 +47,19 @@ _FOLDED_KINDS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs"
 
 def _note_text(kind: str, text: str) -> str:
     """
-    An outline tag in words: 'S3 GetObject (reads)', 'env DB_HOST', 'event Records[].body'.
+    An outline tag in words: 'S3 GetObject (reads)', 'env DB_HOST', 'event Records[].body' (a field of the input
+    comes with its platform's word for it: 'request query.q').
     """
     if kind.startswith(("aws-", "lib-")):
         return f"{text.replace(': ', ' ', 1) if kind.startswith('lib-') else text} ({kind[4:]})"
-    return f"{kind} {text}" if kind in ("env", "event") else text
+    return f"{kind} {text}" if kind == "env" else text
 
 
 def _chips_html(notes: Iterable[tuple[str, str]]) -> str:
     out = []
     for kind, text in notes:
         word = f"<i>{_esc(kind[4:])}</i>" if kind.startswith(("aws-", "lib-")) else ""
-        label = f"{kind} {text}" if kind in ("env", "event") else text.replace(": ", " ", 1) if kind.startswith(
+        label = f"{kind} {text}" if kind == "env" else text.replace(": ", " ", 1) if kind.startswith(
             "lib-") else text
         out.append(f'<span class="nt n-{_esc(kind)}" title="{_esc(_NOTE_TIPS.get(kind, ""))}">{_esc(label)}{word}</span>')
     return "".join(out)

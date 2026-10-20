@@ -53,7 +53,8 @@ class GraphNode:
     code: list[CodeSpan] = field(default_factory=list)  # the lines of code it's about
     more: list[str] = field(default_factory=list)  # its own functions it calls that the graph leaves out: 'save()'
     when: str = ""  # a function called only under an if, everywhere it's called: 'check(order)'
-    icon: str = ""  # a service's icon, when its plugin names one: 'database', 'queue', 'spark'
+    icon: str = ""  # a service's icon, when its plugin names one: 'database', 'queue', 'spark'; or the entry
+    # point's logo, when its platform names one: 'fastapi-icon'
 
 
 @dataclass
@@ -536,12 +537,12 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     labels = [f.label for f in cmap.event]
     leaves = [label for label in labels if not any(
         other.startswith((label + "[", label + ".", label + " (")) for other in labels)]
-    kind = platform.input_kind(cmap.event)
+    kind = platform.input_kind(cmap.event) or (platform.input_name if platform.name else "its input")
     if has_input:
         graph.nodes.append(GraphNode(
-            "event", "event", kind[0].upper() + kind[1:] if kind else "Its input", "what it's called with",
+            "event", "event", kind[0].upper() + kind[1:], "what it's called with",
             _listed_lines(leaves) or ["(no fields read)"],
-            tip="The first argument the entry point is called with"
+            tip=f"What the entry point is called with: {platform.input_name}"
             + (f": the code reads {', '.join(leaves)}" if leaves else ""),
             code=_around([(f.file, f.line, "") for f in cmap.event], by_name)))
     if names:
@@ -564,7 +565,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         graph.nodes.append(GraphNode(
             "f-entry", "handler", entry.rsplit(".", 1)[-1], f"{entry_file} line {cmap.entry_line}",
             ["an object, not a function"], tip=f"{entry} is called with its input", column=1,
-            code=_around([(entry_file, cmap.entry_line, "")], by_name)))
+            code=_around([(entry_file, cmap.entry_line, "")], by_name), icon=platform.entry_icon(cmap)))
     for f in shown:
         is_entry = f.name == entry
         why = reasons.get(f.name, []) + (handler_reasons if is_entry else [])
@@ -579,7 +580,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             column=1 + drawn_level.get(f.name, level.get(f.name, f.depth)),
             code=[CodeSpan(f.file, f.line, f.line + f.lines - 1,
                            sorted(n for n in lit[f.name] if f.line <= n < f.line + f.lines))], more=more,
-            when=_when(f, f.called_from)))
+            when=_when(f, f.called_from), icon=platform.entry_icon(cmap) if is_entry else ""))
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
     for node in reach:
         node.column = out_column

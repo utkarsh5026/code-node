@@ -440,6 +440,19 @@ _ROUTE_METHODS = {
     "api_route",
 }
 
+_URL_PATHS = {"django.urls.path", "django.urls.re_path", "django.conf.urls.url"}  # a URL conf's routes: path('x/', view)
+
+_URL_INCLUDES = {"django.urls.include", "django.conf.urls.include"}  # path('api/', include('shop.urls'))
+
+_VIEW_VERBS = {"require_GET": "GET", "require_POST": "POST", "require_safe": "GET, HEAD"}  # a Django view's decorators
+
+_VIEW_METHODS = ("get", "post", "put", "patch", "delete")  # a class-based view's methods, each a route
+
+_VIEWSET_ACTIONS = {  # a Django REST framework ViewSet's methods: what a router answers with each, and on which path
+    "list": ("GET", False), "create": ("POST", False), "retrieve": ("GET", True), "update": ("PUT", True),
+    "partial_update": ("PATCH", True), "destroy": ("DELETE", True),
+}
+
 _DICT_METHODS = {
     "get",
     "items",

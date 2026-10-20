@@ -44,6 +44,7 @@ class LambdaPlatform(Platform):
     entry_kind = "a Lambda handler (event, context)"
     inputs = ("event", "context")
     input_name = "the event"
+    input_word = "event"
     draws_input = True
     started = "When Lambda starts it (once per cold start)"
     web_apps = ("Chalice", "APIGatewayRestResolver", "APIGatewayHttpResolver", "ALBResolver",

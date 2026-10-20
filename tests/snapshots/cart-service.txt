@@ -1,7 +1,7 @@
 cart.app.on_checkout · cart-service · 4 files, 78 lines, nothing run
 
 -- How it fits together: what comes in, who calls whom, and what it reaches --
-  Its input: body (JSON).customer, body (JSON).items[].sku, body (JSON).items[].quantity, body (JSON).items[].name
+  The event: body (JSON).customer, body (JSON).items[].sku, body (JSON).items[].quantity, body (JSON).items[].name
       → on_checkout()
   Environment: REDIS_HOST, RECEIPTS_TABLE (not set), DATABASE_URL, TOPIC_ARN (not set) (!)
       → At import reads REDIS_HOST, RECEIPTS_TABLE (!)
@@ -31,7 +31,7 @@ cart.app.on_checkout · cart-service · 4 files, 78 lines, nothing run
 
 -- The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request --
 flowchart LR
-  event(["Its input<br/><small>what it's called with</small>"])
+  event(["The event<br/><small>what it's called with</small>"])
   env[/"Environment<br/><small>variables it reads</small>"/]
   start[["At import<br/><small>once, when it loads</small>"]]
   f0["on_checkout()<br/><small>cart/app.py line 20</small>"]

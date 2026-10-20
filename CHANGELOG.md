@@ -7,6 +7,22 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Added
 
+- A web platform for FastAPI, Flask and Django (`--platform web`, set on its own for an app it finds). What a
+  route is called with is the request, read like a Lambda handler's event: a FastAPI route's parameters (from the
+  path, the query, the body, `Query()`, `Header()`, `Annotated[...]`; not `Depends()`), a Flask view's URL values
+  and `flask.request` (`args`, `form`, `get_json()`), and a Django view's `request` (`GET`, `POST`, `body`) and URL
+  values. So SQL or a shell command built from a query string is flagged as injection, and the graph's first box is
+  "The request" with the fields the code reads (`path.order_id`, `query.q`, `json.team`).
+- Django's URL confs are entry points: a `urls.py` with `urlpatterns`, its `path()` and `re_path()` routes,
+  `include()` (routes come out under the path they're included at), class-based views (`View.as_view()`, a route
+  for each method) and Django REST framework routers (`router.register()`, a route for each ViewSet action). The
+  site's URL conf is offered before an app's it includes. `django.db.connection.cursor()` is read by the SQL plugin.
+- A web app's box in the graph shows its framework's logo (FastAPI, Flask or Django), on a white tile as other
+  logos are, and the docs' "What code-node knows" figure lists the three under "Runs on".
+- `examples/books-api`, a FastAPI app with a mistake for each thing the web platform finds, and a snapshot of
+  its page.
+- A call that blocks inside an `async def` route (requests, urllib, `time.sleep()`, boto3) is flagged: it holds up
+  every other request on the worker's event loop. A connection opened on every request is too.
 - Plugins that mix. Besides a platform (one per entry point), two new kinds of plugin stack: libraries, each turned
   on when the code imports it, and deploy files, each read when it's in the folder. `code-node --plugins` lists
   them, and other packages add their own through the `code_node.libraries` and `code_node.deploys` entry point
@@ -43,6 +59,11 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- A web app's own class (`FastAPI()`, `Flask()`, `APIRouter()`, `Blueprint()`) now comes from the web platform, so
+  an app found runs its checks. The summary no longer says "Each call runs app()" for an app object. Beside a step,
+  a field of the input is said in its platform's word (`event body.id` for Lambda, `request query.q` for a web
+  app), and the graph's input box is named for it when the kind of event can't be told ("The event", not "Its
+  input").
 - The graph has room to breathe and is drawn at its real size, no longer squeezed to the page's width. Gaps between
   columns widen with the arrows through them, boxes are spaced further apart, columns are wider so names show whole
   (a long method's name breaks after its class: `PluginManager.` / `_load_plugin()`), and the order with the fewest

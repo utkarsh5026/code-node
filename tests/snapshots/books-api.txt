@@ -1,0 +1,142 @@
+books.main.app · books-api · 4 files, 105 lines, nothing run
+
+-- How it fits together: what comes in, who calls whom, and what it reaches --
+  The request: path.book_id, query.q, query.limit, headers.x-reader, +4 more
+      → app
+  Environment: REDIS_HOST, DATABASE_URL, COVERS_BUCKET
+      → At import reads REDIS_HOST
+      → connect() reads DATABASE_URL
+      → set_cover() reads COVERS_BUCKET
+  At import  once, when it loads
+      makes the S3 client
+      makes the Redis client
+  app  books/main.py line 9
+      calls get_book() (GET /books/{book_id})
+      calls search() (GET /books)
+      calls add_review() (POST /books/{book_id}/reviews)
+      calls set_cover() (PUT /books/{book_id}/cover)
+      calls export() (GET /books/{book_id}/export)
+  get_book()  books/routes.py line 28
+      calls connect() (line 32) when not cached
+      calls book() (line 32) when not cached
+      reads from Redis: GET book:{book_id}
+      writes to Redis: SETEX book:{book_id}
+  search()  books/routes.py line 38
+      calls connect() (line 39)
+      calls search() (line 39)
+  add_review()  books/routes.py line 43
+      calls connect() (line 44)
+      calls add_review() (line 44)
+      writes to Redis: DELETE book:{book_id}
+  set_cover()  books/routes.py line 49 (!)
+      writes to S3: PutObject
+      sends GET url (!)
+  export()  books/routes.py line 56 (!)
+      (does nothing this follows: no AWS calls, own functions or HTTP)
+  connect()  books/db.py line 12
+      makes the PostgreSQL client
+  book()  books/db.py line 17
+      reads from PostgreSQL: SELECT books
+  search()  books/db.py line 24 (!)
+      reads from PostgreSQL: SELECT books (!)
+  add_review()  books/db.py line 31
+      writes to PostgreSQL: INSERT reviews
+
+-- The same graph in Mermaid, to paste in a Markdown file, a wiki or a pull request --
+flowchart LR
+  event(["The request<br/><small>what it's called with</small>"])
+  env[/"Environment<br/><small>variables it reads</small>"/]
+  start[["At import<br/><small>once, when it loads</small>"]]
+  f_entry["app<br/><small>books/main.py line 9</small>"]
+  f0["get_book()<br/><small>books/routes.py line 28</small>"]
+  f1["search()<br/><small>books/routes.py line 38</small>"]
+  f2["add_review()<br/><small>books/routes.py line 43</small>"]
+  f3["set_cover()<br/><small>books/routes.py line 49</small>"]
+  f4["export()<br/><small>books/routes.py line 56</small>"]
+  f5["connect()<br/><small>books/db.py line 12</small>"]
+  f6["book()<br/><small>books/db.py line 17</small>"]
+  f7["search()<br/><small>books/db.py line 24</small>"]
+  f8["add_review()<br/><small>books/db.py line 31</small>"]
+  aws_s3[("S3<br/><small>writes</small>")]
+  lib_redis_redis[("Redis<br/><small>reads · writes</small>")]
+  lib_sql_postgresql[("PostgreSQL<br/><small>reads · writes</small>")]
+  http{{"The web<br/><small>HTTP requests</small>"}}
+  event ==>|"its input"| f_entry
+  f_entry -->|"GET /books/{book_id}"| f0
+  f_entry -->|"GET /books"| f1
+  f_entry -->|"POST /books/{book_id}/reviews"| f2
+  f_entry -->|"PUT /books/{book_id}/cover"| f3
+  f_entry -->|"GET /books/{book_id}/export"| f4
+  f0 -->|"when not cached"| f5
+  f1 --> f5
+  f2 --> f5
+  f0 -->|"when not cached"| f6
+  f1 --> f7
+  f2 --> f8
+  env -.->|"REDIS_HOST"| start
+  env -.->|"DATABASE_URL"| f5
+  env -.->|"COVERS_BUCKET"| f3
+  f3 -->|"PutObject"| aws_s3
+  f0 -->|"GET book:{book_id}"| lib_redis_redis
+  f0 -->|"SETEX book:{book_id}"| lib_redis_redis
+  f2 -->|"DELETE book:{book_id}"| lib_redis_redis
+  f6 -->|"SELECT books"| lib_sql_postgresql
+  f7 -->|"SELECT books"| lib_sql_postgresql
+  f8 -->|"INSERT reviews"| lib_sql_postgresql
+  start -->|"makes its S3 client"| aws_s3
+  start -->|"makes its Redis client"| lib_redis_redis
+  f5 -->|"makes its PostgreSQL client"| lib_sql_postgresql
+  f3 -->|"GET url"| http
+  classDef warn stroke:#f59e0b,stroke-width:2px
+  class f3,f4,f7,lib_sql_postgresql,http warn
+
+-- When Python imports it, once, before the first call --
+    7  from . import routes
+           ↳ books/routes.py, run when it's imported
+   18          cache = redis.Redis(host=os.environ['REDIS_HOST'], socket_timeout=2)   # env REDIS_HOST · makes a Redis client
+   19          s3 = boto3.client('s3')   # makes an S3 client
+
+-- What each call does, step by step from app() --
+    9  app = FastAPI(title='Books')   # books/main.py
+   28    def get_book(book_id: int):   # GET /books/{book_id} · books/routes.py
+   29      cached = cache.get(f'book:{book_id}')   # Redis GET book:{book_id} (reads)
+   30      if cached:
+   31        return json.loads(cached)
+   32      found = db.book(db.connect(), book_id)
+   12          ↳ def connect():   # books/db.py · when not cached
+   14              return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=5)   # env DATABASE_URL · makes a PostgreSQL connection
+   17          ↳ def book(conn, book_id):   # books/db.py · when not cached
+   19              with conn.cursor() as cur:   # cur: a PostgreSQL cursor
+   20                cur.execute(BOOK, (book_id,))   # PostgreSQL SELECT books (reads)
+   21                return cur.fetchone()
+   33      cache.setex(f'book:{book_id}', 300, json.dumps(found))   # Redis SETEX book:{book_id} (writes)
+   34      return found
+   38    def search(q: str, limit: int=20):   # GET /books · books/routes.py
+   39      return db.search(db.connect(), q, limit)
+   12          ↳ def connect():   # books/db.py · its steps are shown where it's first called
+   24          ↳ def search(conn, text, limit):   # books/db.py
+   26              with conn.cursor() as cur:   # cur: a PostgreSQL cursor
+   27                cur.execute(f"SELECT id, title FROM books WHERE title ILIKE '%{text}%' LIMIT {limit}")   # PostgreSQL SELECT books (reads) · SQL injection
+   28                return cur.fetchall()
+   43    def add_review(book_id: int, review: Review, user: str=Header(alias='x-reader')):   # POST /books/{book_id}/reviews · books/routes.py
+   44      db.add_review(db.connect(), book_id, user, review.rating, review.text)   # request body.rating · request body.text
+   12          ↳ def connect():   # books/db.py · its steps are shown where it's first called
+   31          ↳ def add_review(conn, book_id, user, rating, text):   # books/db.py
+   33              with conn.cursor() as cur:   # cur: a PostgreSQL cursor
+   34                cur.execute('INSERT INTO reviews (book_id, reader, rating, text) VALUES (%s, %s, %s, %s)', (book_id, user, rating, text))   # PostgreSQL INSERT reviews (writes)
+   45      cache.delete(f'book:{book_id}')   # Redis DELETE book:{book_id} (writes)
+   49    async def set_cover(book_id: int, url: str):   # PUT /books/{book_id}/cover · books/routes.py
+   50      image = requests.get(url).content   # HTTP GET
+   51      s3.put_object(Bucket=os.environ['COVERS_BUCKET'], Key=f'covers/{book_id}.jpg', Body=image)   # env COVERS_BUCKET · S3 PutObject (writes) · Bucket ← env COVERS_BUCKET · Key ← text built from request path.book_id
+   52      return {'cover': f'covers/{book_id}.jpg'}
+   56    def export(book_id: int, fmt: str='pdf'):   # GET /books/{book_id}/export · books/routes.py
+   57      subprocess.run(f'pandoc books/{book_id}.md -o exports/{book_id}.{fmt}', shell=True, check=True)   # runs a command · a shell command built from request path.book_id
+   58      return {'file': f'exports/{book_id}.{fmt}'}
+It reads the code with Python's ast module and runs none of it. It follows calls into the folder's own functions and the boto3 clients it makes; calls through a value handed in from elsewhere, or made inside a library, aren't followed, so there may be more than it lists. Calls to Redis and PostgreSQL are read by code-node's library plugins.
+
+-- Findings --
+warn: 1 HTTP request has no timeout (GET url at books/routes.py line 50): if the server doesn't answer, the request waits as long as the connection stays open, holding one of the server's workers, and the client gives up first. Pass timeout=10 (or what the call needs).
+warn: PostgreSQL SELECT at books/db.py line 27 in search() puts request query.q, request query.limit into the SQL text itself, so whoever sends it can change the statement (SQL injection). Pass it as a parameter instead: execute("... WHERE id = %s", (value,)).
+warn: It runs a shell command with request path.book_id, request query.fmt in it, at books/routes.py line 57 in export(): whoever sends the request can make it run commands of their own (shell injection). Pass the command as a list of arguments, without shell=True, and check the value before it goes in.
+warn: requests.get() at books/routes.py line 50 and S3 PutObject at books/routes.py line 51 wait without await inside async def set_cover(): while they wait, the server's event loop can't run anything else, so every other request this worker is serving waits too. Make set_cover() a plain def (FastAPI runs those in a thread pool), or use an async client (httpx.AsyncClient, aioboto3, await asyncio.sleep).
+info: It opens a new PostgreSQL connection on every request, at books/db.py line 14 in connect(): that's a round trip or more before any work, and many requests at once can use up the server's connections. Make a pool once, at module level or when the app starts, and take a connection from it.

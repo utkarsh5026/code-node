@@ -17,6 +17,8 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any
 
+from ..platforms.web import FRAMEWORK_LOGOS
+
 AWS_LOGOS = {  # boto3's service name -> its logo
     "s3": "aws-s3", "s3control": "aws-s3", "dynamodb": "aws-dynamodb", "dynamodbstreams": "aws-dynamodb",
     "sns": "aws-sns", "sqs": "aws-sqs", "lambda": "aws-lambda", "kinesis": "aws-kinesis", "events": "aws-eventbridge",
@@ -51,7 +53,8 @@ SERVICE_LOGOS = {  # a service a library reaches, as its box names it (lower cas
 
 DEPLOY_LOGOS = {"sam": "aws-cloudformation", "serverless": "serverless"}  # a deploy plugin's name -> its logo
 
-PLATFORM_LOGOS = {"lambda": "aws-lambda", "": "python"}  # a platform's name -> its logo ('' is plain Python)
+PLATFORM_LOGOS = {"lambda": "aws-lambda", "": "python"}  # a platform's name -> its logo ('' is plain Python); the
+# web one's are by framework (platforms/web.py FRAMEWORK_LOGOS), shown on an app's box
 
 LIBRARY_LOGOS = {  # a library plugin's name -> its logo, and boto3's, which the reader knows itself
     "boto3": "aws", "redis": "redis", "sql": "postgresql", "mongodb": "mongodb-icon", "llm": "openai-icon",
@@ -128,4 +131,4 @@ def logo_names() -> set[str]:
     Every logo the graph and the docs' figures draw: what scripts/logos.py keeps.
     """
     return (set(AWS_LOGOS.values()) | set(SERVICE_LOGOS.values()) | set(DEPLOY_LOGOS.values())
-            | set(PLATFORM_LOGOS.values()) | set(LIBRARY_LOGOS.values()))
+            | set(PLATFORM_LOGOS.values()) | set(LIBRARY_LOGOS.values()) | set(FRAMEWORK_LOGOS.values()))

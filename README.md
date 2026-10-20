@@ -65,8 +65,9 @@ code-node --mermaid                    # print the graph as Mermaid
 <summary><b>Entry points it finds</b></summary>
 
 Console scripts in any `pyproject.toml` (monorepos too), functions named in SAM / Serverless files, Lambda handlers,
-FastAPI / Flask routes, Typer commands, `if __name__ == "__main__":` blocks, and functions named `main`. Test files
-are skipped.
+FastAPI / Flask routes, Django `urls.py` files, Typer commands, `if __name__ == "__main__":` blocks, and functions named
+`main`. Test files are skipped. A web app's routes are read as called with the request, so SQL built from a query
+string is flagged.
 
 </details>
 
