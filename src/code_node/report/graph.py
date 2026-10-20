@@ -19,7 +19,7 @@ from ..kit.text import _esc
 
 from ..analysis.findings import _short_name
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode, GraphView
-from .changes import history_html
+from .changes import blame_keys, blame_mark, blame_row, history_html
 from .brands import AWS_LOGOS, SERVICE_LOGOS, fills, logo, small_logo
 from .editor import editor_name, open_at
 from .style import _ROOT
@@ -1131,6 +1131,18 @@ _G_PANEL_KINDS = {
 }
 
 
+_G_GEAR = (  # the panel's settings
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/>'
+    '<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21'
+    "a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 "
+    "1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1"
+    "a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1"
+    'a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
+    "</svg>"
+)
+
+
 def _g_panel_id(n: GraphNode) -> str:
     return f"cn-code-{n.id}"
 
@@ -1146,9 +1158,12 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
     """
     A box's code, in a panel that slides in from the right when the box is clicked (its id, panel or the box's own, is
     the link's target, so it's CSS's :target that opens it): what the box is, then each place it's about with its
-    lines numbered, the lines worth pointing at lit. '' when none of its code is in the files read.
+    lines numbered, the lines worth pointing at lit. A function's lines each say who changed them last and when, and
+    its last row what git says about it, when the folder is in git. '' when none of its code is in the files read.
     """
-    shown, lit_any = [], False
+    history = n.history if n.history and n.history.lines else None
+    keys = blame_keys(history) if history else {}
+    places = []  # (file, first line, last line, lines left out, the editor's link, its rows)
     for span in n.code[:_G_PANEL_SPANS]:
         lines = lines_of(span.file)
         start, end = max(1, span.start), min(len(lines), span.end)
@@ -1163,48 +1178,66 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
             continue
         more = end - start + 1 - _G_PANEL_LINES
         end = min(end, start + _G_PANEL_LINES - 1)
-        lit_any |= any(start <= k <= end for k in span.lit)
-        rows = "".join(
-            f'<span class="sl{" lit" if k in span.lit else ""}"><span class="sn">{k}</span>{lines[k - 1]}</span>'
-            for k in range(start, end + 1)
-        )
-        where = f"line {start}" if start == end else f"lines {start}–{end}"
-        href = open_at(editor, span.file, min(span.lit, default=start))
-        link = (
-            f' <a class="ced" href="{_esc(href)}" title="Open it in {_esc(editor_name(editor))}">open ↗</a>'
-            if href
-            else ""
-        )
+        rows, above = [], ""
+        for k in range(start, end + 1):
+            mark = ""
+            if history:
+                commit = history.lines.get(k)
+                said = commit.sha if commit else "u" if k in history.lines else ""  # the commit, to say it once a run
+                mark = blame_mark(history, k, keys, bool(said) and said == above)
+                above = said
+            rows.append(
+                f'<span class="sl{" lit" if k in span.lit else ""}">{mark}<span class="sn">{k}</span>'
+                f'<span class="sc">{lines[k - 1]}</span></span>'
+            )
+        places.append((span.file, start, end, more, open_at(editor, span.file, min(span.lit, default=start)), rows))
+    if not places:
+        return ""
+
+    def opens(href: str) -> str:
+        return f'<a class="ced" href="{_esc(href)}">Open in {_esc(editor_name(editor))}</a>' if href else ""
+
+    shown = []
+    for file, start, end, more, href, rows in places:
+        if len(places) > 1:  # one place is in the panel's head
+            where = f"line {start}" if start == end else f"lines {start}–{end}"
+            shown.append(f'<div class="csw">{_esc(file)} <span>{where}</span>{opens(href)}</div>')
         shown.append(
-            f'<div class="csw">{_esc(span.file)} <span>{where}</span>{link}</div>'
-            f'<pre class="csc">{rows}</pre>'
+            f'<pre class="csc{" blame" if history else ""}">{"".join(rows)}</pre>'
             + (f'<div class="csm">+{_plural(more, "more line")}</div>' if more > 0 else "")
         )
-    if not shown:
-        return ""
     rest = len(n.code) - _G_PANEL_SPANS
     if rest > 0:
         shown.append(f'<div class="csm">+{_plural(rest, "more place")}: the tables below list them all</div>')
-    said = "".join(  # not the calls this graph leaves out: a function's panel is the same in every graph it's in
-        f'<p class="csd">{_prose(line)}</p>'
-        for line in (n.tip or "").split("\n")
-        if line and not (n.more and line.startswith("It calls ") and "the graph leaves out" in line)
-    )
-    if lit_any:
-        said += (
-            '<p class="csd csl">The lit lines are where it calls, reads or sends what its arrows show.</p>'
-            if n.kind in ("handler", "function", "start")
-            else '<p class="csd csl">The lit lines are where the code uses it.</p>'
+    mono = n.kind in ("handler", "function")
+    said = []
+    for line in (n.tip or "").split("\n"):
+        if not line or (n.more and line.startswith("It calls ") and "the graph leaves out" in line):
+            continue  # not the calls this graph leaves out: a function's panel is the same in every graph it's in
+        if mono and not said:  # 'name(args) in file, 3 lines: its doc': its def is the code's first line
+            head = re.fullmatch(r".+? in .+?, \d+ lines?(?:: (.*))?", line)
+            if head:
+                line = head.group(1) or ""
+        if line:
+            said.append(f'<p class="csd">{_prose(line)}</p>')
+    about = [_esc(_G_PANEL_KINDS.get(n.kind, n.kind))] + ([_esc(n.sub)] if n.sub else [])
+    if len(places) == 1 and places[0][4]:
+        about.append(opens(places[0][4]))
+    key = panel or _g_panel_id(n)
+    opens_bar = bar = gear = ""
+    if history:  # its settings: a bar under its head that the gear opens, the checkbox before it so CSS can
+        opens_bar = f'<input type="checkbox" class="cso" id="{_esc(key)}-set" aria-label="Settings">'
+        gear = f'<label class="csx csgr" for="{_esc(key)}-set" title="Settings">{_G_GEAR}</label>'
+        bar = (
+            '<div class="csob"><label><input type="checkbox" class="csg" checked> '
+            "Who changed each line, from git</label></div>"
         )
-    said += history_html(n.history)
-    mono = " mono" if n.kind in ("handler", "function") else ""
     return (
-        f'<aside class="cside" id="{_esc(panel or _g_panel_id(n))}" aria-label="{_esc("The code of " + n.label)}">'
-        f'<div class="csh"><div class="cst"><span class="csk">{_esc(_G_PANEL_KINDS.get(n.kind, n.kind))}</span>'
-        f'<b class="csn{mono}">{_esc(n.label)}</b>'
-        + (f'<span class="css">{_esc(n.sub)}</span>' if n.sub else "")
-        + '</div><a class="csx" href="#cn-closed" aria-label="Close" title="Close">×</a></div>'
-        f"{said}{''.join(shown)}</aside>"
+        f'<aside class="cside" id="{_esc(key)}" aria-label="{_esc("The code of " + n.label)}">{opens_bar}'
+        f'<div class="csh"><div class="cst"><b class="csn{" mono" if mono else ""}">{_esc(n.label)}</b>'
+        f'<span class="css">{" · ".join(about)}</span></div>{gear}'
+        f'<a class="csx" href="#cn-closed" aria-label="Close" title="Close">×</a></div>{bar}'
+        f"{''.join(said)}{''.join(shown)}{blame_row(history, keys) if history else ''}</aside>"
     )
 
 
@@ -1446,6 +1479,27 @@ _G_SCRIPT = """<script>
     if (open && !open.contains(e.target) && !e.target.closest("a[href], label, input, .cgt")) close();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  // A function's code: pointing at a line puts the commit it comes from in its panel's last row, in place of what git
+  // says about all of it.
+  // Its settings, one for every panel: turning git off in one turns it off in all, and the page remembers it.
+  const blame = (on) => document.querySelectorAll(".csg").forEach((box) => { box.checked = on; });
+  try { if (localStorage.getItem("code-node.blame") === "off") blame(false); } catch (e) {}
+  document.addEventListener("change", (e) => {
+    if (!e.target.matches(".csg")) return;
+    blame(e.target.checked);
+    try { localStorage.setItem("code-node.blame", e.target.checked ? "on" : "off"); } catch (e) {}
+  });
+  let blamed = "";
+  document.addEventListener("mouseover", (e) => {
+    const mark = e.target.closest(".cside .sl")?.querySelector(".sb[data-k]");
+    const panel = mark && mark.closest(".cside"), key = mark ? mark.dataset.k : "";
+    const row = (panel || document).querySelector(".csf");
+    if (key + (panel && panel.id) === blamed) return;
+    document.querySelectorAll(".csf p").forEach((p) => {
+      p.hidden = p.closest(".csf") === row && key ? p.dataset.k !== key : p.hasAttribute("data-k");
+    });
+    blamed = key + (panel && panel.id);
+  });
   // Moving about a graph as on a canvas: drag it to pan, Ctrl or ⌘ with the wheel (or a trackpad's pinch) to zoom
   // around the pointer, and + - 0 when it has focus. A zoom of its own unchecks the bar's buttons, so the plain rule
   // (the SVG's width times --z) draws it; picking a button again takes it back. Its box keeps one size, and Fit

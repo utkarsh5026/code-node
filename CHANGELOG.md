@@ -4,6 +4,15 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Changed
+
+- A function's code panel says beside each line who changed it last and how long ago ("Asha · 3d"), with a bar
+  that's darker the newer the line and amber for a line not committed yet. Its last row says when the function was
+  last changed, by whom, in which commit, and how many commits and people it comes from; point at a line and it says
+  that line's commit instead. The gear by × opens the panel's settings, where the history can be turned off; the
+  page remembers that. The panel's head is plainer: the name, then what it is, where, and a link to open it in your
+  editor, without the def repeated over the code.
+
 ## [0.5.0] - 2026-10-20
 
 ### Added

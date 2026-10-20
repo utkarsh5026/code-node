@@ -204,6 +204,8 @@ class History:
     first: int  # when the oldest of them was made (about when the function was written), in seconds since 1970
     uncommitted: int  # its lines changed since the last commit
     now: int  # when this was read, for 'three days ago'
+    lines: dict[int, Commit | None] = field(default_factory=dict)  # each of its lines -> the commit it comes from,
+    # None for one changed since the last commit
 
     def ago(self, time: int) -> str:
         """
@@ -214,6 +216,16 @@ class History:
             if days >= size:
                 count = days // size
                 return f"{count} {unit}{'' if count == 1 else 's'} ago"
+        return "today"
+
+    def since(self, time: int) -> str:
+        """
+        The same, short, for beside a line: 'today', '3d', '2w', '5mo', '1y'.
+        """
+        days = max(0, self.now - time) // 86_400
+        for size, unit in ((365, "y"), (30, "mo"), (7, "w"), (1, "d")):
+            if days >= size:
+                return f"{days // size}{unit}"
         return "today"
 
 

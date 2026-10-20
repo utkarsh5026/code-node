@@ -90,7 +90,9 @@ The links hold the folder's full path, so pass `--editor none` for a page you'll
 
 When the folder is in git, each function's hover card, code panel and step card say who changed it last, when, and in
 which commit (a link to it on GitHub or GitLab), how many commits and people its lines come from, and how many of its
-lines have changed since the last commit. It's read with `git blame`, once per file; `--no-git` leaves it out.
+lines have changed since the last commit. The code panel also says it line by line, beside the code: point at a line
+to see its commit. The gear in the panel's head turns that off. It's read with `git blame`, once per file;
+`--no-git` leaves it out.
 
 ## Every option { #options }
 
