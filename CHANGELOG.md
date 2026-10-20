@@ -4,6 +4,13 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Changed
+
+- Pointing at a box in the graph shows a card instead of the browser's plain tooltip: what kind of box it is and
+  its name, a function's `def` as written in colour with its docstring, a service's operations and the permissions
+  they need set as code, and its warnings in a block of their own. It sits under the box, over it or beside it,
+  wherever it fits, and zooms with the graph.
+
 ## [0.1.0] - 2026-10-20
 
 ### Added

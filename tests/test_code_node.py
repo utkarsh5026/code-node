@@ -5,6 +5,7 @@ code-node end to end on small folders written into tmp_path: entry points found,
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -523,6 +524,19 @@ def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) ->
     page = out.read_text()
     assert 'class="cgs cgz-auto" name="cn-graph0-zoom" id="cn-graph0-auto" checked' in page
     assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and "<script" not in page
+
+
+def test_a_box_says_what_it_is_in_a_card_on_hover(tmp_path: Path) -> None:
+    write(tmp_path / "code", {"app.py": HANDLER})
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    page = out.read_text()
+    assert '<g class="cn ' in page and not re.search(r'<g class="cn [^>]*><title>', page)  # not the plain tooltip
+    assert '<foreignObject class="ctip tp-f0' in page and ":hover) .tp-f0{display:inline}" in page
+    # its def as written, in colour
+    assert (
+        '<pre class="ctc"><span class="pk">def</span> <span class="pf">lambda_handler</span>(event, context):' in page
+    )
 
 
 def test_line_links_open_the_editor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
