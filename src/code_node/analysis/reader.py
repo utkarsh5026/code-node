@@ -203,6 +203,22 @@ class _CodeReader:
             module = module[: -len(".__init__")] if module.endswith(".__init__") else module
             if module and module != "__init__":
                 self.sources[module] = path
+        here = (cmap.handler_file or "").rpartition("/")[0]
+        here = here + "/" if here else ""
+        if here.startswith(root) and here != root:
+            # the entry point's own folder is on sys.path too, as a script's is and a Lambda function's code is:
+            # `from helpers import x` beside it is its own code, though the folder is also a package from the root
+            beside: set[str] = set()
+            for path in texts:
+                if not path.startswith(here) or not path.endswith(".py") or "site-packages" in path:
+                    continue
+                module = path[len(here) : -3].replace("/", ".")
+                module = module[: -len(".__init__")] if module.endswith(".__init__") else module
+                if module and module != "__init__" and "-" not in module and module not in self.sources:
+                    self.sources[module] = path
+                    beside.add(module.split(".")[0])
+            self.tops |= beside
+            self.libraries = libraries - beside
         self.modules: dict[str, _Module] = {}
         self.defs: dict[str, tuple[str, Any, str | None]] = {}  # key -> (module, node, class key)
         self.classes: dict[str, dict[str, Any]] = {}
@@ -311,8 +327,9 @@ class _CodeReader:
         cmap.event = list(self.event_reads.values())
         cmap.routes = [(method, path, key) for method, path, key, _ in self.routes]
         loaded = [m for m in self.modules.values() if m.tree is not None]
-        cmap.other_files = sum(
-            1 for name, path in self.sources.items() if name not in self.modules and not _JUNK_RE.search(path)
+        read = {path for name, path in self.sources.items() if name in self.modules}  # a file has two names, at most
+        cmap.other_files = len(
+            {path for path in self.sources.values() if path not in read and not _JUNK_RE.search(path)}
         )
         for m in loaded:
             for node in m.tree.body:
@@ -324,7 +341,7 @@ class _CodeReader:
                     if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)) and prefix + f.name not in self.reached
                 )
             self._secrets(m)
-        for name, path in self.sources.items():
+        for path, name in {path: name for name, path in reversed(self.sources.items())}.items():
             for match in _AWS_KEY_RE.finditer(self.texts[path]):
                 line = self.texts[path].count("\n", 0, match.start()) + 1
                 self._spot("secret", path, line, name, "", "an AWS access key", ok=False)
