@@ -100,8 +100,10 @@ def _trim(path: Path) -> tuple[int, int]:
 def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     page = work / f"{name}.html"
     html = render_page(blocks, f"code-node: {name}")
-    # headless Chrome can take the picture mid fade-in: show the open tab at once
-    html = html.replace("</head>", "<style>.cnd *{animation:none!important}</style>\n</head>", 1)
+    # headless Chrome can take the picture mid fade-in: show the open tab at once. The pictures are shown shrunk
+    # (the README fits them to its column), so logos are their small marks, as on a 1x screen
+    html = html.replace("</head>", "<style>.cnd *{animation:none!important}.cnd .cg .logo.lgf{display:none!important}"
+                                   ".cnd .cg .logo.lgs{display:inline!important}</style>\n</head>", 1)
     if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
         html = html.replace('id="cw0" checked', 'id="cw0"').replace(f'id="cw{STEP_SHOWN}"',
                                                                     f'id="cw{STEP_SHOWN}" checked')

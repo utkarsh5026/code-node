@@ -1,4 +1,8 @@
 """
+Real logos for the graph's boxes, in two sizes, as favicons come: `full`, the detailed art, for 40 pixels and up
+(a 2x screen's 32), and, for AWS's service icons, `small`, a simple mark that stays sharp at 16 to 32 (an ordinary
+screen's badge). logo_for(name, pixels) picks one; the page's graph has both and picks by the screen's density.
+
 Real logos for the graph's boxes: an AWS service's (S3, DynamoDB, SNS...) and those of the services libraries reach
 (Redis, PostgreSQL, OpenAI...). The SVGs are gilbarbara/logos, CC0, through Iconify's @iconify-json/logos, kept as
 files in logos/: scripts/logos.py downloads the pinned version and writes the ones named here. The page embeds the
@@ -11,6 +15,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from importlib.resources import files
+from typing import Any
 
 AWS_LOGOS = {  # boto3's service name -> its logo
     "s3": "aws-s3", "s3control": "aws-s3", "dynamodb": "aws-dynamodb", "dynamodbstreams": "aws-dynamodb",
@@ -53,6 +58,51 @@ LIBRARY_LOGOS = {  # a library plugin's name -> its logo, and boto3's, which the
 }
 
 
+AWS_GLYPHS = {  # an AWS icon -> the symbol its small mark has, in white on the service's colour (AWS's own 16 px
+    # icons are drawn that way); one not here gets 'cloud'
+    "aws-s3": "bucket", "aws-glacier": "bucket", "aws-backup": "bucket",
+    "aws-dynamodb": "database", "aws-rds": "database", "aws-aurora": "database", "aws-redshift": "database",
+    "aws-timestream": "database", "aws-documentdb": "database", "aws-neptune": "database",
+    "aws-elasticache": "database", "aws-keyspaces": "database", "aws-athena": "database",
+    "aws-sqs": "queue", "aws-kinesis": "queue", "aws-mq": "queue", "aws-msk": "queue",
+    "aws-sns": "send", "aws-eventbridge": "send", "aws-ses": "send",
+    "aws-secrets-manager": "key", "aws-kms": "key", "aws-iam": "key", "aws-cognito": "key",
+    "aws-systems-manager": "key", "aws-certificate-manager": "key", "aws-shield": "key", "aws-waf": "key",
+    "aws-lambda": "function", "aws-step-functions": "flow", "aws-glue": "flow", "aws-batch": "flow",
+    "aws-ecs": "flow", "aws-eks": "flow", "aws-codebuild": "flow", "aws-codepipeline": "flow",
+    "aws-codedeploy": "flow", "aws-appflow": "flow", "aws-cloudformation": "flow", "aws-api-gateway": "http",
+    "aws-cloudfront": "http", "aws-route53": "http", "aws-appsync": "http", "aws-elb": "http",
+}
+
+SMALL_UNDER = 40  # pixels: a logo drawn smaller than this uses its small mark, when it has one
+
+
+def _read(path: Any) -> tuple[int, int, str] | None:
+    if not path.is_file():
+        return None
+    found = re.fullmatch(r'\s*<svg[^>]*viewBox="0 0 (\d+) (\d+)"[^>]*>(.*)</svg>\s*', path.read_text("utf-8"), re.S)
+    return (int(found.group(1)), int(found.group(2)), found.group(3)) if found else None
+
+
+@lru_cache(maxsize=None)
+def small_logo(name: str) -> tuple[int, int, str] | None:
+    """
+    A logo's small mark, from logos/small/<name>.svg: (width, height, its SVG body). None when it has none: only
+    AWS's service icons do, the others being simple enough already.
+    """
+    if not re.fullmatch(r"[a-z0-9-]+", name or ""):
+        return None
+    return _read(files(__package__).joinpath("logos", "small", f"{name}.svg"))
+
+
+def logo_for(name: str, pixels: float) -> tuple[int, int, str] | None:
+    """
+    The version of a logo for the pixels it's drawn at, as a browser picks a favicon: the small mark under
+    SMALL_UNDER, when there is one, else the full art.
+    """
+    return (small_logo(name) if pixels < SMALL_UNDER else None) or logo(name)
+
+
 @lru_cache(maxsize=None)
 def logo(name: str) -> tuple[int, int, str] | None:
     """
@@ -61,11 +111,16 @@ def logo(name: str) -> tuple[int, int, str] | None:
     """
     if not re.fullmatch(r"[a-z0-9-]+", name or ""):
         return None
-    path = files(__package__).joinpath("logos", f"{name}.svg")
-    if not path.is_file():
-        return None
-    found = re.fullmatch(r'\s*<svg[^>]*viewBox="0 0 (\d+) (\d+)"[^>]*>(.*)</svg>\s*', path.read_text("utf-8"), re.S)
-    return (int(found.group(1)), int(found.group(2)), found.group(3)) if found else None
+    return _read(files(__package__).joinpath("logos", f"{name}.svg"))
+
+
+def fills(found: tuple[int, int, str]) -> bool:
+    """
+    Whether a logo is a coloured square of its own (AWS's service icons): drawn filling its badge, not on a tile,
+    so it gets every pixel there is. Their fine lines blur together any smaller on a 1x screen.
+    """
+    width, height, body = found
+    return width == height and f'd="M0 0h{width}v{height}H0z"' in body[:600]
 
 
 def logo_names() -> set[str]:

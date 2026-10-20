@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from code_node.report.brands import logo  # noqa: E402  the same logos as code-node's graph
+from code_node.report.brands import fills, logo_for  # noqa: E402  the same logos as code-node's graph
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "snippets"
 
@@ -128,13 +128,17 @@ def _badge(node: Node) -> str:
     A box's badge: its service's logo on a plain tile, else a line drawing in the box's colour.
     """
     x, y = node.x, node.y
-    found = logo(node.icon)
+    found = logo_for(node.icon, 26)  # its small mark: the figure is drawn smaller than the page's graph
     if found is None:
         return (f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
                 f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>')
     width, height, body = found
+    if fills(found):  # AWS's icons fill the badge, its corners rounded
+        return (f'<clipPath id="cn-badge-{node.id}"><rect x="{x + 10}" y="{y + 10}" width="26" height="26" rx="7"/>'
+                f'</clipPath><g clip-path="url(#cn-badge-{node.id})"><svg class="logo" x="{x + 10}" y="{y + 10}" '
+                f'width="26" height="26" viewBox="0 0 {width} {height}">{body}</svg></g>')
     return (f'<rect class="bd lg" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
-            f'<svg class="logo" x="{x + 14}" y="{y + 14}" width="18" height="18" viewBox="0 0 {width} {height}" '
+            f'<svg class="logo" x="{x + 13}" y="{y + 13}" width="20" height="20" viewBox="0 0 {width} {height}" '
             f'fill="currentColor">{body}</svg>')
 
 

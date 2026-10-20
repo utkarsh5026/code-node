@@ -1,7 +1,13 @@
 """
-Downloads the logos the graph draws (code_node.report.brands names them) into src/code_node/report/logos/, one .svg
-file each, from a pinned version of Iconify's @iconify-json/logos (gilbarbara/logos, CC0). The download is checked
-against its hash and only read as JSON. Each logo's ids get its own prefix, so two logos on one page don't share a gradient, and
+Downloads the logos the graph draws (code_node.report.brands names them) into src/code_node/report/logos/, in two
+sizes, as favicons come:
+
+    logos/<name>.svg         the full art, from Iconify's @iconify-json/logos (gilbarbara/logos, CC0)
+    logos/small/<name>.svg   for an AWS service, a mark that reads at 16 to 32 px: its own colour with a white symbol,
+                             as AWS draws its 16 px icons. Other brands' logos are simple enough as they are
+                             (Simple Icons' marks were tried, and read no better)
+
+The download is pinned, checked against its hash, and only read as data. Each logo's ids get its own prefix, so two logos on one page don't share a gradient, and
 near-black fills follow the text colour, so a black logo (OpenAI's) shows in dark mode too.
 
     python scripts/logos.py
@@ -25,12 +31,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from code_node.report.brands import logo_names  # noqa: E402
+from code_node.report.brands import AWS_GLYPHS, logo_names  # noqa: E402
+from code_node.report.graph import _G_ICONS  # noqa: E402  the same symbols as the graph's line icons
 
 VERSION = "1.2.17"
 URL = f"https://registry.npmjs.org/@iconify-json/logos/-/logos-{VERSION}.tgz"
 INTEGRITY = "sha512-ruCr6y5h8FW+loXwRJkz+6cJj3njyX5Ccpi+ifMgaWZPbTSCbsCccNyGomZxIdhoyDKNOmNdZuURC3tyBvDr7A=="
 OUT = ROOT / "src" / "code_node" / "report" / "logos"
+
+SMALL = 32  # an AWS small mark's square, in its own units
 
 MARKS = {  # a logo that's a wordmark -> the path that writes the word (dropped) and the box its mark fills
     "sqlite": ("M194.52 112.044", (0, 0, 206, 228)),
@@ -57,22 +66,60 @@ def _clean(name: str, body: str) -> str:
     return _COLOUR.sub(lambda m: f'{m.group(1)}="currentColor"' if _dark(m.group(2)) else m.group(0), body)
 
 
-def main() -> None:
-    with urllib.request.urlopen(URL, timeout=60) as answer:  # noqa: S310  a fixed https URL
+def _download(url: str, integrity: str) -> tarfile.TarFile:
+    with urllib.request.urlopen(url, timeout=60) as answer:  # noqa: S310  a fixed https URL
         data = answer.read()
     got = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
-    if got != INTEGRITY:
-        sys.exit(f"{URL} doesn't match its pinned hash: {got}")
-    with tarfile.open(fileobj=io.BytesIO(data)) as archive:
-        member = archive.extractfile("package/icons.json")
-        icons = json.load(member) if member is not None else sys.exit("no icons.json in the package")
+    if got != integrity:
+        sys.exit(f"{url} doesn't match its pinned hash: {got}")
+    return tarfile.open(fileobj=io.BytesIO(data))
+
+
+def _read(archive: tarfile.TarFile, name: str) -> bytes:
+    member = archive.extractfile(name)
+    if member is None:
+        sys.exit(f"no {name} in the package")
+    return member.read()
+
+
+def _aws_small(name: str, body: str) -> str | None:
+    """
+    An AWS service's small mark: its icon's own gradient, filling the square, with the graph's symbol for what it
+    is in white, bold enough to read at 16 px. None for an icon that isn't a coloured square.
+    """
+    gradient = re.search(r"<defs>.*?</defs>", body, re.S)
+    if gradient is None or 'd="M0 0h256v256H0z"' not in body:
+        return None
+    defs = gradient.group(0)
+    for found in set(re.findall(r'id="([^"]+)"', defs)):
+        defs = defs.replace(f'id="{found}"', f'id="{found}-sm"')
+    first = re.search(r'id="([^"]+)"', defs)
+    if first is None:
+        return None
+    glyph = _G_ICONS[AWS_GLYPHS.get(name, "cloud")]
+    scale = 1.25  # the 16-unit symbol at 20 of the square's 32
+    return (f'{defs}<path fill="url(#{first.group(1)})" d="M0 0h{SMALL}v{SMALL}H0z"/>'
+            f'<path fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" '
+            f'transform="translate({(SMALL - 16 * scale) / 2:g} {(SMALL - 16 * scale) / 2:g}) scale({scale})" '
+            f'd="{glyph}"/>')
+
+
+
+def _write(path: Path, width: int, height: int, body: str) -> None:
+    path.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+                    f'viewBox="0 0 {width} {height}" fill="currentColor">{body}</svg>\n', "utf-8")
+
+
+def main() -> None:
+    with _download(URL, INTEGRITY) as archive:
+        icons = json.loads(_read(archive, "package/icons.json"))
     width, height = icons.get("width", 256), icons.get("height", 256)
     wanted = sorted(logo_names())
     missing = [name for name in wanted if name not in icons["icons"]]
     if missing:
         sys.exit(f"not in @iconify-json/logos {VERSION}: {', '.join(missing)}")
-    OUT.mkdir(parents=True, exist_ok=True)
-    for old in OUT.glob("*.svg"):
+    (OUT / "small").mkdir(parents=True, exist_ok=True)
+    for old in [*OUT.glob("*.svg"), *(OUT / "small").glob("*.svg")]:
         old.unlink()
     for name in wanted:
         icon = icons["icons"][name]
@@ -83,17 +130,23 @@ def main() -> None:
             body = re.sub(rf'<path[^>]*d="{re.escape(word)}[^"]*"/>', "", body, count=1)
             if left or top:
                 body = f'<g transform="translate({-left} {-top})">{body}</g>'
-        (OUT / f"{name}.svg").write_text(
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
-            f'fill="currentColor">{body}</svg>\n', "utf-8")
+        _write(OUT / f"{name}.svg", w, h, body)
+        small = _aws_small(name, body) if name.startswith("aws-") else None
+        if small is not None:
+            _write(OUT / "small" / f"{name}.svg", SMALL, SMALL, small)
     (OUT / "README.md").write_text(
-        f"# Logos\n\nThe logos code-node's graph draws, from [gilbarbara/logos](https://github.com/gilbarbara/logos) "
-        f"through Iconify's `@iconify-json/logos` {VERSION}, under CC0-1.0. Each is its company's trademark, shown "
-        "to name the service the code reaches.\n\nWritten by `scripts/logos.py` (`make logos`): don't edit them. "
-        "Each one's ids carry its name, and near-black fills are `currentColor`, so they show in dark mode.\n",
+        f"# Logos\n\nThe logos code-node's graph draws, in two sizes, as favicons come. Each is its company's "
+        "trademark, shown to name the service the code reaches.\n\n"
+        f"- `<name>.svg`: the full art, from [gilbarbara/logos](https://github.com/gilbarbara/logos) through "
+        f"Iconify's `@iconify-json/logos` {VERSION} (CC0-1.0).\n"
+        "- `small/<name>.svg`: for an AWS service, a mark that reads at 16 to 32 px: its icon's own colour with "
+        "code-node's white symbol for what it is, as AWS draws its 16 px icons.\n\n"
+        "Written by `scripts/logos.py` (`make logos`): don't edit them. Each one's ids carry its name, and near-black "
+        "fills are `currentColor`.\n",
         "utf-8")
-    size = sum(f.stat().st_size for f in OUT.glob("*.svg"))
-    print(f"{OUT.relative_to(ROOT)}/: {len(wanted)} logos, {size // 1024} KB")
+    size = sum(f.stat().st_size for f in [*OUT.glob("*.svg"), *(OUT / "small").glob("*.svg")])
+    small = len(list((OUT / "small").glob("*.svg")))
+    print(f"{OUT.relative_to(ROOT)}/: {len(wanted)} logos, {small} with a small mark, {size // 1024} KB")
 
 
 if __name__ == "__main__":

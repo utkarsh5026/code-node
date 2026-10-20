@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from code_node.analysis.findings import code_map_findings  # noqa: E402
 from code_node.pages import PageOptions, map_entry  # noqa: E402
 from code_node.project import entry_points, read_project  # noqa: E402
-from code_node.report.brands import logo  # noqa: E402
+from code_node.report.brands import fills, logo_for  # noqa: E402
 from code_node.report.graph import _g_sans  # noqa: E402
 
 IMAGES = ROOT / "docs" / "images"
@@ -36,7 +36,7 @@ THEMES = {  # the docs site's own colours (docs/stylesheets/extra.css)
              "line": "#7d8494", "warn": "#d97706", "tile": "#ffffff"},
 }
 
-WIDE = 1080  # the mix figure's width
+WIDE = 1100  # the mix figure's width
 
 LOGO_INK = "#1b1d22"  # a logo's near-black parts: logos sit on a white tile in both themes, as they're drawn for one
 
@@ -55,9 +55,9 @@ def _svg(width: int, height: int, body: str, theme: dict[str, str], title: str) 
 
 def _logo(name: str, x: float, y: float, size: float) -> str:
     """
-    A logo fitted into a size x size square at (x, y), kept to its own shape.
+    A logo fitted into a size x size square at (x, y), kept to its own shape: the version drawn for that size.
     """
-    found = logo(name)
+    found = logo_for(name, size)
     if found is None:
         raise SystemExit(f"no logo {name}: add it to src/code_node/report/brands.py and run scripts/logos.py")
     width, height, body = found
@@ -65,9 +65,22 @@ def _logo(name: str, x: float, y: float, size: float) -> str:
             f'fill="currentColor" color="{LOGO_INK}">{body}</svg>')
 
 
+_clips = 0  # clip paths made, for unique ids
+
+
 def _tile(name: str, x: float, y: float, size: float, theme: dict[str, str]) -> str:
-    pad = size * 0.2
-    return (f'<rect x="{x}" y="{y}" width="{size}" height="{size}" rx="{size * 0.24:.1f}" fill="{theme["tile"]}" '
+    """
+    A logo's tile: an AWS icon filling it with its corners rounded, else the logo on white, a little in from the edge.
+    """
+    global _clips
+    radius = size * 0.24
+    found = logo_for(name, size)
+    if found is not None and fills(found):
+        _clips += 1
+        return (f'<clipPath id="cnf-{_clips}"><rect x="{x}" y="{y}" width="{size}" height="{size}" rx="{radius:.1f}"/>'
+                f'</clipPath><g clip-path="url(#cnf-{_clips})">{_logo(name, x, y, size)}</g>')
+    pad = size * 0.14
+    return (f'<rect x="{x}" y="{y}" width="{size}" height="{size}" rx="{radius:.1f}" fill="{theme["tile"]}" '
             f'stroke="{theme["rule"]}"/>' + _logo(name, x + pad, y + pad, size - 2 * pad))
 
 
@@ -164,8 +177,8 @@ def plugins_mix(theme: dict[str, str]) -> str:
         parts.append(_curve(box_x + box_w, box_y + box_h / 2, row_x, y + row_h / 2, theme["line"]))
         parts.append(_card(row_x, y, row_w, row_h, theme))
         for k, name in enumerate(logos):
-            parts.append(_tile(name, row_x + 10 + k * 30, y + 9, 28, theme))
-        text_x = row_x + 10 + 3 * 30 + 8
+            parts.append(_tile(name, row_x + 9 + k * 34, y + 8, 30, theme))
+        text_x = row_x + 9 + 3 * 34 + 8
         if _g_sans(text, 13) * 1.12 > row_x + row_w - 34 - text_x:  # the system fonts run wider than Arial
             raise SystemExit(f"too long for its row: {text}")
         parts.append(f'<text x="{text_x}" y="{y + 28}" font-size="13">{escape(text)}</text>')

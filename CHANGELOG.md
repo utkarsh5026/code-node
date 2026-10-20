@@ -24,6 +24,11 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 - Findings across plugins: a client that has no timeout, worded for where it runs ("Lambda stops it at its 15 s
   timeout"); a connection opened on every call of a Lambda handler; a call in a loop that a batch call would do
   (`executemany()`, `mget()`, `insert_many()`, the Batch API); Redis `KEYS`.
+- Logos are sharp on an ordinary (1x) screen. They come in two sizes, as favicons do: AWS's detailed service
+  icons have a small mark too (the service's colour with a bold white symbol), which the page shows on a 1x screen,
+  and the full art on a 2x one. Badges are 32 px, AWS's icons fill theirs instead of sitting small on a white tile,
+  and other logos have less padding. The docs' figures, the home page graph and the screenshots pick the size they
+  draw at.
 - Real logos in the graph. AWS services (S3, DynamoDB, SNS, SQS, Lambda and about sixty more) and the services
   libraries reach (Redis, PostgreSQL, MySQL, SQLite, MongoDB, OpenAI, Anthropic, Kafka...) show their own logo in
   their box, in light and dark mode, where they had a line drawing; anything without one keeps it. The logos are
