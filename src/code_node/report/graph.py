@@ -45,19 +45,22 @@ _EDGE_WORDS = {"call": "calls", "event": "passes its input to", "env": "configur
 
 # how_it_works()'s graph, drawn: cards with an icon badge per kind on a quiet dotted canvas, column captions, arrows that
 # land on the operation (or leave from the variable) they're about, and a legend of pills. The _g names are its helpers.
-_GRAPH_PAD_X = 18  # left and right of the drawing
+_GRAPH_PAD_X = 28  # left and right of the drawing
 
-_GRAPH_BAND = 44  # the captions' band at the top
+_GRAPH_BAND = 52  # the captions' band at the top
 
-_GRAPH_PAD_B = 22
+_GRAPH_PAD_B = 32
 
-_GRAPH_GAP = 56  # between columns: room for the arrows
+_GRAPH_GAP, _GRAPH_GAP_EACH, _GRAPH_GAP_MAX = 84, 3, 150  # between columns: room for the arrows, wider for each arrow
+# that crosses the gap, so a busy gap's curves stay gentle
 
-_GRAPH_ROW_GAP = 22  # between boxes in a column
+_GRAPH_ROW_GAP = 34  # between boxes in a column
 
-_GRAPH_MIN_W, _GRAPH_MAX_W, _GRAPH_MAX_IN, _GRAPH_MAX_HANDLER = 152, 206, 228, 240  # a column's width, from its boxes
+_GRAPH_HOP_GAP = 16  # between an arrow passing through a column and what's beside it
 
-_GRAPH_MAX_FLAGGED = 264  # ...or a column whose box has a line a warning is about ('ListObjectsV2  first page only')
+_GRAPH_MIN_W, _GRAPH_MAX_W, _GRAPH_MAX_IN, _GRAPH_MAX_HANDLER = 184, 284, 268, 304  # a column's width, from its boxes
+
+_GRAPH_MAX_FLAGGED = 320  # ...or a column whose box has a line a warning is about ('ListObjectsV2  first page only')
 
 _GRAPH_LABEL_LINE = 17  # a name too long for one line takes two
 
@@ -69,7 +72,22 @@ _GRAPH_PROSE = 17  # a line of prose: a docstring, what start-up does
 
 _GRAPH_ROUTE = 28  # a web route's pill
 
-_GRAPH_SWEEPS = 6  # passes that reorder each column by where its neighbours are, so fewer arrows cross
+_GRAPH_SWEEPS = 16  # passes that reorder each column by where its neighbours are, so fewer arrows cross; the order
+# with the fewest crossings is kept
+
+_GRAPH_COUNTED = 4000  # arrow segments, at most, whose crossings are counted to pick the best order (past that, the
+# last pass's order, after _GRAPH_SWEEPS_BIG passes)
+
+_GRAPH_SWEEPS_BIG = 6
+
+_GRAPH_TALL, _GRAPH_LANES = 1800, 4  # a column taller than this is split into lanes side by side, at most this many
+
+_GRAPH_ZOOMS = (  # the graph's zoom buttons: (key, word, said on hover); auto is checked to start
+    ("auto", "Auto", "As big as it is, shrunk a little to fit the page; past that it scrolls"),
+    ("fit", "Fit", "All of it in sight"),
+    ("100", "100%", "As big as it is"),
+    ("150", "150%", "Bigger"),
+)
 
 _GRAPH_LISTS = ("event", "env", "aws", "service", "http")  # boxes whose lines are names: fields, variables,
 # operations, requests
@@ -316,13 +334,24 @@ def _g_cards(graph: CodeGraph) -> dict[str, _GCard]:
     return cards
 
 
-def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[str, int]) -> None:
+def _g_code_lines(n: GraphNode, room: float) -> list[str]:
+    """
+    A function's name in one line, or in two after the dot before its own name when it's too long for one.
+    """
+    name = n.label
+    dot = name.rfind(".", 0, name.find("(") if "(" in name else len(name))
+    if dot < 1 or _g_measure_label(n, name) <= room:
+        return [name]
+    return [name[:dot + 1], name[dot + 1:]]
+
+
+def _g_size(cards:dict[str, _GCard], widths: dict[int, float], column_of: dict[str, int]) -> None:
     for card in cards.values():
         n = card.node
         card.width = widths[column_of[n.id]]
         room = card.width - 52 - 14 - (24 if n.tone == "warn" else 0)
-        if n.kind in ("handler", "function"):  # code: clipped, never wrapped
-            card.label = [_g_fit(n.label, room, lambda t: _g_measure_label(n, t))]
+        if n.kind in ("handler", "function"):  # code: broken only after its last dot ('Store.' 'save()'), else clipped
+            card.label = [_g_fit(part, room, lambda t: _g_measure_label(n, t)) for part in _g_code_lines(n, room)]
         else:
             card.label = _g_wrap(n.label, room, lambda t: _g_measure_label(n, t))
         card.head = (_GRAPH_HEAD if n.sub else _GRAPH_HEAD_BARE) + _GRAPH_LABEL_LINE * (len(card.label) - 1)
@@ -339,6 +368,29 @@ def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[
             card.height = max(card.height, 24 + 12 * card.arrows)
 
 
+def _g_lanes(graph: CodeGraph, cards: dict[str, _GCard]) -> dict[str, int]:
+    """
+    Each box's column in the drawing, left to right from 0: its graph column, except that a column of functions (or
+    of what the code reaches) taller than _GRAPH_TALL is dealt into lanes side by side, at most _GRAPH_LANES, so a wide
+    codebase is drawn wide rather than as one long strip. The arrows into a far lane pass between the near lane's boxes.
+    """
+    _g_size(cards, {0: float(_GRAPH_MAX_W)}, {n.id: 0 for n in graph.nodes})  # about how tall each box will be
+    by_column: dict[int, list[GraphNode]] = defaultdict(list)
+    for n in graph.nodes:
+        by_column[n.column].append(n)
+    column_of, k = {}, 0
+    for column in sorted(by_column):
+        nodes = by_column[column]
+        tall = sum(cards[n.id].height for n in nodes) + _GRAPH_ROW_GAP * (len(nodes) - 1)
+        lanes = 1
+        if all(n.kind in ("function", "aws", "service", "http") for n in nodes):
+            lanes = max(1, min(_GRAPH_LANES, math.ceil(tall / _GRAPH_TALL), len(nodes) // 2))
+        for j, n in enumerate(nodes):
+            column_of[n.id] = k + j % lanes
+        k += lanes
+    return column_of
+
+
 def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
         dict[str, tuple[float, float, float, float]], dict[int, list[float]], float, float, dict[int, float],
         dict[int, float], dict[str, int]]:
@@ -346,13 +398,14 @@ def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
     Where each box goes: (x, y, width, height) by its id; for each arrow that skips columns, the heights where it
     crosses the columns between (a waypoint in each, so it runs between their boxes, not behind them); the drawing's
     width and height; and each column's x and width, and each box's column. A column is as wide as its boxes want,
-    within limits. Each column is put in the order of its neighbours' heights, a few passes left to right and back
-    (the barycenter method), so arrows cross less; then each box is moved as near its neighbours as the boxes around
-    it let it be.
+    within limits, and a gap as wide as the arrows through it need. Arrows that skip columns from one box (the
+    environment's, start-up's), or into one, share their waypoints, so they run as one line and part near the end,
+    instead of each finding its own way. A column too tall to take in is split into lanes side by side. Each column is put in the order of its neighbours' heights, a few passes
+    left to right and back (the barycenter method), keeping the order where the fewest arrows cross; then each box is
+    moved as near its neighbours as the boxes around it let it be.
     """
-    order = sorted({n.column for n in graph.nodes})
-    place = {col: i for i, col in enumerate(order)}
-    column_of = {n.id: place[n.column] for n in graph.nodes}
+    column_of = _g_lanes(graph, cards)
+    order = sorted(set(column_of.values()))
     widths = {k: 0.0 for k in range(len(order))}
     for card in cards.values():
         k = column_of[card.node.id]
@@ -371,24 +424,42 @@ def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
     columns: dict[int, list[str]] = defaultdict(list)
     for node in graph.nodes:
         columns[column_of[node.id]].append(node.id)
+    skips = [(i, e) for i, e in enumerate(graph.edges) if abs(column_of[e.target] - column_of[e.source]) > 1]
+    fan_out: dict[str, int] = defaultdict(int)
+    fan_in: dict[str, int] = defaultdict(int)
+    for _, e in skips:
+        fan_out[e.source] += 1
+        fan_in[e.target] += 1
     near: dict[str, list[str]] = defaultdict(list)
     hops: dict[int, list[str]] = {}
     for i, e in enumerate(graph.edges):
         a, b = column_of[e.source], column_of[e.target]
         chain = [e.source]
-        if abs(b - a) > 1:  # a waypoint in each column it crosses, either way
+        if abs(b - a) > 1:  # a waypoint in each column it crosses, either way, shared with the arrows it bundles with
             step = 1 if b > a else -1
-            hops[i] = [f"~{i}.{k}" for k in range(a + step, b, step)]
+            if fan_out[e.source] > 1 and fan_out[e.source] >= fan_in[e.target]:
+                key = f"~s{step}.{e.source}"
+            elif fan_in[e.target] > 1:
+                key = f"~t{step}.{e.target}"
+            else:
+                key = f"~{i}"
+            hops[i] = [f"{key}.{k}" for k in range(a + step, b, step)]
             for k, hop in zip(range(a + step, b, step), hops[i]):
-                columns[k].append(hop)
-                column_of[hop] = k
-                height[hop] = 4.0
+                if hop not in column_of:
+                    columns[k].append(hop)
+                    column_of[hop] = k
+                    height[hop] = 4.0
             chain += hops[i]
         chain.append(e.target)
         for x, y in zip(chain, chain[1:]):
             if x != y:
                 near[x].append(y)
                 near[y].append(x)
+    segments = {tuple(sorted((x, y), key=lambda item: column_of[item])) for x, ys in near.items() for y in ys
+                if abs(column_of[x] - column_of[y]) == 1}
+    by_gap: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for x, y in segments:
+        by_gap[column_of[x]].append((x, y))
     center: dict[str, float] = {}
     for k in range(len(order)):
         top = 0.0
@@ -397,7 +468,7 @@ def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
             top += height[item] + _GRAPH_ROW_GAP
 
     def gap(x: str, y: str) -> float:
-        return _GRAPH_ROW_GAP if not (x.startswith("~") or y.startswith("~")) else 12.0
+        return _GRAPH_ROW_GAP if not (x.startswith("~") or y.startswith("~")) else _GRAPH_HOP_GAP
 
     def settle(items: list[str], wanted: list[float]) -> None:
         """
@@ -411,7 +482,21 @@ def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
         for item, a in zip(items, at):
             center[item] = a + shift
 
-    for sweep in range(_GRAPH_SWEEPS):
+    def crossings() -> int:
+        """
+        How many pairs of arrows cross in the gaps, with the columns in their order now.
+        """
+        rank = {item: j for items in columns.values() for j, item in enumerate(items)}
+        count = 0
+        for pairs in by_gap.values():
+            ends = sorted((rank[x], rank[y]) for x, y in pairs)
+            for j, (a1, b1) in enumerate(ends):
+                count += sum(1 for a2, b2 in ends[j + 1:] if a2 > a1 and b2 < b1)
+        return count
+
+    counted = len(segments) <= _GRAPH_COUNTED
+    best = (crossings() if counted else 0, {k: list(v) for k, v in columns.items()}, dict(center))
+    for sweep in range(_GRAPH_SWEEPS if counted else _GRAPH_SWEEPS_BIG):
         for k in (range(len(order)) if sweep % 2 == 0 else range(len(order) - 1, -1, -1)):
             items = columns[k]
 
@@ -421,17 +506,29 @@ def _graph_layout(graph: CodeGraph, cards: dict[str, _GCard]) -> tuple[
 
             items.sort(key=pull)
             settle(items, [pull(item) for item in items])
+        if counted and (crossed := crossings()) < best[0]:
+            best = (crossed, {k: list(v) for k, v in columns.items()}, dict(center))
+    if counted:
+        columns.clear()
+        columns.update(best[1])
+        center = best[2]
     top = min(center[item] - height[item] / 2 for item in center)
+    last = len(order) - 1  # a call within the last column curls round into the margin; the others, into a gap
+    through: dict[int, int] = defaultdict(int)  # arrows that cross each gap (the gap after column k), counted once per line drawn
+    for x, y in segments:
+        through[column_of[x]] += 1
+    for e in graph.edges:
+        if column_of[e.source] == column_of[e.target] and column_of[e.source] < last:
+            through[column_of[e.source]] += 1
     xs, x = {}, float(_GRAPH_PAD_X)
     for k in range(len(order)):
         xs[k] = x
-        x += widths[k] + _GRAPH_GAP
+        x += widths[k] + (min(_GRAPH_GAP + _GRAPH_GAP_EACH * through[k], _GRAPH_GAP_MAX) if k < last else 0)
     boxes = {n.id: (xs[column_of[n.id]], center[n.id] - height[n.id] / 2 - top + _GRAPH_BAND, widths[column_of[n.id]],
                     height[n.id]) for n in graph.nodes}
     routes = {i: [center[hop] - top + _GRAPH_BAND for hop in chain] for i, chain in hops.items()}
-    last = len(order) - 1  # a call within the last column curls round into the margin; the others, into a gap
-    loops = 52 if any(column_of[e.source] == column_of[e.target] == last for e in graph.edges) else 0
-    width = x - _GRAPH_GAP + _GRAPH_PAD_X + loops
+    loops = 64 if any(column_of[e.source] == column_of[e.target] == last for e in graph.edges) else 0
+    width = x + _GRAPH_PAD_X + loops
     tall = max(max(y + h for _, y, _, h in boxes.values()),
                max((y for ys in routes.values() for y in ys), default=0)) + _GRAPH_PAD_B
     return boxes, routes, width, tall, xs, widths, column_of
@@ -513,6 +610,7 @@ def _g_anchors(graph: CodeGraph, cards: dict[str, _GCard], boxes: dict[str, tupl
             for y in ends[i][end]:
                 shared[(node_id, end, round(y, 1))].append(i)
     for (node_id, end, y), edges in shared.items():
+        edges = [i for i in edges if graph.edges[i].kind != "env"]  # the environment's leave as one line, then part
         if len(edges) > 1 and end == 0:  # leaving one row: side by side, within the row (arriving: one head)
             edges.sort(key=lambda i: other(i, end))
             step = min(5.0, (_GRAPH_ROW - 6) / (len(edges) - 1))
@@ -897,7 +995,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
     for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
-        report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) :is(.s-{n.id},.t-{n.id}) .ln{{stroke-width:2.4}}")
+        report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) :is(.s-{n.id},.t-{n.id}) .ln{{stroke-width:2.4;stroke-opacity:1}}")
     marked: set[tuple[str, str]] = set()  # one loop mark between two boxes, even for two arrows
     taken: list[tuple[float, float]] = []  # where marks are, so the next one goes clear of them
     lanes: dict[frozenset[str], int] = defaultdict(int)  # calls within a column between the same two boxes
@@ -942,11 +1040,23 @@ def _graph_html(block: _Graph, report: _Report) -> str:
               "not drawn (too deep or too many): the Step by step tab has them all</span>") if graph.hidden else ""
     hint = ('<span class="kt">Point at a box to see only what it\'s joined to'
             + ("; click it to read its code" if any(panels.values()) else "") + "</span>")
+    made = report.shared("graphs", lambda: [0])  # graphs drawn so far, so each one's buttons have ids of their own
+    group = f"cn-graph{made[0]}"
+    made[0] += 1
+    # its zoom and full screen: inputs before the box they change, so CSS reaches it with ~ (no :has(), no script)
+    switches = (f'<input type="checkbox" class="cgs cgfs" id="{group}-full">'
+                + "".join(f'<input type="radio" class="cgs cgz-{key}" name="{group}-zoom" id="{group}-{key}"'
+                          f'{" checked" if key == "auto" else ""}>' for key, _, _ in _GRAPH_ZOOMS))
+    bar = ('<div class="cgt"><span class="cgtz" role="group" aria-label="Zoom">'
+           + "".join(f'<label class="zl-{key}" for="{group}-{key}" title="{_esc(tip)}">{_esc(word)}</label>'
+                     for key, word, tip in _GRAPH_ZOOMS)
+           + f'</span><label class="cgtf" for="{group}-full"><span class="on">Full screen</span>'
+           '<span class="off">Close full screen</span></label></div>')
     # in a box of its own with its panels: the :has() rules that outline a box whose code is open look only in here,
     # so a radio button elsewhere (the walk's steps) doesn't make the browser restyle the whole page
-    return (f'{title}<div class="cgw"><div class="cgb"><div class="cg"><svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" '
-            f'height="{tall:.0f}" style="min-width:{width * 0.72:.0f}px" role="img" '
-            f'aria-label="{_esc(block.title or "How the code fits together")}">'
+    return (f'{title}<div class="cgw">{switches}<div class="cgb">{bar}<div class="cg">'
+            f'<svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" height="{tall:.0f}" '
+            f'style="--w:{width:.0f}px" role="img" aria-label="{_esc(block.title or "How the code fits together")}">'
             f'{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}</svg></div>'
             f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}</div>')
 

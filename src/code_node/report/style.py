@@ -104,7 +104,27 @@ _EXTRA_CSS = """\
 .cnd .cgb{width:fit-content;max-width:min(100%,1180px)}
 .cnd .cg{border:1px solid rgba(127,127,127,.2);border-radius:14px;margin:6px 0 8px;overflow:auto;background-color:rgba(127,127,127,.035);background-attachment:local;background-size:18px 18px;
  background-image:radial-gradient(circle at 1px 1px,rgba(127,127,127,.3) 1px,transparent 0);background-position:9px 9px}
-.cnd .cg svg{display:block;max-width:100%;height:auto;overflow:visible;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.cnd .cg svg{display:block;width:calc(var(--w)*var(--z,1));max-width:none;height:auto;overflow:visible;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.cnd .cgw{position:relative}
+.cnd .cgw>.cgs{position:absolute;left:0;top:0;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
+.cnd .cgt{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin:0 0 6px;font-size:12px;user-select:none;-webkit-user-select:none}
+.cnd .cgtz{display:inline-flex;border:1px solid rgba(127,127,127,.28);border-radius:8px;overflow:hidden}
+.cnd .cgtz label{padding:3px 10px;cursor:pointer;opacity:.6;font-variant-numeric:tabular-nums}
+.cnd .cgtz label+label{border-left:1px solid rgba(127,127,127,.2)}
+.cnd .cgt label:hover{opacity:.95;background:rgba(127,127,127,.08)}
+.cnd .cgtf{padding:3px 10px;border:1px solid rgba(127,127,127,.28);border-radius:8px;cursor:pointer;opacity:.7}
+.cnd .cgtf .off,.cnd .cgfs:checked~.cgb .cgtf .on{display:none}
+.cnd .cgfs:checked~.cgb .cgtf .off{display:inline}
+.cnd .cgz-auto:checked~.cgb .zl-auto,.cnd .cgz-fit:checked~.cgb .zl-fit,.cnd .cgz-100:checked~.cgb .zl-100,.cnd .cgz-150:checked~.cgb .zl-150{opacity:1;font-weight:650;background:rgba(127,127,127,.14)}
+.cnd .cgz-auto:focus-visible~.cgb .zl-auto,.cnd .cgz-fit:focus-visible~.cgb .zl-fit,.cnd .cgz-100:focus-visible~.cgb .zl-100,.cnd .cgz-150:focus-visible~.cgb .zl-150,.cnd .cgfs:focus-visible~.cgb .cgtf{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px}
+.cnd .cgz-150:checked~.cgb{--z:1.5}
+.cnd .cgz-auto:checked~.cgb .cg svg{width:var(--w);max-width:100%;min-width:calc(var(--w)*.8)}
+.cnd .cgz-fit:checked~.cgb .cg svg{width:var(--w);max-width:100%}
+.cnd .cgfs:checked~.cgb{position:fixed;inset:0;z-index:25;width:auto;max-width:none;display:flex;flex-direction:column;box-sizing:border-box;padding:12px clamp(12px,2vw,28px) 4px;background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas))}
+.cnd .cgfs:checked~.cgb .cg{flex:1;min-height:0;margin:0 0 8px}
+.cnd .cgfs:checked~.cgz-fit:checked~.cgb .cg svg{width:100%;height:100%;max-width:none}
+.cnd .cgfs:checked~.cgz-auto:checked~.cgb .cg svg{min-width:0}
+@media (min-width:1100px){.cnd .cgw:has(.cside:target) .cgfs:checked~.cgb{right:min(660px,94vw)}}
 .cnd .cg .cap{font-size:12px;font-weight:650;letter-spacing:1.2px;fill:currentColor;fill-opacity:.6}
 .cnd .cg .capl{stroke:currentColor;stroke-opacity:.14;stroke-width:1;fill:none}
 .cnd .cg .cn,.cnd .cg .ce{transition:opacity .15s}
@@ -169,6 +189,7 @@ _EXTRA_CSS = """\
 .cnd .cg .ek-event{--c:#16a34a}
 .cnd .cg .ek-event .ln{stroke-width:2.2}
 .cnd .cg .ek-env,.cnd .cgk .ek-env{--c:#0d9488}
+.cnd .cg :is(.ek-env,.ek-client) .ln{stroke-opacity:.6}
 .cnd .cg .ek-env .ln,.cnd .cgk .ek-env .ln{stroke-dasharray:5 4}
 .cnd .cg .ek-client,.cnd .cgk .ek-client{--c:rgba(100,116,139,.85)}
 .cnd .cg .ek-client .ln,.cnd .cgk .ek-client .ln{stroke-dasharray:.5 4.5;stroke-width:2}

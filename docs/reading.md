@@ -39,6 +39,13 @@ Read it left to right.
 !!! tip "Worth knowing"
     Point at a box and everything it isn't connected to fades out.
 
+??? more "Zoom, full screen and big graphs"
+    The graph is drawn at its real size. **Auto** shrinks it a little to fit the page and scrolls sideways past
+    that; **Fit** puts all of it in sight; **100%** and **150%** are as big as it is and bigger. **Full screen** gives
+    it the whole window, with the same buttons. Arrows that skip columns from one box (the environment's, start-up's)
+    or into one run as a single line and part near the end, and a column too tall to take in is split into lanes
+    side by side, so `--functions 100` draws a wide map rather than a long strip.
+
 ??? more "Click a box to read its code"
     A panel slides in from the right with the code the box is about, its lines numbered. A function shows whole,
     with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the

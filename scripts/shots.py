@@ -36,6 +36,7 @@ EXAMPLE = ROOT / "examples" / "orders-service"
 CART = ROOT / "examples" / "cart-service"  # every kind of plugin: its SAM template, Redis, PostgreSQL, OpenAI
 IMAGES = ROOT / "docs" / "images"
 WIDTH = 1240  # the browser window: the figures are trimmed to what's drawn in it
+WIDE = 1800  # ...for the figures that are only the graph, so it's drawn at its real size
 SCALE = 2  # device pixels per CSS pixel, for sharp text
 MARGIN = 24  # kept around what's drawn, in device pixels
 
@@ -107,12 +108,16 @@ def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
         html = html.replace('id="cw0" checked', 'id="cw0"').replace(f'id="cw{STEP_SHOWN}"',
                                                                     f'id="cw{STEP_SHOWN}" checked')
+    # all of the graph in the picture, however wide it is: Fit, not Auto
+    html = html.replace('id="cn-graph0-auto" checked', 'id="cn-graph0-auto"').replace(
+        'id="cn-graph0-fit"', 'id="cn-graph0-fit" checked')
     page.write_text(html, "utf-8")
+    width = WIDE if name in ("graph", "plugins") else WIDTH
     for theme in ("light", "dark"):
         out = IMAGES / f"{name}-{theme}.png"
         flags = ["--force-dark-mode"] if theme == "dark" else []
         subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-                        f"--force-device-scale-factor={SCALE}", f"--window-size={WIDTH},4000", *flags,
+                        f"--force-device-scale-factor={SCALE}", f"--window-size={width},4000", *flags,
                         "--virtual-time-budget=2000",
                         f"--screenshot={out}", page.as_uri()], check=True, capture_output=True)
         width, height = _trim(out)

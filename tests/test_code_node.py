@@ -337,6 +337,23 @@ def test_the_graph_draws_the_functions_that_do_the_work(tmp_path: Path) -> None:
     assert main_box.more == ["tidy()", "note()"]  # said in its box, rather than looking like it does nothing
 
 
+def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) -> None:
+    from code_node.report.graph import _g_cards, _graph_layout
+
+    chain = ("import os\n\n\ndef main():\n    a()\n\n\ndef a():\n    b()\n\n\ndef b():\n    os.environ['B']\n    c()\n\n\n"
+             "def c():\n    os.environ['C']\n")
+    project = read_project(write(tmp_path / "code", {"app.py": chain}))
+    graph = code_graph(map_code(project.files, "app.main"))
+    _, routes, *_ = _graph_layout(graph, _g_cards(graph))
+    env = [routes[i] for i, e in enumerate(graph.edges) if e.kind == "env"]
+    assert len(env) == 2 and env[0][:2] == env[1][:2]  # one line through the columns both cross, then they part
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
+    page = out.read_text()
+    assert 'class="cgs cgz-auto" name="cn-graph0-zoom" id="cn-graph0-auto" checked' in page
+    assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and "<script" not in page
+
+
 def test_line_links_open_the_editor(tmp_path: Path) -> None:
     from code_node.report.editor import editor_link, open_at
 

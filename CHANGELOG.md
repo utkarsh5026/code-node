@@ -43,6 +43,14 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 
 ### Changed
 
+- The graph has room to breathe and is drawn at its real size, no longer squeezed to the page's width. Gaps between
+  columns widen with the arrows through them, boxes are spaced further apart, columns are wider so names show whole
+  (a long method's name breaks after its class: `PluginManager.` / `_load_plugin()`), and the order with the fewest
+  crossing arrows is kept. Arrows that skip columns from one box (the environment's, start-up's) or into one run as
+  one line and part near the end, instead of each taking its own path, and the environment's and clients' arrows
+  are quieter until you point at a box. A column too tall to take in is split into lanes side by side, so a big
+  graph (`--functions 100`) is wide, not one long strip. Buttons over the graph zoom it (Auto, Fit, 100%, 150%)
+  and open it full screen, without JavaScript.
 - code-node now depends on PyYAML, to read deploy files.
 - `--serve` also redraws when a deploy file (`template.yaml`, `serverless.yml`) changes.
 
