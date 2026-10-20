@@ -148,6 +148,8 @@ def test_the_steps_are_walked_in_the_order_the_code_runs(tmp_path: Path) -> None
         "Finish <code>load()</code>"
     ) in html  # from inside load()
     assert '<div class="whead">Makes an S3 client</div>' in html  # each step said in plain words
+    assert 'id="cx1"' in html and 'id="cx0"' not in html  # lambda_handler() folds; the import line has nothing under it
+    assert "#cx1:checked~.wu1" in html and 'class="wil k-def wu1 wu2 wu3"' in html  # load(), inside its caller's fold
     assert '<span class="wtx">Goes through each <code>record</code> in <code>event[&#x27;Records&#x27;]</code>' in html
     assert '<label class="sl" for="cw5"><span class="sn">10</span>' in html  # load()'s line 10 jumps to its step
     assert ".cnd #cw5:checked~.wf2{--k:1}" in html  # and lights the second line of load()

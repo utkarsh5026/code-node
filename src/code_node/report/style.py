@@ -298,13 +298,27 @@ _EXTRA_CSS = """\
 .cnd .walk .ws{border-left:1px solid rgba(127,127,127,.2)}
 .cnd .walk .wch{position:sticky;top:0;z-index:2;padding:12px 16px 9px;font-size:12.5px;font-weight:650;background:var(--bg);border-bottom:1px solid rgba(127,127,127,.14)}
 .cnd .walk .wr{display:block;width:0;height:0;margin:0;border:0;padding:0;opacity:0;appearance:none;-webkit-appearance:none;pointer-events:none}
-.cnd .walk .wil{display:flex;align-items:center;gap:10px;min-height:30px;padding:0 14px 0 4px;cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;transition:background-color .15s}
+.cnd .walk .wil{display:flex;align-items:center;gap:10px;min-height:30px;padding:0 14px 0 4px;cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;transition:background-color .2s,box-shadow .2s;animation:cnd-row .22s ease-out}
+@keyframes cnd-row{from{opacity:0;transform:translateY(-3px)}}
+.cnd .walk .wcx{position:absolute;width:0;height:0;margin:0;opacity:0;pointer-events:none}
+.cnd .walk .wtg{position:relative;z-index:1;display:block;height:0}
+.cnd .walk .wtg i{position:absolute;top:0;left:calc(40px + var(--d)*16px);width:16px;height:30px;border-radius:4px;cursor:pointer;opacity:.45;transition:opacity .15s,background-color .15s}
+.cnd .walk .wtg i::before{content:"";position:absolute;left:5px;top:12px;width:5px;height:5px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg);transition:transform .2s cubic-bezier(.3,.7,.3,1)}
+.cnd .walk .wtg:hover i{opacity:1;background:rgba(127,127,127,.14)}
+.cnd .walk .wcx:checked+.wtg i{opacity:.8}
+.cnd .walk .wcx:checked+.wtg i::before{transform:translate(-1px,1px) rotate(-45deg)}
+.cnd .walk .wcnt{display:none;flex:none;font-size:11px;padding:0 7px;border-radius:9px;line-height:17px;background:rgba(127,127,127,.14);opacity:.75;animation:cnd-in .2s ease}
+.cnd .walk .wcx:checked+.wtg+.wr+.wil .wcnt{display:inline-block}
 .cnd .walk .wil:hover{background-color:rgba(127,127,127,.08)}
 .cnd .walk .wr:checked+.wil{background-color:rgba(245,158,11,.16);box-shadow:inset 3px 0 #f59e0b}
 .cnd .walk .wr:focus-visible+.wil{outline:2px solid var(--blue);outline-offset:-2px}
 .cnd .walk .wno{flex:0 0 26px;text-align:right;font:11px var(--mono);opacity:.4;font-variant-numeric:tabular-nums}
-.cnd .walk .wr:checked+.wil .wno{opacity:.8}
-.cnd .walk .wx{display:flex;align-items:center;align-self:stretch;gap:8px;min-width:0;flex:1;padding-left:calc(var(--d)*16px);background:repeating-linear-gradient(90deg,rgba(127,127,127,.18) 0 1px,transparent 1px 16px) 5px 0/calc(var(--d)*16px) 100% no-repeat}
+.cnd .walk .wr:checked+.wil .wno{opacity:.9;color:#d97706;font-weight:600}
+.cnd .walk .wtx{transition:transform .2s ease}
+.cnd .walk .wr:checked+.wil .wtx{transform:translateX(2px)}
+.cnd .walk .wr:checked+.wil .wdot{animation:cnd-ping 1s ease-out 2}
+@keyframes cnd-ping{from{box-shadow:0 0 0 0 var(--c,rgba(127,127,127,.6))}to{box-shadow:0 0 0 6px transparent}}
+.cnd .walk .wx{display:flex;align-items:center;align-self:stretch;gap:8px;min-width:0;flex:1;padding-left:calc(var(--d)*16px + 18px);background:repeating-linear-gradient(90deg,rgba(127,127,127,.18) 0 1px,transparent 1px 16px) 8px 0/calc(var(--d)*16px) 100% no-repeat}
 .cnd .walk .wtx{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .cnd .walk .wtx code{font:12px var(--mono);background:none;padding:0}
 .cnd .walk :is(.k-def,.k-module) .wtx b{font:650 12.5px var(--mono)}
@@ -312,7 +326,10 @@ _EXTRA_CSS = """\
 .cnd .walk .wdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--c,rgba(127,127,127,.6))}
 .cnd .walk :is(.d-aws-reads,.d-lib-reads){--c:#3b82f6}.cnd .walk :is(.d-aws-writes,.d-lib-writes){--c:#ea580c}
 .cnd .walk :is(.d-aws-sends,.d-lib-sends,.d-http){--c:#db2777}.cnd .walk :is(.d-aws-runs,.d-lib-runs){--c:#9333ea}.cnd .walk .d-aws-signs{--c:#64748b}
-.cnd .walk .wc{display:none;position:absolute;left:var(--lw);right:0;top:0;height:var(--ch);box-sizing:border-box;overflow:auto;padding:14px 22px 12px;white-space:normal;cursor:auto;border-left:1px solid rgba(127,127,127,.2);border-bottom:1px solid rgba(127,127,127,.18);background:var(--bg);animation:cnd-in .18s ease}
+.cnd .walk .wc{display:none;position:absolute;left:var(--lw);right:0;top:0;height:var(--ch);box-sizing:border-box;overflow:auto;padding:14px 22px 12px;white-space:normal;cursor:auto;border-left:1px solid rgba(127,127,127,.2);border-bottom:1px solid rgba(127,127,127,.18);background:var(--bg)}
+.cnd .walk .wc>*{animation:cnd-in .24s ease both}
+.cnd .walk .wc>.whead{animation-delay:.03s}.cnd .walk .wc>.wstk{animation-delay:.06s}.cnd .walk .wc>.wsay{animation-delay:.09s}.cnd .walk .wc>.wthen{animation-delay:.12s}
+.cnd .walk .wfacts li{animation:cnd-in .24s ease both;animation-delay:.12s}.cnd .walk .wfacts li:nth-child(2){animation-delay:.15s}.cnd .walk .wfacts li:nth-child(n+3){animation-delay:.18s}
 .cnd .walk .wr:checked+.wil+.wc{display:block}
 .cnd .walk .wnav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .cnd .walk .wbt{display:inline-flex;align-items:center;gap:5px;padding:4px 14px;border:1px solid rgba(127,127,127,.32);border-radius:8px;font-size:13px;font-weight:600;line-height:20px;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background-color .12s,transform .06s}
@@ -348,7 +365,9 @@ _EXTRA_CSS = """\
 .cnd .walk :is(.wfm,.wfv){opacity:.6}
 .cnd .walk .wthen{margin-top:10px;font-size:12px;opacity:.6}
 .cnd .walk .wf{display:none;position:absolute;left:var(--lw);right:0;top:var(--ch);bottom:0;flex-direction:column;border-left:1px solid rgba(127,127,127,.2);background:var(--bg)}
-.cnd .walk .wfn>.wr:checked~.wf{display:flex}
+.cnd .walk .wfn>.wr:checked~.wf{display:flex;animation:cnd-fade .25s ease}
+.cnd .walk .wfh{animation:cnd-in .25s ease}
+@keyframes cnd-fade{from{opacity:0}}
 .cnd .walk .wfh{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 22px;font-size:12px;border-bottom:1px solid rgba(127,127,127,.12)}
 .cnd .walk .wfh b{font:650 12.5px var(--mono)}
 .cnd .walk .wfh span{opacity:.62}
@@ -356,15 +375,16 @@ _EXTRA_CSS = """\
 .cnd .walk .wfw{position:relative;flex:1;min-height:0;overflow-x:auto;overflow-y:hidden;container-type:size;background:rgba(127,127,127,.03)}
 .cnd .walk .wfp{position:relative;box-sizing:border-box;width:max-content;min-width:100%;padding:var(--pad) 0;font:12.5px/var(--lh) var(--mono);
  translate:0 min(0px,max(calc(100cqh - var(--n)*var(--lh) - 2*var(--pad)),calc(36cqh - var(--k,0)*var(--lh))));transition:translate .32s cubic-bezier(.25,.8,.25,1)}
-.cnd .walk .wbar{position:absolute;left:0;right:0;top:calc(var(--pad) + var(--k,-9)*var(--lh));height:var(--lh);background:rgba(245,158,11,.2);box-shadow:inset 3px 0 #f59e0b;transition:top .32s cubic-bezier(.25,.8,.25,1)}
+.cnd .walk .wbar{position:absolute;left:0;right:0;top:calc(var(--pad) + var(--k,-9)*var(--lh));height:var(--lh);background:rgba(245,158,11,.2);box-shadow:inset 3px 0 #f59e0b;transition:top .32s cubic-bezier(.25,.8,.25,1);animation:cnd-glow 1.2s ease-in-out 2}
+@keyframes cnd-glow{50%{background:rgba(245,158,11,.3)}}
 .cnd .walk .sl{position:relative;display:block;padding-right:16px;white-space:pre}
 .cnd .walk span.sl{opacity:.6}
-.cnd .walk label.sl{cursor:pointer}
+.cnd .walk label.sl{cursor:pointer;transition:background-color .15s}
 .cnd .walk label.sl:hover{background:rgba(127,127,127,.1)}
 .cnd .walk .sn{display:inline-block;width:3.2em;padding-right:14px;text-align:right;opacity:.42;user-select:none;-webkit-user-select:none}
 .cnd .walk label.sl .sn{opacity:.8}
 @media (max-width:860px){.cnd .walk{--lt:40vh;grid-template-columns:minmax(0,1fr);grid-template-rows:var(--lt) 1fr;height:calc(var(--lt) + var(--ch) + 380px)}.cnd .walk .wl{max-height:none}.cnd .walk :is(.wc,.wf){left:0;border-left:0}.cnd .walk .wc{top:var(--lt);border-top:1px solid rgba(127,127,127,.2);padding:12px 16px}.cnd .walk .wf{top:calc(var(--lt) + var(--ch))}.cnd .walk .ws{border-left:0}}
-@media (prefers-reduced-motion:reduce){.cnd .walk .wfp,.cnd .walk .wbar,.cnd .walk .wc,.cnd .tabs>.tp{transition:none;animation:none}}"""
+@media (prefers-reduced-motion:reduce){.cnd .walk :is(.wfp,.wbar,.wc,.wc>*,.wfacts li,.wil,.wtx,.wdot,.wcnt,.wf,.wfh,.wtg i,.wtg i::before),.cnd .tabs>.tp{transition:none;animation:none}}"""
 
 _CSS = _base_css(_ROOT, _EXTRA_CSS)
 

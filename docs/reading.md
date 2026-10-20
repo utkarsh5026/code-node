@@ -63,6 +63,10 @@ with each of its own functions as a heading over its steps. A dot marks the step
 graph's colours. On the right is a card saying what the current step does and which calls it's inside, and under it
 the function's code with that line lit.
 
+The list is a tree, like a JSON viewer's: the arrow beside a step with steps under it (a function, a loop, a
+branch) folds them away and leaves a count in their place, so you can hide what you've read and keep the part you're
+following. A folded step still shows its card and code when Next lands on a step inside it.
+
 ![The Step by step tab](images/steps-light.webp#only-light){ loading=lazy }
 ![The Step by step tab](images/steps-dark.webp#only-dark){ loading=lazy }
 
@@ -79,4 +83,5 @@ the function's code with that line lit.
 ??? more "How it works without JavaScript"
     Each step is a radio button and the buttons are its labels, so the arrow keys move between them as they do in any
     radio group. The CSS shows the card of the checked step and the code of the function it's in, and moves the lit
-    line there, which slides when the next step is in the same function.
+    line there, which slides when the next step is in the same function. Each fold is a checkbox, and the steps under
+    it carry its number as a class, so one rule hides them all.
