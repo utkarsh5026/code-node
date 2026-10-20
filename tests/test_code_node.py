@@ -601,6 +601,14 @@ def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) ->
     page = out.read_text()
     assert 'class="cgs cgz-auto" name="cn-graph0-zoom" id="cn-graph0-auto" checked' in page
     assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and page.count("<script>") == 1
+    # with JavaScript it pans and zooms like a canvas, and says so; without it, it scrolls
+    assert (
+        'box.addEventListener("wheel"' in page
+        and 'class="cgtm pzo"' in page
+        and 'class="zi"' in page
+        and "Drag to move about" in page
+    )
+    assert ".cnd .cgw:not(.pz) .pzo{display:none}" in page
 
 
 def test_a_box_says_what_it_is_in_a_card_on_hover(tmp_path: Path) -> None:

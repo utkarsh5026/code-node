@@ -1414,7 +1414,7 @@ _G_SCRIPT = """<script>
     const from = view ? document.getElementById(view)?.content : wrap.main;
     if (!from) return;
     for (const part of parts) {
-      wrap.querySelector(".cgb > ." + part).innerHTML = from.querySelector(".x-" + part).innerHTML;
+      wrap.querySelector(".cgb ." + part).innerHTML = from.querySelector(".x-" + part).innerHTML;
     }
     wrap.dataset.view = view;
     wrap.querySelector(".cgb").scrollIntoView({block: "nearest"});
@@ -1424,7 +1424,7 @@ _G_SCRIPT = """<script>
     for (const part of parts) {
       const kept = document.createElement("div");
       kept.className = "x-" + part;
-      kept.innerHTML = wrap.querySelector(".cgb > ." + part).innerHTML;
+      kept.innerHTML = wrap.querySelector(".cgb ." + part).innerHTML;
       main.content.append(kept);
     }
     wrap.main = main.content;
@@ -1440,6 +1440,97 @@ _G_SCRIPT = """<script>
     if (open && !open.contains(e.target) && !e.target.closest("a[href], label, input, .cgt")) close();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  // Moving about a graph as on a canvas: drag it to pan, Ctrl or ⌘ with the wheel (or a trackpad's pinch) to zoom
+  // around the pointer, and + - 0 when it has focus. A zoom of its own unchecks the bar's buttons, so the plain rule
+  // (the SVG's width times --z) draws it; picking a button again takes it back. Its box keeps one size, and Fit
+  // (--fit) puts all of it in that box, both ways.
+  for (const wrap of document.querySelectorAll(".cgw")) {
+    const box = wrap.querySelector(".cgb .cg"), radios = wrap.querySelectorAll(":scope > .cgs[type=radio]");
+    const said = wrap.querySelector(".cgtp"), svg = () => box.querySelector("svg");
+    const scale = () => {
+      const s = svg();
+      return s && s.viewBox.baseVal.width ? s.getBoundingClientRect().width / s.viewBox.baseVal.width : 1;
+    };
+    const fit = () => {
+      const s = svg(), w = s && s.viewBox.baseVal.width, h = s && s.viewBox.baseVal.height;
+      if (w && h && box.clientWidth) {
+        box.style.setProperty("--fit", Math.min((box.clientWidth - 24) / w, (box.clientHeight - 24) / h, 1.5));
+      }
+    };
+    const tell = () => { fit(); if (said) said.textContent = Math.round(scale() * 100) + "%"; };
+    const pan = (dx, dy) => {  // the graph's box first, then the page for what it can't scroll
+      const top = box.scrollTop;
+      box.scrollLeft += dx;
+      box.scrollTop += dy;
+      const left = dy - (box.scrollTop - top);
+      if (Math.abs(left) > 0.5) scrollBy(0, left);
+    };
+    const zoom = (by, x, y) => {  // keeps the point at (x, y) where it is
+      const s = svg();
+      if (!s) return;
+      const from = scale(), to = Math.min(4, Math.max(0.1, from * by)), was = s.getBoundingClientRect();
+      const px = (x - was.left) / from, py = (y - was.top) / from;
+      radios.forEach((r) => { r.checked = false; });
+      box.style.setProperty("--z", to);
+      const now = s.getBoundingClientRect();
+      pan(now.left + px * to - x, now.top + py * to - y);
+      tell();
+    };
+    const auto = () => {  // back to the Auto button
+      const radio = wrap.querySelector(":scope > .cgz-auto");
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", {bubbles: true}));
+    };
+    const step = (by) => {  // around the middle of what's in sight
+      const r = box.getBoundingClientRect();
+      zoom(by, r.left + r.width / 2, (Math.max(r.top, 0) + Math.min(r.bottom, innerHeight)) / 2);
+    };
+    wrap.querySelector(".cgb .zi")?.addEventListener("click", () => step(1.25));
+    wrap.querySelector(".cgb .zo")?.addEventListener("click", () => step(0.8));
+    let drag = null, moved = false;
+    box.addEventListener("pointerdown", (e) => {
+      moved = false;
+      if (e.button === 0 && e.pointerType !== "touch") drag = {x: e.clientX, y: e.clientY, id: e.pointerId};
+    });
+    box.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!moved && Math.hypot(dx, dy) < 4) return;  // a click on a box stays a click
+      if (!moved) { moved = true; box.setPointerCapture(e.pointerId); box.classList.add("pan"); }
+      pan(-dx, -dy);
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    });
+    const end = () => { drag = null; box.classList.remove("pan"); };
+    box.addEventListener("pointerup", end);
+    box.addEventListener("pointercancel", end);
+    box.addEventListener("click", (e) => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
+    box.addEventListener("dragstart", (e) => e.preventDefault());
+    box.addEventListener("wheel", (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const d = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+      zoom(Math.exp(-Math.max(-100, Math.min(100, d)) * 0.0015), e.clientX, e.clientY);
+    }, {passive: false});
+    box.tabIndex = 0;
+    box.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "+" || e.key === "=") step(1.25);
+      else if (e.key === "-" || e.key === "_") step(0.8);
+      else if (e.key === "0") auto();
+      else return;
+      e.preventDefault();
+    });
+    wrap.addEventListener("change", (e) => {
+      if (!e.target.matches(".cgs")) return;  // a zoom button, or full screen: its box's size changes
+      if (e.target.type === "radio") box.style.removeProperty("--z");
+      requestAnimationFrame(tell);
+    });
+    addEventListener("hashchange", () => requestAnimationFrame(tell));
+    addEventListener("resize", tell);
+    wrap.classList.add("pz");
+    tell();
+  }
 })();
 </script>"""
 
@@ -1604,7 +1695,7 @@ def _g_canvas(
     hint = (
         '<span class="kt">Point at a box to see only what it\'s joined to'
         + ("; click it to read its code" if panel_of else "")
-        + "</span>"
+        + '</span><span class="kt pzo">Drag to move about; Ctrl or ⌘ and scroll, or pinch, to zoom</span>'
     )
     svg = (
         f'<svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" height="{tall:.0f}" '
@@ -1681,8 +1772,14 @@ def _graph_html(block: _Graph, report: _Report) -> str:
         + f'</span><label class="cgtf" for="{group}-full"><span class="on">Full screen</span>'
         '<span class="off">Close full screen</span></label></div>'
     )
+    zoom = (  # over the graph's corner, as a canvas has it: with JavaScript only
+        '<span class="cgtm pzo" role="group" aria-label="Zoom out or in">'
+        '<button type="button" class="zo" title="Zoom out (-, or Ctrl and scroll)">−</button>'
+        '<span class="cgtp" title="How big the graph is drawn"></span>'
+        '<button type="button" class="zi" title="Zoom in (+, or Ctrl and scroll)">+</button></span>'
+    )
     script = ""
-    if (views or panels) and not report.shared("graph-script", lambda: [False])[0]:
+    if not report.shared("graph-script", lambda: [False])[0]:  # once, for every graph: moving about and zooming
         report.shared("graph-script", lambda: [False])[0] = True
         script = _G_SCRIPT
     # in a box of its own with its panels: the :has() rules that outline a box whose code is open look only in here,
@@ -1690,7 +1787,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
     data = f' data-group="{group}"' if views else ""
     return (
         f'{title}<div class="cgw"{data}>{switches}<div class="cgb">{bar}'
-        f'<nav class="cgc" aria-label="Where this graph starts"></nav><div class="cg">{svg}</div>'
+        f'<nav class="cgc" aria-label="Where this graph starts"></nav><div class="cgv"><div class="cg">{svg}</div>{zoom}</div>'
         f'<div class="cgk">{legend}</div></div>{"".join(html for _, html in panels.values())}{"".join(views)}</div>'
         f"{script}"
     )
