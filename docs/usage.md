@@ -39,7 +39,7 @@ in your browser.
 
     - console scripts in every `pyproject.toml` (the root's first, then a monorepo's `libs/*/pyproject.toml`)
     - Lambda handlers: `def handler(event, context)`
-    - FastAPI / Flask apps: every route
+    - FastAPI / Flask apps, and Django's `urls.py`: every route, called with the request
     - Typer apps: every command
     - whatever runs under `if __name__ == "__main__":`
     - functions called `main`, `run`, `cli` or `app`

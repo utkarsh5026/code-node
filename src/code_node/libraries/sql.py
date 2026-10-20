@@ -1,6 +1,6 @@
 """
 SQL databases through their drivers: sqlite3, psycopg2 and psycopg (PostgreSQL), PyMySQL and mysql-connector
-(MySQL), asyncpg, and SQLAlchemy's engines and text(). Each statement is read for what it does to which table, and a
+(MySQL), asyncpg, SQLAlchemy's engines and text(), and Django's connection.cursor(). Each statement is read for what it does to which table, and a
 statement put together from the entry point's input is flagged.
 """
 
@@ -79,7 +79,7 @@ class SqlLibrary(Library):
     name = "sql"
     title = "SQL"
     modules = ("sqlite3", "psycopg2", "psycopg", "psycopg_pool", "pymysql", "MySQLdb", "mysql", "asyncpg",
-               "sqlalchemy")
+               "sqlalchemy", "django")
     icon = "database"
 
     def make(self, name: str, call: Call) -> Handle | Use | None:
@@ -93,6 +93,8 @@ class SqlLibrary(Library):
             fix = f"{name}(..., {'timeout' if name.startswith('asyncpg') else 'connect_timeout'}=5)"
             return Handle(kind, service, facts + (("driver", name.split(".")[0]),), opens=service != "SQLite",
                           waits=waits, fix=fix)  # SQLite opens a file: nothing to keep a connection to
+        if name == "django.db.connection.cursor":  # Django opens and keeps the connection itself
+            return Handle("cursor", "", (("driver", "django"),))
         last = name.rsplit(".", 1)[-1]
         if name.startswith("sqlalchemy") and last in ("create_engine", "create_async_engine", "engine_from_config"):
             url = str(call.value(0, "url") or "")

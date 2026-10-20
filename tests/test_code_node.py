@@ -249,6 +249,119 @@ def test_plain_python_has_no_lambda_checks_until_asked(tmp_path: Path) -> None:
     assert "Lambda passes two" in out.read_text()
 
 
+FASTAPI = '''
+import sqlite3
+import time
+from typing import Annotated, Optional
+
+import requests
+from fastapi import Depends, FastAPI, Query, Request
+from pydantic import BaseModel
+
+app = FastAPI()
+db = sqlite3.connect("shop.db")
+
+
+class OrderIn(BaseModel):
+    item: str
+
+
+def user():
+    return "me"
+
+
+@app.get("/orders/{order_id}")
+def get_order(order_id: int, fields: str = "id", who=Depends(user)):
+    return db.execute(f"SELECT {fields} FROM orders WHERE id = {order_id}").fetchone()
+
+
+@app.get("/search")
+async def search(q: Annotated[str, Query(alias="term")], limit: Optional[int] = None):
+    requests.get("https://example.com/search", timeout=5)
+    time.sleep(1)
+
+
+@app.post("/orders")
+async def create(order: OrderIn, request: Request):
+    note = (await request.json())["note"]
+    db.execute("INSERT INTO orders (item, note) VALUES (?, ?)", (order.item, note))
+'''
+
+
+def test_a_fastapi_routes_parameters_are_the_request(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+
+    project = read_project(write(tmp_path / "code", {"main.py": FASTAPI}))
+    assert [(e.name, e.platform) for e in entry_points(project)] == [("main.app", "web")]
+    cmap = map_code(project.files, "main.app", libraries=project.libraries(), platform="web")
+    assert {f.label: f.required for f in cmap.event} == {
+        "path.order_id": True, "query.fields": False, "query.term": True, "query.limit": False, "body": True,
+        "body.item": True, "json": True, "json.note": True}  # who=Depends(...) isn't from the request
+    said = [message for _, message in code_map_findings(cmap)]
+    assert any("puts request query.fields, request path.order_id into the SQL text itself" in m for m in said)
+    assert any("requests.get() at main.py line 29 and time.sleep() at main.py line 30 wait without await inside "
+               "async def search()" in m for m in said)
+    assert not any("create()" in m for m in said)  # its SQL takes parameters
+    assert next(n for n in code_graph(cmap).nodes if n.kind == "event").label == "The request"
+    assert next(n for n in code_graph(cmap).nodes if n.kind == "handler").icon == "fastapi-icon"  # the app's logo
+    plain = map_code(project.files, "main.app", libraries=project.libraries())  # plain Python: no request
+    assert not plain.event and not any("SQL injection" in m for _, m in code_map_findings(plain))
+
+
+def test_a_flask_views_url_values_and_request_are_the_input(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+
+    source = ('import os\nimport sqlite3\nfrom flask import Flask, request\n\napp = Flask(__name__)\n'
+              'db = sqlite3.connect("x.db")\n\n\n@app.route("/users/<int:user_id>")\ndef user(user_id):\n'
+              '    return db.execute("SELECT * FROM users WHERE id = %s" % user_id).fetchone()\n\n\n'
+              '@app.post("/search")\ndef search():\n    q = request.args.get("q", "")\n'
+              '    team = request.get_json()["team"]\n'
+              '    db.execute(f"SELECT * FROM users WHERE name = \'{q}\' AND team = \'{team}\'")\n'
+              '    os.system("grep " + request.form["pattern"] + " app.log")\n')
+    project = read_project(write(tmp_path / "code", {"app.py": source}))
+    entry = entry_points(project)[0]
+    assert (entry.name, entry.platform) == ("app.app", "web")
+    cmap = map_code(project.files, entry.name, libraries=project.libraries(), platform=entry.platform)
+    assert [f.label for f in cmap.event] == ["path.user_id", "args", "args.q", "json", "json.team", "form",
+                                            "form.pattern"]
+    said = [message for _, message in code_map_findings(cmap)]
+    assert any("puts request path.user_id into the SQL text" in m for m in said)
+    assert any("puts request args.q, request json.team into the SQL text" in m for m in said)
+    assert any("shell command with request form.pattern in it" in m for m in said)
+
+
+def test_django_urls_are_followed_through_include_views_and_routers(tmp_path: Path) -> None:
+    from code_node.analysis.findings import code_map_findings
+
+    views = ('import json\nfrom django.db import connection\nfrom django.views import View\n'
+             'from django.views.decorators.http import require_GET\nfrom rest_framework import viewsets\n\n\n'
+             '@require_GET\ndef order_list(request):\n    status = request.GET.get("status")\n'
+             '    with connection.cursor() as cursor:\n'
+             '        cursor.execute(f"SELECT * FROM orders WHERE status = \'{status}\'")\n\n\n'
+             'class OrderDetail(View):\n    def get(self, request, pk):\n        return pk\n\n'
+             '    def post(self, request, pk):\n        note = json.loads(request.body)["note"]\n\n\n'
+             'class ItemViewSet(viewsets.ViewSet):\n    def retrieve(self, request, pk=None):\n        return pk\n')
+    urls = ('from django.urls import include, path\nfrom rest_framework.routers import DefaultRouter\n'
+            'from . import views\n\nrouter = DefaultRouter()\nrouter.register("items", views.ItemViewSet)\n\n'
+            'urlpatterns = [\n    path("orders/", views.order_list),\n'
+            '    path("orders/<int:pk>/", views.OrderDetail.as_view()),\n    path("", include(router.urls)),\n]\n')
+    project = read_project(write(tmp_path / "code", {
+        "shop/__init__.py": "", "shop/urls.py": ('from django.urls import include, path\n\n'
+                                                 'urlpatterns = [path("api/", include("orders.urls"))]\n'),
+        "orders/__init__.py": "", "orders/urls.py": urls, "orders/views.py": views}))
+    found = entry_points(project)  # the site's URLs first: they include the app's
+    assert [(e.name, e.platform) for e in found] == [("shop.urls.urlpatterns", "web"),
+                                                     ("orders.urls.urlpatterns", "web")]
+    cmap = map_code(project.files, found[0].name, libraries=project.libraries(), platform="web")
+    assert [(method, path) for method, path, _ in cmap.routes] == [
+        ("GET", "/api/items/<pk>/"), ("GET", "/api/orders/"), ("GET", "/api/orders/<int:pk>/"),
+        ("POST", "/api/orders/<int:pk>/")]
+    assert {"path.pk", "GET.status", "body (JSON).note"} <= {f.label for f in cmap.event}
+    said = [message for _, message in code_map_findings(cmap)]
+    assert any("puts request GET.status into the SQL text" in m for m in said)
+    assert next(n for n in code_graph(cmap).nodes if n.kind == "handler").icon == "django-icon"
+
+
 def test_a_platform_plugin_finds_its_entry_points_and_adds_findings(tmp_path: Path, monkeypatch) -> None:
     import ast
 
@@ -719,13 +832,9 @@ def test_the_command_lists_its_plugins(capsys) -> None:
     assert "lambda  AWS Lambda" in out and "redis    Redis  (redis)" in out and "sam         AWS SAM" in out
 
 
-CART_SNAPSHOT = Path(__file__).parent / "snapshots" / "cart-service.txt"
-
-
-def test_the_cart_example_matches_its_snapshot() -> None:
+def _matches_snapshot(example: str) -> None:
     """
-    The cart example, which every kind of plugin reads (its SAM template, Redis, PostgreSQL, OpenAI and boto3 on
-    Lambda): its page as text, then its findings, against tests/snapshots/cart-service.txt.
+    An example's page as text, then its findings, against tests/snapshots/<example>.txt.
     UPDATE_SNAPSHOTS=1 uv run pytest writes it anew.
     """
     from code_node.analysis.findings import code_map_findings
@@ -733,7 +842,8 @@ def test_the_cart_example_matches_its_snapshot() -> None:
     from code_node.pages import PageOptions, map_entry
     from code_node.report.build import page_blocks
 
-    root = Path(__file__).parent.parent / "examples" / "cart-service"
+    root = Path(__file__).parent.parent / "examples" / example
+    snapshot = Path(__file__).parent / "snapshots" / f"{example}.txt"
     entry = entry_points(read_project(root))[0]
     cmap, project = map_entry(root, entry, PageOptions())
     text = _render_text(page_blocks(cmap, project=root.name, max_functions=24, max_depth=5,
@@ -741,8 +851,24 @@ def test_the_cart_example_matches_its_snapshot() -> None:
     text += "\n\n-- Findings --\n" + "\n".join(f"{level}: {message}" for level, message in code_map_findings(cmap))
     text += "\n"
     if os.environ.get("UPDATE_SNAPSHOTS"):
-        CART_SNAPSHOT.write_text(text)
-    assert text.replace("'", '"') == CART_SNAPSHOT.read_text().replace("'", '"')
+        snapshot.write_text(text)
+    assert text.replace("'", '"') == snapshot.read_text().replace("'", '"')
+
+
+def test_the_cart_example_matches_its_snapshot() -> None:
+    """
+    The cart example, which every kind of plugin reads: its SAM template, Redis, PostgreSQL, OpenAI and boto3 on
+    Lambda.
+    """
+    _matches_snapshot("cart-service")
+
+
+def test_the_books_example_matches_its_snapshot() -> None:
+    """
+    The books example, a FastAPI app on the web platform: its routes' parameters are the request, followed into
+    PostgreSQL, a shell command, S3 and an async route that blocks.
+    """
+    _matches_snapshot("books-api")
 
 
 def test_services_show_their_real_logos(tmp_path: Path) -> None:
@@ -754,7 +880,7 @@ def test_services_show_their_real_logos(tmp_path: Path) -> None:
     graph = code_graph(map_code(project.files, "app.handler", libraries=project.libraries(), platform="lambda"))
     boxes = {n.label: n for n in graph.nodes}
     assert _g_logo(boxes["Redis"]) == logo("redis") and _g_logo(boxes["SQLite"]) == logo("sqlite")
-    assert _g_logo(boxes["handler()"]) is None  # its own functions keep their line drawing
+    assert _g_logo(boxes["handler()"]) is None  # its own functions keep their line drawing, a Lambda handler too
     page = render_page(page_blocks_for(project, "app.handler"), "x")
     assert page.count('<svg class="logo"') == 4  # SQLite, Redis, MongoDB, Anthropic
     assert 'id="cnl-sqlite-' in page  # each logo's gradient ids get its own prefix, so two logos never share one

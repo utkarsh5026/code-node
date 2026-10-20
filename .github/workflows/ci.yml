@@ -57,3 +57,5 @@ jobs:
           "$RUNNER_TEMP/wheel/bin/code-node" examples/orders-service --no-open -o "$RUNNER_TEMP/page.html"
           "$RUNNER_TEMP/wheel/bin/code-node" examples/cart-service --no-open -o "$RUNNER_TEMP/cart.html" \
             | grep "Deployed as CheckoutFunction in template.yaml"
+          "$RUNNER_TEMP/wheel/bin/code-node" examples/books-api --no-open -o "$RUNNER_TEMP/books.html" \
+            | grep "books.main.app"

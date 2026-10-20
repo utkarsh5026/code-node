@@ -28,9 +28,7 @@ _MAIN_NAMES = ("main", "run", "cli", "app")
 
 _IMPORT_RE = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import|import[ \t]+([\w., \t]+))", re.M)
 
-_CLI_APPS = ("Typer",)
-
-_WEB_APPS = ("FastAPI", "Flask", "APIRouter", "Blueprint")  # and those a platform adds (Chalice for Lambda)
+_CLI_APPS = ("Typer",)  # web apps are a platform's (FastAPI for the web one, Chalice for Lambda's)
 
 
 @dataclass
@@ -184,9 +182,10 @@ def _module_functions(tree: ast.Module) -> dict[str, ast.FunctionDef | ast.Async
     return {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
-def _web_apps(tree: ast.Module) -> list[tuple[str, int, str]]:
+def _web_apps(tree: ast.Module) -> list[tuple[str, int, str, str]]:
     """
-    Module-level web and CLI apps: `app = FastAPI()` -> [('app', 3, 'a web app: each route')].
+    Module-level web and CLI apps, with the platform whose app it is: `app = FastAPI()` -> [('app', 3, 'a web app:
+    each route', 'web')].
     """
     found = []
     for node in tree.body:
@@ -194,10 +193,10 @@ def _web_apps(tree: ast.Module) -> list[tuple[str, int, str]]:
             continue
         func = node.value.func
         made = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
-        web = made in _WEB_APPS or any(made in platform.web_apps for platform in platforms())
-        if web or made in _CLI_APPS:
-            kind = "a CLI app: each command" if made in _CLI_APPS else "a web app: each route"
-            found += [(t.id, node.lineno, kind) for t in node.targets if isinstance(t, ast.Name)]
+        web = next((platform.name for platform in platforms() if made in platform.web_apps), None)
+        if web is not None or made in _CLI_APPS:
+            kind = "a CLI app: each command" if web is None else "a web app: each route"
+            found += [(t.id, node.lineno, kind, web or "") for t in node.targets if isinstance(t, ast.Name)]
     return found
 
 
@@ -237,12 +236,12 @@ def entry_points(project: Project) -> list[EntryPoint]:
             continue
         tree = project.trees[rel]
         node = _module_functions(tree).get(function.split(".")[0])
-        apps = {name: (line, kind) for name, line, kind in _web_apps(tree)}
+        apps = {name: (line, kind, runs_on) for name, line, kind, runs_on in _web_apps(tree)}
         runs = [name for name in (_calls(node) if node is not None else set()) if name in apps]
         command = f"the {script} command" + (f" in {config}" if "/" in config else "")
         if runs:  # main() just runs the app: start from the app, so each command is followed
-            line, kind = apps[runs[0]]
-            add(EntryPoint(f"{module}.{runs[0]}", f"{command} ({kind})", rel, line))
+            line, kind, runs_on = apps[runs[0]]
+            add(EntryPoint(f"{module}.{runs[0]}", f"{command} ({kind})", rel, line, runs_on))
         add(EntryPoint(f"{module}.{function}", command, rel, getattr(node, "lineno", 0)))
     code = {rel: tree for rel, tree in project.trees.items() if not _is_test(rel)}
     for deployed in all_deployments(project.deploy_files, project.files):
@@ -256,8 +255,8 @@ def entry_points(project: Project) -> list[EntryPoint]:
         for platform in platforms():
             for name, line, why in platform.find_entries(module, tree):
                 add(EntryPoint(f"{module}.{name}", why, rel, line, platform.name))
-        for name, line, kind in _web_apps(tree):
-            add(EntryPoint(f"{module}.{name}", kind, rel, line))
+        for name, line, kind, runs_on in _web_apps(tree):
+            add(EntryPoint(f"{module}.{name}", kind, rel, line, runs_on))
     for rel, tree in code.items():
         module = project.modules[rel]
         functions = _module_functions(tree)
@@ -270,7 +269,10 @@ def entry_points(project: Project) -> list[EntryPoint]:
             if name in functions:
                 add(EntryPoint(f"{project.modules[rel]}.{name}", f"a function named {name}()", rel,
                                functions[name].lineno))
-    return list(found.values())
+    # one another of its kind names, as include('orders.urls') does, comes after it: the site's URLs before an app's
+    named = {e.name for e in found.values() for other in found.values() if other.why == e.why and other.file != e.file
+             and re.search(rf"['\"]{re.escape(e.name.rsplit('.', 1)[0])}['\"]", project.files.get(other.file, ""))}
+    return [e for e in found.values() if e.name not in named] + [e for e in found.values() if e.name in named]
 
 
 def entry_in_files(project: Project, entry: str) -> EntryPoint | None:

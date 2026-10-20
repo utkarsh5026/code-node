@@ -1,7 +1,8 @@
 """
 Platforms: what a kind of entry point adds to reading plain Python. The reader, the findings and the graph are
 generic; a platform says what its entry points look like, what they're called with, what its code can't do there,
-and how to say so. AWS Lambda is one (aws_lambda.py). Pure, like analysis/: no I/O, no rendering.
+and how to say so. AWS Lambda is one (aws_lambda.py), a web app (FastAPI, Flask, Django) another (web.py). Pure,
+like analysis/: no I/O, no rendering.
 
 Another package adds one by subclassing Platform and naming it under the `code_node.platforms` entry point group:
 
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 
 ENTRY_POINT_GROUP = "code_node.platforms"
 
-_BUILT_IN = ("code_node.platforms.aws_lambda:LambdaPlatform",)
+_BUILT_IN = ("code_node.platforms.aws_lambda:LambdaPlatform", "code_node.platforms.web:WebPlatform")
 
 
 class Platform:
@@ -37,9 +38,12 @@ class Platform:
     inputs: tuple[str, ...] = ()  # what its entry function is called with: ('event', 'context'); the reader records
     # the fields the code reads from the one named 'event'
     input_name = "its input"  # 'the event'
+    input_word = "input"  # what a field of it is said to be read from, beside a step: 'event' ('event body.id')
     draws_input = False  # the graph draws the input box even when the code reads no field of it
     started = "When Python imports it"  # what runs at import is said to run: 'When Lambda starts it (...)'
-    web_apps: tuple[str, ...] = ()  # app classes that make an entry point of a module-level object, like FastAPI
+    web_apps: tuple[str, ...] = ()  # app classes that make an entry point of a module-level object, like Chalice
+    input_objects: tuple[str, ...] = ()  # names from a library that hold the input being handled: ('flask.request',)
+    input_aliases: dict[str, str] = {}  # its input's methods that give back a part of it: {'get_json': 'json'}
 
     def find_entries(self, module: str, tree: ast.Module) -> list[tuple[str, int, str]]:
         """
@@ -47,6 +51,22 @@ class Platform:
         handler (event, context)')].
         """
         return []
+
+    def route_inputs(self, function: ast.FunctionDef | ast.AsyncFunctionDef, path: str, imports: set[str],
+                     bound: bool = False) -> dict[str, tuple[str, ...]]:
+        """
+        What each parameter of a function a route runs holds from the input, as a path into it: {'order_id':
+        ('path', 'order_id'), 'request': ()}. path is the route's ('/orders/{order_id}'), imports the libraries its
+        module imports ({'fastapi'}), bound whether the first parameter is self. A parameter left out holds nothing
+        it knows.
+        """
+        return {}
+
+    def entry_icon(self, cmap: CodeMap) -> str:
+        """
+        The logo the entry point's box shows, by its name in report/logos/ ('fastapi-icon'); '' for its line icon.
+        """
+        return ""
 
     def input_kind(self, fields: Iterable[EventField]) -> str | None:
         """

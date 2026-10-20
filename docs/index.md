@@ -62,7 +62,7 @@ $ code-node examples/orders-service
 orders.handler.lambda_handler: 8 functions, 4 AWS calls
 ```
 
-With no arguments it looks for places your code starts: console scripts, Lambda handlers, FastAPI and Flask routes,
+With no arguments it looks for places your code starts: console scripts, Lambda handlers, FastAPI, Flask and Django routes,
 Typer commands and `if __name__ == "__main__":` blocks. If it finds more than one, it asks. `code-node --serve` keeps
 the page open and redraws it each time you save a file.
 

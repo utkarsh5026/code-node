@@ -110,8 +110,9 @@ def _pick_entry(project: Project, given: str | None) -> EntryPoint | None:
         return _ask(matches[:30])
     found = entry_points(project)
     if not found:
-        kinds = ["console script", "web app", "main()", *(f"{p.title} handler" for p in platforms())]
-        print(f"Found no entry point in {project.root}: no {', '.join(kinds[:-1])} or {kinds[-1]}. Name one with -e "
+        kinds = ["console script", "main()", *(p.entry_kind.split(":")[0].split(" (")[0].removeprefix("a ")
+                                               for p in platforms() if p.entry_kind)]
+        print(f"Found no entry point in {project.root}: no {', '.join(kinds[:-1])}, or {kinds[-1]}. Name one with -e "
               "module.function.", file=sys.stderr)
         return None
     return _ask(found[:30])

@@ -205,7 +205,8 @@ KNOWS = [  # (row, what reads it, [(logo, name)])
         ("postgresql", "PostgreSQL"), ("mysql-icon", "MySQL"), ("sqlite", "SQLite"), ("mongodb-icon", "MongoDB"),
         ("redis", "Redis")]),
     ("Models", "library plugin", [("openai-icon", "OpenAI"), ("anthropic-icon", "Anthropic")]),
-    ("Runs on", "platforms", [("aws-lambda", "AWS Lambda"), ("python", "Plain Python")]),
+    ("Runs on", "platforms", [("aws-lambda", "AWS Lambda"), ("fastapi-icon", "FastAPI"), ("flask", "Flask"),
+                              ("django-icon", "Django"), ("python", "Plain Python")]),
     ("Deployed with", "deploy files", [("aws-cloudformation", "AWS SAM"), ("serverless", "Serverless")]),
 ]
 
@@ -242,8 +243,8 @@ def reaches(theme: dict[str, str]) -> str:
     height = y - 16
     return _svg(1000, height, "".join(parts), theme,
                 "What code-node knows: AWS through boto3 (S3, DynamoDB, SNS, SQS, Lambda and every other service), "
-                "PostgreSQL, MySQL, SQLite, MongoDB and Redis, OpenAI and Anthropic, AWS Lambda and plain Python, "
-                "and AWS SAM and Serverless deploy files.")
+                "PostgreSQL, MySQL, SQLite, MongoDB and Redis, OpenAI and Anthropic, AWS Lambda, FastAPI, Flask, "
+                "Django and plain Python, and AWS SAM and Serverless deploy files.")
 
 
 FIGURES = {"plugins-mix": plugins_mix, "reaches": reaches}
