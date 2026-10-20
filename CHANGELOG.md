@@ -4,6 +4,13 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Fixed
+
+- Modules beside the entry point's file are read as its own code when it imports them by their own names, as a
+  Lambda function's folder does (`from helpers import x` in `src/app/handler.py`). They were taken for installed
+  libraries, so their functions, AWS calls and environment variables were missing, even when the folder is also a
+  package from the project's root.
+
 ### Added
 
 - A box's "+12 calls not drawn" line opens them: click it and the graph starts from that function, with every call it

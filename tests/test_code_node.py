@@ -84,6 +84,28 @@ def test_a_method_can_be_the_entry_point(tmp_path: Path) -> None:
     assert [f.name for f in cmap.functions] == ["tool.store.Store.save", "tool.store.Store._write"]
 
 
+def test_modules_beside_the_entry_point_are_its_own_code(tmp_path: Path) -> None:
+    # a Lambda function's folder: its handler imports the files beside it by their own names, though the folder is
+    # also a package from the project's root
+    project = read_project(
+        write(
+            tmp_path,
+            {
+                "src/app/__init__.py": "",
+                "src/app/handler.py": "from helpers import load\n\n\ndef lambda_handler(event, context):\n    load()\n",
+                "src/app/helpers.py": (
+                    "import boto3\n\n\ndef load():\n    boto3.client('s3').get_object(Bucket='b', Key='k')\n"
+                ),
+            },
+        )
+    )
+    cmap = map_code(project.files, "app.handler.lambda_handler", libraries=project.libraries())
+    assert [f.name for f in cmap.functions] == ["app.handler.lambda_handler", "helpers.load"]
+    assert [(c.service, c.operation) for c in cmap.aws] == [("s3", "GetObject")]
+    assert next(i for i in cmap.imports if i.module == "helpers").source == "own"
+    assert cmap.other_files == 0  # helpers.py is read, though it has two names
+
+
 def test_graph_limits_and_all(tmp_path: Path) -> None:
     chain = "\n".join(f"def f{i}():\n    f{i + 1}()\n" for i in range(12)) + "\ndef f12():\n    pass\n"
     project = read_project(write(tmp_path, {"deep.py": chain}))
