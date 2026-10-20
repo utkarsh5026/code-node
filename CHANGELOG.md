@@ -4,6 +4,13 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Changed
+
+- Step by step's list folds like a tree: the arrow beside a function, loop or branch hides the steps under it and
+  shows how many it hid. The tab also moves more: a new step's card comes in a line at a time, the lit row and its
+  number ease in, a dot pings when its step is reached, the code fades in when the walk goes into another function,
+  and the lit line glows as it lands. None of it moves for readers who ask for less motion.
+
 ## [0.2.0] - 2026-10-20
 
 ### Changed

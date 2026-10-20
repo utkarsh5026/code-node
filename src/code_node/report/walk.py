@@ -7,6 +7,11 @@ No JavaScript: each step is a radio button (one group, so once one has focus the
 Each function's steps sit in a box of their own, with the function's code drawn once at the end of it; the CSS shows
 the card after the checked button and the code of its box with sibling selectors, so the light slides from line to
 line as you step, and a step costs the same however many there are.
+
+The list folds like a tree: a step with steps under it has a checkbox before it, and its arrow folds them away. Each
+step under it carries the class `wu<step>`, so one rule per fold hides them, whether they sit beside it or inside the
+box of a function it calls (`#cx5:checked ~ .wu5, #cx5:checked ~ * .wu5`). Only the steps' rows are hidden: the
+current one's card and code still show when it's folded away.
 """
 
 from __future__ import annotations
@@ -523,11 +528,29 @@ def _frame_html(index: int, frame: _Frame, rows: list[tuple[int, str]]) -> str:
     )
 
 
-def _item_html(stops: list[_Stop], i: int, card: str) -> str:
+def _folds(stops: list[_Stop]) -> tuple[list[int], list[list[int]]]:
+    """
+    How many steps sit under each stop in the list, and the stops each one sits under, outermost first.
+    """
+    under = [0] * len(stops)
+    above: list[list[int]] = []
+    opened: list[int] = []
+    for i, stop in enumerate(stops):
+        while opened and (stops[opened[-1]].depth >= stop.depth or stops[opened[-1]].chapter != stop.chapter):
+            opened.pop()
+        for j in opened:
+            under[j] += 1
+        above.append(list(opened))
+        opened.append(i)
+    return under, above
+
+
+def _item_html(stops: list[_Stop], i: int, card: str, under: int = 0, above: tuple[int, ...] = ()) -> str:
     """
     A step in the list: its radio button, then its number and what it does in a few words (or, for a function it goes
     into, the function's name and file, as a heading over its steps) as the button's label, then its card, which shows
-    (beside the list) while the button is checked.
+    (beside the list) while the button is checked. under: how many steps sit under it, folded away by the checkbox and
+    arrow before it; above: the steps it sits under, whose folds hide it.
     """
     stop = stops[i]
     step = stop.step
@@ -543,10 +566,18 @@ def _item_html(stops: list[_Stop], i: int, card: str) -> str:
         dot = f'<span class="wdot d-{said}" title="{_esc(_NOTE_TIPS.get(said, ""))}"></span>' if said in _DOTS else ""
         text = f'<span class="wtx">{headline}</span>{dot}'
     checked = " checked" if i == 0 else ""
+    hidden_by = "".join(f" wu{j}" for j in above)
+    fold = ""
+    if under:
+        fold = (
+            f'<input type="checkbox" class="wcx" id="cx{i}" tabindex="-1"><label class="wtg{hidden_by}" for="cx{i}" '
+            f'style="--d:{stop.depth}" title="Fold or unfold the {_plural(under, "step")} under it"><i></i></label>'
+        )
+        text += f'<span class="wcnt">{_plural(under, "step")}</span>'
     return (
-        f'<input type="radio" class="wr" name="{_GROUP}" id="cw{i}"{checked}><label class="wil k-{_esc(step.kind)}" '
-        f'for="cw{i}" style="--d:{stop.depth}"><span class="wno">{i + 1}</span><span class="wx">{text}</span>'
-        f"</label>{card}"
+        f'{fold}<input type="radio" class="wr" name="{_GROUP}" id="cw{i}"{checked}><label class="wil '
+        f'k-{_esc(step.kind)}{hidden_by}" for="cw{i}" style="--d:{stop.depth}"><span class="wno">{i + 1}</span>'
+        f'<span class="wx">{text}</span></label>{card}'
     )
 
 
@@ -576,6 +607,7 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         rows = _frame_rows(frame, highlighted.get(frame.file, []), stops)
         rows_of.append({number: n for n, (number, _) in enumerate(rows) if number})
         drawn.append(_frame_html(k, frame, rows))
+    under, above = _folds(stops)
     out: list[str] = []
     opened: list[int] = []  # the frames whose boxes are open, innermost last
     chapter = -1
@@ -593,7 +625,9 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         if not opened or opened[-1] != stop.frame:  # into a call
             out.append('<div class="wfn">')
             opened.append(stop.frame)
-        out.append(_item_html(stops, i, _card_html(stops, i, first, docs, block.editor)))
+        out.append(_item_html(stops, i, _card_html(stops, i, first, docs, block.editor), under[i], tuple(above[i])))
+        if under[i]:  # its fold hides the steps under it, beside it or in the boxes of what it calls
+            report.rules.add(f".{root} #cx{i}:checked~.wu{i},.{root} #cx{i}:checked~* .wu{i}{{display:none}}")
         at = rows_of[stop.frame].get(stop.lit)
         if at is not None:  # the line its code lights
             report.rules.add(f".{root} #cw{i}:checked~.wf{stop.frame}{{--k:{at}}}")
@@ -601,7 +635,8 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         out.append(drawn[opened.pop()] + "</div>")
     sub = (
         f'<div class="wsub">{_plural(len(stops), "step")}, in the order the code runs. Press Next or click a step to '
-        "light its line in the code; after a click, <kbd>↑</kbd> <kbd>↓</kbd> move through them.</div>"
+        "light its line in the code; after a click, <kbd>↑</kbd> <kbd>↓</kbd> move through them. The arrow beside a "
+        "step folds the steps under it away.</div>"
     )
     return (
         f'{title}{sub}<div class="walk"><div class="wl" role="radiogroup" aria-label="The steps">{"".join(out)}'
