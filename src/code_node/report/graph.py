@@ -13,8 +13,8 @@ from typing import Any, Callable
 
 from ..kit.blocks import _Report, _draws
 from ..kit.fmt import _plural
-from ..kit.highlight import _python_lines
-from ..kit.render import _prose
+from ..kit.highlight import _python_html, _python_lines
+from ..kit.render import _CALL_RE, _prose
 from ..kit.text import _esc
 
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode
@@ -1081,7 +1081,7 @@ def _node_svg(
         )
     classes = " ".join(["cn", f"k-{n.kind}", f"n-{n.id}", *(f"a-{m}" for m in neighbours)]) + (" warn" if warn else "")
     return (
-        f'<g class="{_esc(classes)}" transform="translate({x:.1f},{y:.1f})"><title>{_esc(n.tip or n.label)}</title>'
+        f'<g class="{_esc(classes)}" transform="translate({x:.1f},{y:.1f})">'
         f'<rect class="bg" width="{w:.0f}" height="{h:.0f}" rx="11"/>'
         f'<rect class="fg" x=".5" y=".5" width="{w - 1:.0f}" height="{h - 1:.0f}" rx="10.5"/>{"".join(parts)}</g>'
     )
@@ -1175,6 +1175,153 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
     )
 
 
+_G_TIP_W = 420  # a box's hover card, wide
+
+_G_TIP_SIGNATURE = 6  # lines of a def its hover card shows, at most
+
+_G_TIP_WARNING = "A warning is about it: "
+
+# a name in the card's sentences worth setting as code: a dotted or keyed path (Records[].s3.bucket.name,
+# book:{book_id}, s3:GetObject, orders/handler.py) or a variable in capitals (DB_HOST)
+_G_CODE_RE = re.compile(
+    r"(?<![\w.\-/])([A-Za-z_][\w\-]*(?:[.:/]+[\w{}\-]+|\[\]|\{\w*\})+|[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9])(?![\w{])"
+)
+
+
+def _g_tip_text(text: str) -> str:
+    """
+    One of the card's sentences as HTML, its calls coloured as Python and its names set as code, every piece escaped.
+    """
+    out = []
+    for i, piece in enumerate(_CALL_RE.split(text)):
+        if i % 2:
+            out.append(f'<code class="ctk">{_python_html(piece)}</code>')
+            continue
+        for k, part in enumerate(_G_CODE_RE.split(piece)):
+            out.append(f'<code class="ctk ctn">{_esc(part)}</code>' if k % 2 else _esc(part))
+    return "".join(out)
+
+
+def _g_tip_item(item: str) -> str:
+    """
+    One thing a service box lists, for its card: 'PutItem (dynamodb:PutItem)' as the operation in code and what it
+    needs beside it.
+    """
+    m = re.fullmatch(r"(.+?) \((.+)\)", item)
+    if not m:
+        return f'<li><code class="ctk ctn">{_esc(item)}</code></li>'
+    return (
+        f'<li><code class="ctk ctn">{_esc(m.group(1))}</code> <span class="ctm">{_g_tip_text(m.group(2))}</span></li>'
+    )
+
+
+def _g_tip_signature(n: GraphNode, lines_of: Callable[[str], list[str]]) -> list[str]:
+    """
+    A function's def as it's written, in colour: its decorators and the lines up to the colon that opens its body.
+    [] when its file wasn't read.
+    """
+    if not n.code:
+        return []
+    span = n.code[0]
+    lines = lines_of(span.file)
+    if not lines or span.start > len(lines):
+        return []
+    start = span.start
+    while start > 1 and lines[start - 2].lstrip().startswith("@"):
+        start -= 1
+    shown = []
+    for k in range(start, min(len(lines), span.end, start + _G_TIP_SIGNATURE - 1) + 1):
+        shown.append(lines[k - 1])
+        if k >= span.start and re.sub(r"<[^>]*>", "", lines[k - 1]).rstrip().endswith(":"):
+            break
+    indent = min((len(line) - len(line.lstrip(" ")) for line in shown if line.strip()), default=0)
+    return [line[indent:] for line in shown]
+
+
+def _g_tip(n: GraphNode, lines_of: Callable[[str], list[str]], opens: bool) -> tuple[str, float]:
+    """
+    What a box says on hover, as a card: what kind of box it is and its name, a function's def in colour and its
+    docstring, then the rest of its words with the code in them set as code, its warnings apart, and when it has a
+    panel (opens), that a click shows its code. With how tall it is likely to be, to pick whether it goes under the
+    box or over it.
+    """
+    said = [line for line in (n.tip or n.label).split("\n") if line]
+    warnings = [w for line in said if line.startswith(_G_TIP_WARNING) for w in line[len(_G_TIP_WARNING) :].split("; ")]
+    said = [line for line in said if not line.startswith(_G_TIP_WARNING)]
+    mono = n.kind in ("handler", "function")
+    body, tall, sub = [], 80.0 + (20 if n.sub else 0), n.sub
+    if mono and said and _CALL_RE.match(said[0]) and " in " in said[0]:  # 'name(args) in file, 3 lines: its doc'
+        head = said.pop(0)
+        signature = _g_tip_signature(n, lines_of) or [_python_html(head.split(" in ", 1)[0])]
+        body.append(f'<pre class="ctc">{chr(10).join(signature)}</pre>')
+        tall += 21 * len(signature) + 34
+        lines = re.search(r", (\d+ lines?)", head)
+        sub = f"{n.sub} · {lines.group(1)}" if lines and n.sub else sub
+        if n.lines and n.lines[0]:
+            body.append(f'<p class="ctd">{_g_tip_text(n.lines[0])}</p>')
+            tall += 23 * math.ceil(len(n.lines[0]) / 42) + 10
+    for line in said:
+        lead, _, rest = line.partition(": ")
+        if rest and lead == n.label:  # 'S3: GetObject (s3:GetObject), PutObject (s3:PutObject)': a list
+            items = rest.split(", ")
+            body.append(f'<ul class="ctl">{"".join(_g_tip_item(item) for item in items)}</ul>')
+            tall += 30 * len(items) + 8
+        else:
+            body.append(f'<p class="ctp">{_g_tip_text(line)}</p>')
+            tall += 23 * math.ceil(len(line) / 42) + 10
+    if warnings:
+        body.append(
+            '<div class="ctw"><b>Warning</b><ul>'
+            + "".join(f"<li>{_g_tip_text(w)}</li>" for w in warnings)
+            + "</ul></div>"
+        )
+        tall += 50 + sum(23 * math.ceil(len(w) / 36) + 4 for w in warnings)
+    kind = _G_PANEL_KINDS.get(n.kind, n.kind)
+    name = _python_html(n.label) if mono else _esc(n.label)
+    card = (
+        f'<div class="ctt k-{_esc(n.kind)}{" warn" if warnings else ""}"><div class="cth">'
+        f'<span class="ctkd">{_esc(kind)}</span><b class="ctn{" mono" if mono else ""}">{name}</b>'
+        + (f'<span class="cts{" mono" if mono else ""}">{_esc(sub)}</span>' if sub else "")
+        + f"</div>{''.join(body)}"
+        + ('<div class="cto">Click it to read its code</div>' if opens else "")
+        + "</div>"
+    )
+    return card, tall + (40 if opens else 0)
+
+
+def _g_tip_svg(
+    n: GraphNode,
+    box: tuple[float, float, float, float],
+    width: float,
+    tall: float,
+    lines_of: Callable[[str], list[str]],
+    opens: bool,
+) -> str:
+    """
+    A box's hover card, in the graph so it zooms with it: under the box when it fits there, else over it, else beside
+    it, and inside the graph from left to right. Hidden until the box is pointed at.
+    """
+    card, high = _g_tip(n, lines_of, opens)
+    x, y, w, h = box
+    card_w = min(_G_TIP_W, max(width - 16, 220))
+    left = max(8.0, min(x, width - card_w - 8))
+    below, above = tall - (y + h + 10) - 8, y - 10 - 8
+    if high <= below:
+        top, room, side = y + h + 10, below, "dn"
+    elif high <= above:
+        top, room, side = 8.0, above, "up"
+    else:  # beside the box, as high up as keeps all of it in the graph; over the box only when there's no room beside
+        if width - (x + w + 12) - 8 >= card_w:
+            left = x + w + 12
+        elif x - 12 - 8 >= card_w:
+            left = x - 12 - card_w
+        top, room, side = max(8.0, min(y, tall - high - 8)), high, "dn"
+    return (
+        f'<foreignObject class="ctip tp-{_esc(n.id)} {side}" x="{left:.0f}" y="{top:.0f}" width="{card_w:.0f}" '
+        f'height="{room:.0f}" aria-hidden="true"><div class="ctx">{card}</div></foreignObject>'
+    )
+
+
 def _g_captions(graph: CodeGraph, xs: dict[int, float], widths: dict[int, float], column_of: dict[str, int]) -> str:
     """
     The words over the columns: COMES IN, HANDLER, CALLS, REACHES, each over the columns it covers.
@@ -1256,6 +1403,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
     for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
+        report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .tp-{n.id}{{display:inline}}")
         report.rules.add(
             f".{root} .cg:has(.n-{n.id}:hover) :is(.s-{n.id},.t-{n.id}) .ln{{stroke-width:2.4;stroke-opacity:1}}"
         )
@@ -1307,6 +1455,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
         for n in graph.nodes
         for box in [_node_svg(cards[n.id], boxes[n.id], list(dict.fromkeys(near[n.id])), access[n.id])]
     )
+    tips = "".join(_g_tip_svg(n, boxes[n.id], width, tall, lines_of, bool(panels.get(n.id))) for n in graph.nodes)
     kinds = {e.kind for e in graph.edges}
     pills = [f'<span class="kp">{_g_swatch(k)}{_esc(word)}</span>' for k, word in _G_LEGEND if k in kinds]
     if any(e.guessed for e in graph.edges):
@@ -1362,7 +1511,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
         f'{title}<div class="cgw">{switches}<div class="cgb">{bar}<div class="cg">'
         f'<svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" height="{tall:.0f}" '
         f'style="--w:{width:.0f}px" role="img" aria-label="{_esc(block.title or "How the code fits together")}">'
-        f"{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}</svg></div>"
+        f"{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}{tips}</svg></div>"
         f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}</div>'
     )
 
