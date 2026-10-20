@@ -131,7 +131,7 @@ _EXTRA_CSS = """\
 .cnd .cgw.pz .cg{cursor:grab;user-select:none;-webkit-user-select:none}
 .cnd .cgw.pz .cg.pan,.cnd .cgw.pz .cg.pan *{cursor:grabbing}
 .cnd .cgw.pz .cg:focus-visible{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px}
-.cnd .cgw.pz>.cgfs:not(:checked)~.cgb{width:min(100%,1180px)}
+.cnd .cgw.pz>.cgfs:not(:checked)~.cgb{width:100%;max-width:none}
 .cnd .cgw.pz>.cgfs:not(:checked)~.cgb .cg{height:max(360px,72vh)}
 .cnd .cgw.pz .cg{display:flex}
 .cnd .cgw.pz .cg svg{flex:none;margin:auto}

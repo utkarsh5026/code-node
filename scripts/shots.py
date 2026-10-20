@@ -103,11 +103,15 @@ def shoot(name: str, blocks: list[Any], chrome: str, work: Path) -> None:
     page = work / f"{name}.html"
     html = render_page(blocks, f"code-node: {name}")
     # headless Chrome can take the picture mid fade-in: show the open tab at once. The pictures are shown shrunk
-    # (the README fits them to its column), so logos are their small marks, as on a 1x screen
+    # (the README fits them to its column), so logos are their small marks, as on a 1x screen. The graph's canvas is
+    # as tall as the window, which is tall here to fit the page: drawn at its own height, without the zoom controls
     html = html.replace(
         "</head>",
         "<style>.cnd *{animation:none!important}.cnd .cg .logo.lgf{display:none!important}"
-        ".cnd .cg .logo.lgs{display:inline!important}</style>\n</head>",
+        ".cnd .cg .logo.lgs{display:inline!important}"
+        ".cnd .cgw.pz>.cgfs:not(:checked)~.cgb .cg{height:auto!important}"
+        ".cnd .cgw.pz .cg svg{width:var(--w)!important;max-width:100%!important;height:auto!important}"
+        ".cnd .cgw.pz .pzo{display:none!important}</style>\n</head>",
         1,
     )
     if name == "steps":  # no clicks in a screenshot: open a step by moving the checked mark to it
