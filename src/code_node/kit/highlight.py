@@ -22,7 +22,7 @@ def _json_source_html(text: str) -> str:
     """
     out, last = [], 0
     for m in _JSON_TOKEN_RE.finditer(text):
-        out.append(_esc(text[last:m.start()]))
+        out.append(_esc(text[last : m.start()]))
         if m.group(1):
             css = "jk" if m.group(2) else "js"
             out.append(f'<span class="{css}">{_esc(m.group(1))}</span>{_esc(m.group(2) or "")}')
@@ -76,8 +76,9 @@ def _python_html(code: str) -> str:
     comments in their own colours. Every piece is escaped; code that doesn't tokenize is shown plain.
     """
     try:
-        tokens = [token for token in tokenize.generate_tokens(io.StringIO(code).readline)
-                  if token.type not in _LAYOUT_TOKENS]
+        tokens = [
+            token for token in tokenize.generate_tokens(io.StringIO(code).readline) if token.type not in _LAYOUT_TOKENS
+        ]
     except (tokenize.TokenError, SyntaxError):
         return _esc(code)
 
@@ -85,8 +86,9 @@ def _python_html(code: str) -> str:
     for line in code.splitlines(keepends=True):
         line_starts.append(line_starts[-1] + len(line))
     code_tokens = [token for token in tokens if token.type not in _NOT_CODE_TOKENS]
-    following = {id(token): code_tokens[k + 1].string if k + 1 < len(code_tokens) else ""
-                 for k, token in enumerate(code_tokens)}
+    following = {
+        id(token): code_tokens[k + 1].string if k + 1 < len(code_tokens) else "" for k, token in enumerate(code_tokens)
+    }
     previous = {id(token): code_tokens[k - 1].string if k else "" for k, token in enumerate(code_tokens)}
 
     out, last = [], 0

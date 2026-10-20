@@ -17,56 +17,138 @@ from . import MANAGED_POLICIES, Deploy, allowed, as_list, line_of, load_yaml, re
 _D = "dynamodb:"
 
 POLICY_TEMPLATES: dict[str, set[str]] = {  # SAM's policy templates -> the actions they allow
-    "DynamoDBCrudPolicy": {_D + a for a in ("GetItem", "DeleteItem", "PutItem", "Scan", "Query", "UpdateItem",
-                                            "BatchWriteItem", "BatchGetItem", "DescribeTable", "ConditionCheckItem")},
+    "DynamoDBCrudPolicy": {
+        _D + a
+        for a in (
+            "GetItem",
+            "DeleteItem",
+            "PutItem",
+            "Scan",
+            "Query",
+            "UpdateItem",
+            "BatchWriteItem",
+            "BatchGetItem",
+            "DescribeTable",
+            "ConditionCheckItem",
+        )
+    },
     "DynamoDBReadPolicy": {_D + a for a in ("GetItem", "Scan", "Query", "BatchGetItem", "DescribeTable")},
     "DynamoDBWritePolicy": {_D + a for a in ("PutItem", "UpdateItem", "BatchWriteItem")},
     "DynamoDBReconfigurePolicy": {_D + "DescribeTable", _D + "UpdateTable"},
     "DynamoDBStreamReadPolicy": {_D + a for a in ("DescribeStream", "GetRecords", "GetShardIterator", "ListStreams")},
-    "S3ReadPolicy": {"s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:GetObjectVersion",
-                     "s3:GetLifecycleConfiguration"},
+    "S3ReadPolicy": {
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetObjectVersion",
+        "s3:GetLifecycleConfiguration",
+    },
     "S3WritePolicy": {"s3:PutObject", "s3:PutObjectAcl", "s3:PutLifecycleConfiguration"},
-    "S3CrudPolicy": {"s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:GetObjectVersion", "s3:PutObject",
-                     "s3:PutObjectAcl", "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration",
-                     "s3:DeleteObject"},
-    "S3FullAccessPolicy": {"s3:GetObject", "s3:GetObjectAcl", "s3:GetObjectVersion", "s3:PutObject", "s3:PutObjectAcl",
-                           "s3:DeleteObject", "s3:DeleteObjectTagging", "s3:DeleteObjectVersionTagging",
-                           "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObjectTagging",
-                           "s3:PutObjectVersionTagging", "s3:ListBucket", "s3:GetBucketLocation",
-                           "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration"},
+    "S3CrudPolicy": {
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:DeleteObject",
+    },
+    "S3FullAccessPolicy": {
+        "s3:GetObject",
+        "s3:GetObjectAcl",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:DeleteObject",
+        "s3:DeleteObjectTagging",
+        "s3:DeleteObjectVersionTagging",
+        "s3:GetObjectTagging",
+        "s3:GetObjectVersionTagging",
+        "s3:PutObjectTagging",
+        "s3:PutObjectVersionTagging",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration",
+    },
     "SQSSendMessagePolicy": {"sqs:SendMessage*"},
-    "SQSPollerPolicy": {"sqs:ChangeMessageVisibility", "sqs:ChangeMessageVisibilityBatch", "sqs:DeleteMessage",
-                        "sqs:DeleteMessageBatch", "sqs:GetQueueAttributes", "sqs:ReceiveMessage"},
+    "SQSPollerPolicy": {
+        "sqs:ChangeMessageVisibility",
+        "sqs:ChangeMessageVisibilityBatch",
+        "sqs:DeleteMessage",
+        "sqs:DeleteMessageBatch",
+        "sqs:GetQueueAttributes",
+        "sqs:ReceiveMessage",
+    },
     "SNSPublishMessagePolicy": {"sns:Publish"},
-    "SNSCrudPolicy": {"sns:ListSubscriptionsByTopic", "sns:CreateTopic", "sns:SetTopicAttributes", "sns:Subscribe",
-                      "sns:Publish"},
+    "SNSCrudPolicy": {
+        "sns:ListSubscriptionsByTopic",
+        "sns:CreateTopic",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Publish",
+    },
     "LambdaInvokePolicy": {"lambda:InvokeFunction"},
     "StepFunctionsExecutionPolicy": {"states:StartExecution"},
     "StepFunctionsCallbackPolicy": {"states:SendTaskSuccess", "states:SendTaskFailure", "states:SendTaskHeartbeat"},
     "AWSSecretsManagerGetSecretValuePolicy": {"secretsmanager:GetSecretValue"},
-    "SSMParameterReadPolicy": {"ssm:DescribeParameters", "ssm:GetParameters", "ssm:GetParameter",
-                               "ssm:GetParametersByPath"},
-    "SSMParameterWithSlashPrefixReadPolicy": {"ssm:DescribeParameters", "ssm:GetParameters", "ssm:GetParameter",
-                                              "ssm:GetParametersByPath"},
+    "SSMParameterReadPolicy": {
+        "ssm:DescribeParameters",
+        "ssm:GetParameters",
+        "ssm:GetParameter",
+        "ssm:GetParametersByPath",
+    },
+    "SSMParameterWithSlashPrefixReadPolicy": {
+        "ssm:DescribeParameters",
+        "ssm:GetParameters",
+        "ssm:GetParameter",
+        "ssm:GetParametersByPath",
+    },
     "KMSDecryptPolicy": {"kms:Decrypt"},
     "KMSEncryptPolicy": {"kms:Encrypt"},
     "EventBridgePutEventsPolicy": {"events:PutEvents"},
     "FirehoseWritePolicy": {"firehose:PutRecord", "firehose:PutRecordBatch"},
-    "SESCrudPolicy": {"ses:GetIdentityVerificationAttributes", "ses:SendEmail", "ses:SendRawEmail",
-                      "ses:VerifyEmailIdentity"},
+    "SESCrudPolicy": {
+        "ses:GetIdentityVerificationAttributes",
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+        "ses:VerifyEmailIdentity",
+    },
     "SESSendBouncePolicy": {"ses:SendBounce"},
-    "SESBulkTemplatedCrudPolicy": {"ses:GetIdentityVerificationAttributes", "ses:SendEmail", "ses:SendRawEmail",
-                                   "ses:SendTemplatedEmail", "ses:SendBulkTemplatedEmail", "ses:VerifyEmailIdentity"},
+    "SESBulkTemplatedCrudPolicy": {
+        "ses:GetIdentityVerificationAttributes",
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+        "ses:SendTemplatedEmail",
+        "ses:SendBulkTemplatedEmail",
+        "ses:VerifyEmailIdentity",
+    },
     "CloudWatchPutMetricPolicy": {"cloudwatch:PutMetricData"},
-    "RekognitionDetectOnlyPolicy": {"rekognition:DetectFaces", "rekognition:DetectLabels",
-                                    "rekognition:DetectModerationLabels", "rekognition:DetectText"},
-    "TextractDetectAnalyzePolicy": {"textract:DetectDocumentText", "textract:StartDocumentTextDetection",
-                                    "textract:StartDocumentAnalysis", "textract:AnalyzeDocument"},
+    "RekognitionDetectOnlyPolicy": {
+        "rekognition:DetectFaces",
+        "rekognition:DetectLabels",
+        "rekognition:DetectModerationLabels",
+        "rekognition:DetectText",
+    },
+    "TextractDetectAnalyzePolicy": {
+        "textract:DetectDocumentText",
+        "textract:StartDocumentTextDetection",
+        "textract:StartDocumentAnalysis",
+        "textract:AnalyzeDocument",
+    },
     "TextractGetResultPolicy": {"textract:GetDocumentTextDetection", "textract:GetDocumentAnalysis"},
-    "ComprehendBasicAccessPolicy": {"comprehend:BatchDetectKeyPhrases", "comprehend:DetectDominantLanguage",
-                                    "comprehend:DetectEntities", "comprehend:BatchDetectEntities",
-                                    "comprehend:DetectKeyPhrases", "comprehend:DetectSentiment",
-                                    "comprehend:BatchDetectDominantLanguage", "comprehend:BatchDetectSentiment"},
+    "ComprehendBasicAccessPolicy": {
+        "comprehend:BatchDetectKeyPhrases",
+        "comprehend:DetectDominantLanguage",
+        "comprehend:DetectEntities",
+        "comprehend:BatchDetectEntities",
+        "comprehend:DetectKeyPhrases",
+        "comprehend:DetectSentiment",
+        "comprehend:BatchDetectDominantLanguage",
+        "comprehend:BatchDetectSentiment",
+    },
     "EKSDescribePolicy": {"eks:DescribeCluster", "eks:ListClusters"},
     "EC2DescribePolicy": {"ec2:DescribeRegions", "ec2:DescribeInstances"},
     "AMIDescribePolicy": {"ec2:DescribeImages"},
@@ -167,23 +249,29 @@ class SamTemplate(Deploy):
     def _functions(self, path: str, text: str, data: dict[str, Any], code: set[str]) -> list[Deployment]:
         resources: dict[str, Any] = data["Resources"]
         base = posixpath.dirname(path)
-        defaults = ((data.get("Globals") or {}).get("Function") or {})
-        connected = any(isinstance(r, dict) and r.get("Type") == "AWS::Serverless::Connector"
-                        for r in resources.values())
+        defaults = (data.get("Globals") or {}).get("Function") or {}
+        connected = any(
+            isinstance(r, dict) and r.get("Type") == "AWS::Serverless::Connector" for r in resources.values()
+        )
         found = []
         for logical_id, resource in resources.items():
             if not isinstance(resource, dict):
                 continue
             kind = resource.get("Type")
             props = resource.get("Properties") or {}
-            if kind not in ("AWS::Serverless::Function", "AWS::Lambda::Function") or props.get("PackageType") == "Image":
+            if (
+                kind not in ("AWS::Serverless::Function", "AWS::Lambda::Function")
+                or props.get("PackageType") == "Image"
+            ):
                 continue
             merged = {**defaults, **props} if kind == "AWS::Serverless::Function" else dict(props)
             runtime = merged.get("Runtime")
             if isinstance(runtime, str) and not runtime.startswith("python"):
                 continue
             code_dir = merged.get("CodeUri") if kind == "AWS::Serverless::Function" else merged.get("Code")
-            where = resolve_handler(base, code_dir if isinstance(code_dir, str) else "", merged.get("Handler", ""), code)
+            where = resolve_handler(
+                base, code_dir if isinstance(code_dir, str) else "", merged.get("Handler", ""), code
+            )
             if where is None:
                 continue
             env_names, env_error = set(), None
@@ -199,14 +287,30 @@ class SamTemplate(Deploy):
             layers = [str(_logical(layer) or layer) for layer in as_list(merged.get("Layers"))]
             timeout = merged.get("Timeout", _PYTHON_DEFAULT_TIMEOUT)
             memory = merged.get("MemorySize", 128)
-            found.append(Deployment(
-                logical_id, path, self.name, where[0], where[1], "lambda", line_of(text, logical_id),
-                runtime if isinstance(runtime, str) else None, timeout if isinstance(timeout, int) else None,
-                memory if isinstance(memory, int) else None, env_names, env_error, layers, actions, names))
+            found.append(
+                Deployment(
+                    logical_id,
+                    path,
+                    self.name,
+                    where[0],
+                    where[1],
+                    "lambda",
+                    line_of(text, logical_id),
+                    runtime if isinstance(runtime, str) else None,
+                    timeout if isinstance(timeout, int) else None,
+                    memory if isinstance(memory, int) else None,
+                    env_names,
+                    env_error,
+                    layers,
+                    actions,
+                    names,
+                )
+            )
         return found
 
-    def _permissions(self, logical_id: str, props: dict[str, Any], kind: str, resources: dict[str, Any]
-                     ) -> tuple[set[str] | None, list[str]]:
+    def _permissions(
+        self, logical_id: str, props: dict[str, Any], kind: str, resources: dict[str, Any]
+    ) -> tuple[set[str] | None, list[str]]:
         """
         What a function's role allows: SAM's role from its Policies and event sources, or a role in the template,
         plus any AWS::IAM::Policy attached to that role. None for the actions when it can't be told.
@@ -231,8 +335,10 @@ class SamTemplate(Deploy):
         else:
             return None, []
         for resource in resources.values():
-            if not isinstance(resource, dict) or resource.get("Type") not in ("AWS::IAM::Policy",
-                                                                              "AWS::IAM::ManagedPolicy"):
+            if not isinstance(resource, dict) or resource.get("Type") not in (
+                "AWS::IAM::Policy",
+                "AWS::IAM::ManagedPolicy",
+            ):
                 continue
             policy = resource.get("Properties") or {}
             if any(_logical(role) == role_id for role in as_list(policy.get("Roles"))):
@@ -250,8 +356,11 @@ class SamTemplate(Deploy):
             by_service.setdefault(action.split(":")[0], []).append(action)
         templates, rest = [], []
         for wanted in by_service.values():
-            fits = [(name, granted) for name, granted in POLICY_TEMPLATES.items()
-                    if all(allowed(action, granted) for action in wanted)]
+            fits = [
+                (name, granted)
+                for name, granted in POLICY_TEMPLATES.items()
+                if all(allowed(action, granted) for action in wanted)
+            ]
             if fits:
                 templates.append(min(fits, key=lambda fit: (len(fit[1]), fit[0]))[0])
             else:

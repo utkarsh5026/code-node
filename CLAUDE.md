@@ -19,6 +19,7 @@ command is `code-node` and the import is `code_node`.
 uv sync                                                   # .venv with every dependency group
 uv run pytest                                             # tests
 uv run ruff check .                                       # lint
+uv run ruff format .                                      # format (examples/ and docs/ are left as they are)
 uv run code-node examples/orders-service --no-open -o /tmp/page.html   # try it
 uv run python scripts/shots.py                            # remake docs/images/ (needs Chrome)
 uv run mkdocs build --strict                              # the docs site

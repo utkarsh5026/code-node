@@ -23,14 +23,35 @@ from ..libraries import get_library
 from ..platforms import get_platform
 
 
-_PIP_NAMES = {"yaml": "pyyaml", "PIL": "pillow", "sklearn": "scikit-learn", "cv2": "opencv-python-headless",
-              "dateutil": "python-dateutil", "jwt": "PyJWT", "dotenv": "python-dotenv", "bs4": "beautifulsoup4",
-              "psycopg2": "psycopg2-binary", "Crypto": "pycryptodome", "jose": "python-jose", "magic": "python-magic"}
+_PIP_NAMES = {
+    "yaml": "pyyaml",
+    "PIL": "pillow",
+    "sklearn": "scikit-learn",
+    "cv2": "opencv-python-headless",
+    "dateutil": "python-dateutil",
+    "jwt": "PyJWT",
+    "dotenv": "python-dotenv",
+    "bs4": "beautifulsoup4",
+    "psycopg2": "psycopg2-binary",
+    "Crypto": "pycryptodome",
+    "jose": "python-jose",
+    "magic": "python-magic",
+}
 
-_REPLACEMENTS = {"distutils": "setuptools, or shutil and sysconfig", "imp": "importlib", "asyncore": "asyncio",
-                 "asynchat": "asyncio", "smtpd": "aiosmtpd", "cgi": "email.message and urllib.parse",
-                 "pipes": "shlex.quote", "crypt": "hashlib", "telnetlib": "telnetlib3", "imghdr": "Pillow or filetype",
-                 "uu": "base64", "xdrlib": "struct"}
+_REPLACEMENTS = {
+    "distutils": "setuptools, or shutil and sysconfig",
+    "imp": "importlib",
+    "asyncore": "asyncio",
+    "asynchat": "asyncio",
+    "smtpd": "aiosmtpd",
+    "cgi": "email.message and urllib.parse",
+    "pipes": "shlex.quote",
+    "crypt": "hashlib",
+    "telnetlib": "telnetlib3",
+    "imghdr": "Pillow or filetype",
+    "uu": "base64",
+    "xdrlib": "struct",
+}
 
 
 def _short_name(key: str) -> str:
@@ -80,16 +101,26 @@ def code_map_findings(cmap: CodeMap) -> list[tuple[str, str]]:
     for spot in spots["syntax"]:
         mine = sys.version_info[:2]
         if version and version > mine:
-            found.append(("info", (
-                f"{spot.file} doesn't parse with this Python {mine[0]}.{mine[1]} ({spot.detail}): it may use syntax "
-                f"only Python {version[0]}.{version[1]} knows, so code-node couldn't follow it. Run code-node with "
-                f"Python {version[0]}.{version[1]} to read it."
-            )))
+            found.append(
+                (
+                    "info",
+                    (
+                        f"{spot.file} doesn't parse with this Python {mine[0]}.{mine[1]} ({spot.detail}): it may use syntax "
+                        f"only Python {version[0]}.{version[1]} knows, so code-node couldn't follow it. Run code-node with "
+                        f"Python {version[0]}.{version[1]} to read it."
+                    ),
+                )
+            )
         else:
-            found.append(("warn", (
-                f"{spot.file} doesn't parse ({spot.detail}): Python can't load it either, so code that imports it fails "
-                "with SyntaxError, and the map stops there. Fix that line."
-            )))
+            found.append(
+                (
+                    "warn",
+                    (
+                        f"{spot.file} doesn't parse ({spot.detail}): Python can't load it either, so code that imports it fails "
+                        "with SyntaxError, and the map stops there. Fix that line."
+                    ),
+                )
+            )
     if cmap.entry is None and cmap.handler_file and not any(s.file == cmap.handler_file for s in spots["syntax"]):
         others = f" ({_listed(cmap.handlers)} look like entry points)" if cmap.handlers else ""
         found.append(("warn", platform.missing_entry(cmap, entry_name, others)))
@@ -101,79 +132,130 @@ def code_map_findings(cmap: CodeMap) -> list[tuple[str, str]]:
         startup = any(i.startup for i in gone)
         pip = " ".join(_PIP_NAMES.get(top, top) for top in tops[:5])
         install = platform.install(pip, "it" if len(tops) == 1 else "them")
-        found.append(("warn", (
-            f"It imports {_listed(tops)}, which {'isn' if len(tops) == 1 else 'aren'}'t in the code, Python's "
-            f"standard library or the Python environment ({gone[0].file} line {gone[0].line}): "
-            + ("every call fails" if startup else "calls that reach that line fail")
-            + f" with {platform.import_error(tops[0])}. {install[0].upper()}{install[1:]}."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"It imports {_listed(tops)}, which {'isn' if len(tops) == 1 else 'aren'}'t in the code, Python's "
+                    f"standard library or the Python environment ({gone[0].file} line {gone[0].line}): "
+                    + ("every call fails" if startup else "calls that reach that line fail")
+                    + f" with {platform.import_error(tops[0])}. {install[0].upper()}{install[1:]}."
+                ),
+            )
+        )
     for i in [i for i in cmap.imports if i.source == "removed"]:
         removed = _REMOVED_MODULES[i.top]
-        found.append(("warn", (
-            f"It imports {i.top} ({i.file} line {i.line}), which Python {removed[0]}.{removed[1]} removed: on the "
-            f"Python it runs on that fails with {platform.import_error(i.top)}. Use "
-            f"{_REPLACEMENTS.get(i.top, 'a replacement')} instead."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"It imports {i.top} ({i.file} line {i.line}), which Python {removed[0]}.{removed[1]} removed: on the "
+                    f"Python it runs on that fails with {platform.import_error(i.top)}. Use "
+                    f"{_REPLACEMENTS.get(i.top, 'a replacement')} instead."
+                ),
+            )
+        )
     family_latest = LATEST_RUNTIMES["python"]
     latest = _python_version(family_latest)
-    later = [i for i in cmap.imports if i.source == "stdlib" and i.top in _REMOVED_MODULES and latest
-             and _REMOVED_MODULES[i.top] <= latest]
+    later = [
+        i
+        for i in cmap.imports
+        if i.source == "stdlib" and i.top in _REMOVED_MODULES and latest and _REMOVED_MODULES[i.top] <= latest
+    ]
     if later:
         tops = list(dict.fromkeys(i.top for i in later))
         removed = _REMOVED_MODULES[tops[0]]
         swaps = _listed([f"{top} by {_REPLACEMENTS.get(top, 'a replacement')}" for top in tops], 2)
-        found.append(("info", (
-            f"It imports {_listed(tops)}, which Python {removed[0]}.{removed[1]} removed: on Python "
-            f"{removed[0]}.{removed[1]} or later it fails with {platform.import_error(tops[0])} until "
-            f"{'that is' if len(tops) == 1 else 'they are'} replaced ({swaps})."
-        )))
+        found.append(
+            (
+                "info",
+                (
+                    f"It imports {_listed(tops)}, which Python {removed[0]}.{removed[1]} removed: on Python "
+                    f"{removed[0]}.{removed[1]} or later it fails with {platform.import_error(tops[0])} until "
+                    f"{'that is' if len(tops) == 1 else 'they are'} replaced ({swaps})."
+                ),
+            )
+        )
 
     slow = [s for s in spots["http"] if not s.ok]
     if slow:
-        found.append(("warn", (
-            f"{_plural(len(slow), 'HTTP request')} {'has' if len(slow) == 1 else 'have'} no timeout "
-            f"({_listed([f'{s.detail} at {_where(s.file, s.line)}' for s in slow], 2)}): if the server doesn't "
-            f"answer, {platform.hang(cmap)} Pass timeout=10 (or what the call needs)."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"{_plural(len(slow), 'HTTP request')} {'has' if len(slow) == 1 else 'have'} no timeout "
+                    f"({_listed([f'{s.detail} at {_where(s.file, s.line)}' for s in slow], 2)}): if the server doesn't "
+                    f"answer, {platform.hang(cmap)} Pass timeout=10 (or what the call needs)."
+                ),
+            )
+        )
     for call in cmap.aws:
         if call.pages == "one" and call.operation.startswith(("List", "Scan", "Query")) and not call.guessed:
             first = {"ListObjectsV2": "1,000 keys", "ListObjects": "1,000 keys", "Scan": "1 MB", "Query": "1 MB"}.get(
-                call.operation, "the first page")
-            fix = ("loop while the answer has LastEvaluatedKey, passing it back as ExclusiveStartKey"
-                   if call.service == "dynamodb" else
-                   f"use get_paginator('{_snake(call.operation)}').paginate(...) on its client")
-            found.append(("warn", (
-                f"{call.label} at {_where(call.file, call.line)} reads only its first page: past {first} the rest is "
-                f"left out without an error. To read every page, {fix}."
-            )))
+                call.operation, "the first page"
+            )
+            fix = (
+                "loop while the answer has LastEvaluatedKey, passing it back as ExclusiveStartKey"
+                if call.service == "dynamodb"
+                else f"use get_paginator('{_snake(call.operation)}').paginate(...) on its client"
+            )
+            found.append(
+                (
+                    "warn",
+                    (
+                        f"{call.label} at {_where(call.file, call.line)} reads only its first page: past {first} the rest is "
+                        f"left out without an error. To read every page, {fix}."
+                    ),
+                )
+            )
     for spot in spots["swallow"]:
-        found.append(("warn", (
-            f"Errors are dropped at {_where(spot.file, spot.line, spot.function)} ({spot.code}): a run that failed "
-            f"{platform.lost_error()} Log it (logger.exception(...)) and raise it again, or report the failed item."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"Errors are dropped at {_where(spot.file, spot.line, spot.function)} ({spot.code}): a run that failed "
+                    f"{platform.lost_error()} Log it (logger.exception(...)) and raise it again, or report the failed item."
+                ),
+            )
+        )
     secrets = spots["secret"]
     if secrets:
         where = _listed([f"{s.detail} at {s.file} line {s.line}" for s in secrets], 2)
-        found.append(("warn", (
-            f"Secret-looking values are written in the code ({where}; "
-            "the values aren't shown here): anyone who can read the code can read them. "
-            "Keep them in Secrets Manager or Parameter Store, and read them when the code starts."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"Secret-looking values are written in the code ({where}; "
+                    "the values aren't shown here): anyone who can read the code can read them. "
+                    "Keep them in Secrets Manager or Parameter Store, and read them when the code starts."
+                ),
+            )
+        )
 
     batched = [c for c in cmap.aws if c.loop and (c.service, c.operation) in _BATCHES and not c.guessed]
     for call in list({(c.service, c.operation): c for c in batched}.values()):
         alternative, size = _BATCHES[(call.service, call.operation)]
-        found.append(("info", (
-            f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}): a request "
-            f"for each. {alternative} sends up to {size:,} at a time, so a run takes fewer round trips."
-        )))
+        found.append(
+            (
+                "info",
+                (
+                    f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}): a request "
+                    f"for each. {alternative} sends up to {size:,} at a time, so a run takes fewer round trips."
+                ),
+            )
+        )
     found += _library_findings(cmap)
     for spot in [s for s in spots["command"] if not s.ok]:
-        found.append(("warn", (
-            f"It runs a shell command with {spot.detail} in it, at {_where(spot.file, spot.line, spot.function)}: "
-            f"whoever sends {platform.input_name} can make it run commands of their own (shell injection). Pass the "
-            "command as a list of arguments, without shell=True, and check the value before it goes in."
-        )))
+        found.append(
+            (
+                "warn",
+                (
+                    f"It runs a shell command with {spot.detail} in it, at {_where(spot.file, spot.line, spot.function)}: "
+                    f"whoever sends {platform.input_name} can make it run commands of their own (shell injection). Pass the "
+                    "command as a list of arguments, without shell=True, and check the value before it goes in."
+                ),
+            )
+        )
     return found + platform.findings(cmap)
 
 
@@ -190,24 +272,38 @@ def _library_findings(cmap: CodeMap) -> list[tuple[str, str]]:
         found.append(("warn", f"{call.label} at {where} {call.why}"))
     looped = [c for c in cmap.library_calls if c.loop and c.batch]
     for call in list({(c.service, c.operation, c.target): c for c in looped}.values()):
-        found.append(("info", (
-            f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}), a round "
-            f"trip for each, where {call.batch} would need fewer."
-        )))
+        found.append(
+            (
+                "info",
+                (
+                    f"{call.label} runs once per item in {call.loop.rstrip(':')} ({_where(call.file, call.line)}), a round "
+                    f"trip for each, where {call.batch} would need fewer."
+                ),
+            )
+        )
     for spot in [s for s in cmap.spots if s.kind == "connect"]:
         if spot.waits:
-            found.append(("info" if not platform.name else "warn", (
-                f"The {spot.detail} client made at {_where(spot.file, spot.line, '' if spot.startup else spot.function)}"
-                f" has no timeout, so a call through it waits {spot.waits}: if {spot.detail} doesn't answer, "
-                f"{platform.hang(cmap)} Give it one where it's made"
-                + (f": {spot.fix}." if spot.fix else ".")
-            )))
+            found.append(
+                (
+                    "info" if not platform.name else "warn",
+                    (
+                        f"The {spot.detail} client made at {_where(spot.file, spot.line, '' if spot.startup else spot.function)}"
+                        f" has no timeout, so a call through it waits {spot.waits}: if {spot.detail} doesn't answer, "
+                        f"{platform.hang(cmap)} Give it one where it's made" + (f": {spot.fix}." if spot.fix else ".")
+                    ),
+                )
+            )
         if spot.loop and not spot.ok:
-            found.append(("info", (
-                f"It makes a new {spot.detail} client for each item in {spot.loop.rstrip(':')}, at "
-                f"{_where(spot.file, spot.line, spot.function)}: each one opens its own connection. Make it once, "
-                "before the loop."
-            )))
+            found.append(
+                (
+                    "info",
+                    (
+                        f"It makes a new {spot.detail} client for each item in {spot.loop.rstrip(':')}, at "
+                        f"{_where(spot.file, spot.line, spot.function)}: each one opens its own connection. Make it once, "
+                        "before the loop."
+                    ),
+                )
+            )
     by_library: dict[str, list[LibraryCall]] = defaultdict(list)
     for call in cmap.library_calls:
         by_library[call.library].append(call)
@@ -239,10 +335,15 @@ def _code_summary(cmap: CodeMap) -> list[str]:
     out = []
     file = cmap.handler_file or ""
     early = []
-    names = list(dict.fromkeys(_service_name(s.detail) for s in cmap.spots
-                               if s.kind == "client" and s.startup and s.detail != "?"))
+    names = list(
+        dict.fromkeys(
+            _service_name(s.detail) for s in cmap.spots if s.kind == "client" and s.startup and s.detail != "?"
+        )
+    )
     if names:
-        early.append(f"makes {_a(names[0])} {names[0]} client" if len(names) == 1 else f"makes {_listed(names)} clients")
+        early.append(
+            f"makes {_a(names[0])} {names[0]} client" if len(names) == 1 else f"makes {_listed(names)} clients"
+        )
     env = list(dict.fromkeys(e.name for e in cmap.env if e.startup))
     if env:
         early.append(f"reads {_listed(env)} from its environment")
@@ -255,12 +356,18 @@ def _code_summary(cmap: CodeMap) -> list[str]:
     if any(f.name == cmap.entry for f in cmap.functions):  # not an app object: its routes are said below
         out.append(f"Each call runs {entry}() in {file}.")
     labels = [f.label for f in cmap.event]
-    leaves = [label for label in labels if not any(
-        other.startswith((label + "[", label + ".", label + " (")) for other in labels)]
+    leaves = [
+        label
+        for label in labels
+        if not any(other.startswith((label + "[", label + ".", label + " (")) for other in labels)
+    ]
     if leaves:
         kind = platform.input_kind(cmap.event)
-        out.append(f"It reads {_listed(leaves, 4)} from {platform.input_name}"
-                   + (f", which looks like {kind}" if kind else "") + ".")
+        out.append(
+            f"It reads {_listed(leaves, 4)} from {platform.input_name}"
+            + (f", which looks like {kind}" if kind else "")
+            + "."
+        )
     phrase = _aws_phrase([c for c in cmap.aws if not c.startup])
     phrase += _library_phrase([c for c in cmap.library_calls if not c.startup])
     http = [s for s in cmap.spots if s.kind == "http" and not s.startup]
@@ -279,16 +386,22 @@ def _code_summary(cmap: CodeMap) -> list[str]:
     returns = list(dict.fromkeys(code for code, _, _ in cmap.returns))
     last = []
     if called:
-        last.append("calls " + _listed([f"{_short_name(f.name)}()" + (
-            f" from {f.file}" if f.file != file else "") for f in called], 4))
+        last.append(
+            "calls "
+            + _listed([f"{_short_name(f.name)}()" + (f" from {f.file}" if f.file != file else "") for f in called], 4)
+        )
     if returns:
-        last.append(f"returns {_returned(returns[0])}" + (f" (or {_plural(len(returns) - 1, 'other value')})"
-                                                          if len(returns) > 1 else ""))
+        last.append(
+            f"returns {_returned(returns[0])}"
+            + (f" (or {_plural(len(returns) - 1, 'other value')})" if len(returns) > 1 else "")
+        )
     if last:
         out.append(f"It {' and '.join(last)}.")
     if not (leaves or more or last):
-        out.append(f"It does nothing this can follow: no AWS calls, own functions, HTTP requests or fields of "
-                   f"{platform.input_name}.")
+        out.append(
+            f"It does nothing this can follow: no AWS calls, own functions, HTTP requests or fields of "
+            f"{platform.input_name}."
+        )
     return out
 
 
@@ -332,8 +445,13 @@ def _aws_phrase(calls: list[AwsCall]) -> list[str]:
     grouped: dict[str, dict[str, list[AwsCall]]] = {}
     for call in calls:
         grouped.setdefault(call.access, {}).setdefault(call.service, []).append(call)
-    verbs = {"reads": "reads from", "writes": "writes to", "sends": "sends to", "runs": "calls",
-             "signs": "signs links for"}
+    verbs = {
+        "reads": "reads from",
+        "writes": "writes to",
+        "sends": "sends to",
+        "runs": "calls",
+        "signs": "signs links for",
+    }
     parts = []
     for access, services in grouped.items():
         each = []

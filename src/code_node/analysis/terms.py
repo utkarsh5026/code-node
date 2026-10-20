@@ -172,9 +172,7 @@ _REMOVED_MODULES = {
     "lib2to3": (3, 13),
 }
 
-_ADDED_MODULES = {
-    "tomllib": (3, 11)
-}  # standard-library modules a newer Python added: (the first Python with it)
+_ADDED_MODULES = {"tomllib": (3, 11)}  # standard-library modules a newer Python added: (the first Python with it)
 
 _SERVICE_NAMES = {  # boto3's name -> what people call it, where botocore's serviceId reads oddly
     "stepfunctions": "Step Functions",
@@ -440,7 +438,11 @@ _ROUTE_METHODS = {
     "api_route",
 }
 
-_URL_PATHS = {"django.urls.path", "django.urls.re_path", "django.conf.urls.url"}  # a URL conf's routes: path('x/', view)
+_URL_PATHS = {
+    "django.urls.path",
+    "django.urls.re_path",
+    "django.conf.urls.url",
+}  # a URL conf's routes: path('x/', view)
 
 _URL_INCLUDES = {"django.urls.include", "django.conf.urls.include"}  # path('api/', include('shop.urls'))
 
@@ -449,8 +451,12 @@ _VIEW_VERBS = {"require_GET": "GET", "require_POST": "POST", "require_safe": "GE
 _VIEW_METHODS = ("get", "post", "put", "patch", "delete")  # a class-based view's methods, each a route
 
 _VIEWSET_ACTIONS = {  # a Django REST framework ViewSet's methods: what a router answers with each, and on which path
-    "list": ("GET", False), "create": ("POST", False), "retrieve": ("GET", True), "update": ("PUT", True),
-    "partial_update": ("PATCH", True), "destroy": ("DELETE", True),
+    "list": ("GET", False),
+    "create": ("POST", False),
+    "retrieve": ("GET", True),
+    "update": ("PUT", True),
+    "partial_update": ("PATCH", True),
+    "destroy": ("DELETE", True),
 }
 
 _DICT_METHODS = {
@@ -494,10 +500,6 @@ _PLACEHOLDERS = {
 
 _AWS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 
-LATEST_RUNTIMES = {
-    "python": "python3.14"
-}  # the newest Python findings suggest moving to
+LATEST_RUNTIMES = {"python": "python3.14"}  # the newest Python findings suggest moving to
 
-_JUNK_RE = re.compile(
-    r"(^|/)(__pycache__|\.git|\.pytest_cache|tests?|\.venv|venv|\.idea|\.vscode|node_modules)/"
-)
+_JUNK_RE = re.compile(r"(^|/)(__pycache__|\.git|\.pytest_cache|tests?|\.venv|venv|\.idea|\.vscode|node_modules)/")

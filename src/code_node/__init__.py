@@ -15,6 +15,26 @@ from .project import EntryPoint, Project, entry_points, read_project
 
 __version__ = "0.1.0"
 
-__all__ = ["CodeGraph", "CodeMap", "CodeSpan", "Deploy", "Deployment", "EntryPoint", "GraphEdge", "GraphNode", "Library",
-           "LibraryCall", "Platform", "Project", "code_graph", "entry_points", "find_deployment", "get_platform",
-           "map_code", "read_project", "register_deploy", "register_library", "register_platform"]
+__all__ = [
+    "CodeGraph",
+    "CodeMap",
+    "CodeSpan",
+    "Deploy",
+    "Deployment",
+    "EntryPoint",
+    "GraphEdge",
+    "GraphNode",
+    "Library",
+    "LibraryCall",
+    "Platform",
+    "Project",
+    "code_graph",
+    "entry_points",
+    "find_deployment",
+    "get_platform",
+    "map_code",
+    "read_project",
+    "register_deploy",
+    "register_library",
+    "register_platform",
+]

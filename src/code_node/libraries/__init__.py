@@ -153,8 +153,11 @@ class Call:
         if isinstance(_const(node), str):
             return _short(str(_const(node)), most)
         if isinstance(node, ast.JoinedStr):
-            parts = [str(_const(v)) if isinstance(_const(v), str) else "{" + _unparse(v.value, 20) + "}"
-                     for v in node.values if isinstance(v, (ast.Constant, ast.FormattedValue))]
+            parts = [
+                str(_const(v)) if isinstance(_const(v), str) else "{" + _unparse(v.value, 20) + "}"
+                for v in node.values
+                if isinstance(v, (ast.Constant, ast.FormattedValue))
+            ]
             return _short("".join(parts), most)
         return _short(_unparse(node, most), most)
 
@@ -198,7 +201,7 @@ class Call:
 
 
 def _short(text: str, most: int) -> str:
-    return text if len(text) <= most else text[:most - 1] + "…"
+    return text if len(text) <= most else text[: most - 1] + "…"
 
 
 class Library:
@@ -315,5 +318,16 @@ def get_library(name: str) -> Library | None:
     return next((library for library in libraries() if library.name == name), None)
 
 
-__all__ = ["ACCESS", "ENTRY_POINT_GROUP", "ICONS", "Call", "Handle", "Library", "Use", "get_library", "libraries",
-           "library_for", "register_library"]
+__all__ = [
+    "ACCESS",
+    "ENTRY_POINT_GROUP",
+    "ICONS",
+    "Call",
+    "Handle",
+    "Library",
+    "Use",
+    "get_library",
+    "libraries",
+    "library_for",
+    "register_library",
+]

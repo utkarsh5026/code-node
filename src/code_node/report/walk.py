@@ -41,17 +41,44 @@ _KIND_SAYS = {  # what a line of each kind means, said once on its card
 }
 
 _AWS_DOES = {  # an AWS call, by what it does, as a sentence: 'Reads from S3 (GetObject)'
-    "reads": "Reads from {}", "writes": "Writes to {}", "sends": "Sends a message with {}",
-    "runs": "Starts something in {}", "signs": "Makes a signed link for {}",
+    "reads": "Reads from {}",
+    "writes": "Writes to {}",
+    "sends": "Sends a message with {}",
+    "runs": "Starts something in {}",
+    "signs": "Makes a signed link for {}",
 }
 
 _LIB_DOES = {"reads": "Reads from {}", "writes": "Writes to {}", "sends": "Sends a message with {}", "runs": "Calls {}"}
 
-_SAID_FIRST = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "lib-reads", "lib-writes", "lib-sends",
-               "lib-runs", "http", "command", "file", "sleep", "client")  # the tags that say what a line is for, before the calls and names in it
+_SAID_FIRST = (
+    "aws-reads",
+    "aws-writes",
+    "aws-sends",
+    "aws-runs",
+    "aws-signs",
+    "lib-reads",
+    "lib-writes",
+    "lib-sends",
+    "lib-runs",
+    "http",
+    "command",
+    "file",
+    "sleep",
+    "client",
+)  # the tags that say what a line is for, before the calls and names in it
 
-_DOTS = ("aws-reads", "aws-writes", "aws-sends", "aws-runs", "aws-signs", "lib-reads", "lib-writes", "lib-sends",
-         "lib-runs", "http")  # what's marked in the list
+_DOTS = (
+    "aws-reads",
+    "aws-writes",
+    "aws-sends",
+    "aws-runs",
+    "aws-signs",
+    "lib-reads",
+    "lib-writes",
+    "lib-sends",
+    "lib-runs",
+    "http",
+)  # what's marked in the list
 
 _HEADERS = [  # a block's first line -> what it does: (pattern, sentence with {} for what it matched)
     (r"(?:async )?for (.+?) in (.+):", "Goes through each {} in {}"),
@@ -65,8 +92,14 @@ _HEADERS = [  # a block's first line -> what it does: (pattern, sentence with {}
     (r"raise (.+)", "Raises {}"),
 ]
 
-_BARE = {"try:": "Tries the lines under it", "except:": "If anything under the try fails", "else:": "Otherwise",
-         "finally:": "Finally, whatever happened above", "return": "Returns", "raise": "Raises the error again"}
+_BARE = {
+    "try:": "Tries the lines under it",
+    "except:": "If anything under the try fails",
+    "else:": "Otherwise",
+    "finally:": "Finally, whatever happened above",
+    "return": "Returns",
+    "raise": "Raises the error again",
+}
 
 
 @dataclass
@@ -146,8 +179,15 @@ class _Walker:
         self.frames.append(frame)
         return len(self.frames) - 1
 
-    def add(self, step: CodeStep, depth: int, frame: int, stack: tuple[tuple[str, int], ...],
-            caller: int | None = None, lit: int | None = None) -> int:
+    def add(
+        self,
+        step: CodeStep,
+        depth: int,
+        frame: int,
+        stack: tuple[tuple[str, int], ...],
+        caller: int | None = None,
+        lit: int | None = None,
+    ) -> int:
         index = len(self.stops)
         lit = step.line if lit is None else lit
         self.stops.append(_Stop(step, depth, frame, lit, stack, self.chapter, caller))
@@ -155,8 +195,9 @@ class _Walker:
             self.frames[frame].stops.setdefault(lit, index)
         return index
 
-    def enter(self, step: CodeStep, depth: int, stack: tuple[tuple[str, int], ...], caller: int | None,
-              frame: int | None) -> None:
+    def enter(
+        self, step: CodeStep, depth: int, stack: tuple[tuple[str, int], ...], caller: int | None, frame: int | None
+    ) -> None:
         """
         A function (or module) being run: a stop on its def, then its own lines under it, in a frame of its own. One
         whose steps were shown before stays in the caller's frame, with the line that calls it lit.
@@ -206,13 +247,16 @@ def _note_said(kind: str, text: str) -> str:
     """
     if kind.startswith("lib-"):
         service, _, operation = text.partition(": ")
-        return _esc(_LIB_DOES.get(kind[4:], "Calls {}").format(service)) + (f" ({_esc(operation)})" if operation else "")
+        return _esc(_LIB_DOES.get(kind[4:], "Calls {}").format(service)) + (
+            f" ({_esc(operation)})" if operation else ""
+        )
     if kind.startswith("aws-"):
         service, _, operation = text.rpartition(" ")
         if " waiter" in service:
             return f"Waits for {_esc(text)}"
         return _esc(_AWS_DOES.get(kind[4:], "Calls {}").format(service or text)) + (
-            f" ({_esc(operation)})" if service else "")
+            f" ({_esc(operation)})" if service else ""
+        )
     if kind == "http":
         verb, _, where = text.removeprefix("HTTP ").partition(" ")
         return f"Sends an HTTP {_esc(verb)} request" + (f" to {_code(where)}" if where else "")
@@ -287,8 +331,10 @@ def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str
         doc = docs.get(step.name, "")
         out = "".join(f"<p>{line}</p>" for line in said) + (f'<p class="wdoc">{_esc(doc)}</p>' if doc else "")
         if step.seen and step.name in first:
-            out += (f'<p>Its steps are shown where it\'s first called: <label class="wjump" for="cw{first[step.name]}">'
-                    f"step {first[step.name] + 1}</label>.</p>")
+            out += (
+                f'<p>Its steps are shown where it\'s first called: <label class="wjump" for="cw{first[step.name]}">'
+                f"step {first[step.name] + 1}</label>.</p>"
+            )
         elif not step.steps and not step.notes:
             out += "<p>There's nothing in it to follow.</p>"
         return out
@@ -300,21 +346,33 @@ def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str
     if step.kind == "return":
         entered = stops[stop.stack[-1][1]] if stop.stack else None
         if entered is not None and entered.caller is not None and len(stop.stack) > 1:
-            said.append(f"{_code(stop.stack[-1][0])} ends here and hands this back to {_code(stop.stack[-2][0])}, "
-                        f"line {stops[entered.caller].step.line}.")
+            said.append(
+                f"{_code(stop.stack[-1][0])} ends here and hands this back to {_code(stop.stack[-2][0])}, "
+                f"line {stops[entered.caller].step.line}."
+            )
         else:
             said.append("The function ends here: this is what the call returns.")
     elif step.kind == "else":
-        said.append("Runs last, whether or not a line above it raised." if step.code.startswith("finally")
-                    else "Runs when the branch or loop above it doesn't.")
+        said.append(
+            "Runs last, whether or not a line above it raised."
+            if step.code.startswith("finally")
+            else "Runs when the branch or loop above it doesn't."
+        )
     elif step.kind in _KIND_SAYS:
         said.append(_KIND_SAYS[step.kind])
     own = [call for call in step.calls if call.kind == "def"]
     if own:
         it = "it" if len(own) == 1 else "each"
-        said.append(f"Next goes into {it} to show its steps"
-                    + ("; Skip call runs it without going in." if over and len(own) == 1 else
-                       "; Skip call runs them without going in." if over else "."))
+        said.append(
+            f"Next goes into {it} to show its steps"
+            + (
+                "; Skip call runs it without going in."
+                if over and len(own) == 1
+                else "; Skip call runs them without going in."
+                if over
+                else "."
+            )
+        )
     return "".join(f"<p>{line}</p>" for line in said)
 
 
@@ -324,13 +382,19 @@ def _facts_html(step: CodeStep, said: str) -> str:
     'env ORDERS_TABLE  an environment variable it reads', 'bucket  holds  event Records[].s3.bucket.name',
     'Bucket  comes from  event Records[].s3.bucket.name'.
     """
-    rows = [f'<li>{_chips_html([note])}<span class="wfm">{_esc(_NOTE_TIPS.get(note[0], ""))}</span></li>'
-            for note in step.notes if note[0] != said and note[0] != "more"]
+    rows = [
+        f'<li>{_chips_html([note])}<span class="wfm">{_esc(_NOTE_TIPS.get(note[0], ""))}</span></li>'
+        for note in step.notes
+        if note[0] != said and note[0] != "more"
+    ]
     rows += [f'<li><span class="wfm">{_esc(text)}</span></li>' for kind, text in step.notes if kind == "more"]
     rows += [f'<li>{_code(name)}<span class="wfv">holds</span>{_esc(what)}</li>' for name, what in step.holds]
     one_call = len({arg.rsplit(" ", 1)[0] for arg, _ in step.given}) == 1  # its headline says which: just 'Bucket'
-    rows += [f'<li>{_code(arg.rsplit(" ", 1)[-1] if one_call else arg)}<span class="wfv">comes from</span>'
-             f"{_esc(source)}</li>" for arg, source in step.given]
+    rows += [
+        f'<li>{_code(arg.rsplit(" ", 1)[-1] if one_call else arg)}<span class="wfv">comes from</span>'
+        f"{_esc(source)}</li>"
+        for arg, source in step.given
+    ]
     return f'<ul class="wfacts">{"".join(rows)}</ul>' if rows else ""
 
 
@@ -355,16 +419,24 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
     over = _after(stops, i, depth) if stop.step.calls else None
     over = over if over != i + 1 else None
     out = _after(stops, i, depth - 1) if depth > 1 else None
-    nav = [_button(i - 1 if i else None, "← Back"),
-           _button(i + 1 if i + 1 < total else None, "Next →", "go"),
-           f'<span class="wpos">Step <b>{i + 1}</b> of {total}</span><span class="wgap"></span>']
+    nav = [
+        _button(i - 1 if i else None, "← Back"),
+        _button(i + 1 if i + 1 < total else None, "Next →", "go"),
+        f'<span class="wpos">Step <b>{i + 1}</b> of {total}</span><span class="wgap"></span>',
+    ]
     if over is not None:
-        nav.append(_button(over, "Skip call", tip="Run what this line calls without going in, and stop at the next "
-                                                  "line here"))
+        nav.append(
+            _button(over, "Skip call", tip="Run what this line calls without going in, and stop at the next line here")
+        )
     if out is not None:
         name = stop.stack[-1][0]
-        nav.append(_button(out, f"Finish <code>{_esc(name)}</code>",
-                           tip=f"Run the rest of {name} and go back to where it was called"))
+        nav.append(
+            _button(
+                out,
+                f"Finish <code>{_esc(name)}</code>",
+                tip=f"Run the rest of {name} and go back to where it was called",
+            )
+        )
     headline, said = _headline(stop)
     trail = []
     for k, (name, at) in enumerate(stop.stack):
@@ -374,8 +446,10 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
     href = open_at(editor, stop.step.file, stop.step.line) if stop.step.file else ""
     line = f"line {stop.step.line}" if stop.step.line else stop.step.file
     if href:
-        line = (f'<a class="wed" href="{_esc(href)}" title="Open {_esc(stop.step.file)} at this line in '
-                f'{_esc(editor_name(editor))}">{line} ↗</a>')
+        line = (
+            f'<a class="wed" href="{_esc(href)}" title="Open {_esc(stop.step.file)} at this line in '
+            f'{_esc(editor_name(editor))}">{line} ↗</a>'
+        )
     elif line:
         line = f'<span class="wln">{_esc(line)}</span>'
     then = ""
@@ -388,11 +462,14 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
             then = f"Next: back in {back}, line {nxt.step.line}" if nxt.step.line else f"Next: back in {back}"
     else:
         then = "That's the last step."
-    return (f'<div class="wc"><div class="wnav">{"".join(nav)}</div>'
-            f'<div class="whead">{headline}</div>'
-            f'<div class="wstk"><span class="win">In</span>{where}{line}</div>'
-            f'<div class="wsay">{_says(stops, i, first, docs, over is not None)}{_facts_html(stop.step, said)}</div>'
-            + (f'<div class="wthen">{_esc(then)}</div>' if then else "") + "</div>")
+    return (
+        f'<div class="wc"><div class="wnav">{"".join(nav)}</div>'
+        f'<div class="whead">{headline}</div>'
+        f'<div class="wstk"><span class="win">In</span>{where}{line}</div>'
+        f'<div class="wsay">{_says(stops, i, first, docs, over is not None)}{_facts_html(stop.step, said)}</div>'
+        + (f'<div class="wthen">{_esc(then)}</div>' if then else "")
+        + "</div>"
+    )
 
 
 def _frame_rows(frame: _Frame, lines: list[str], stops: list[_Stop]) -> list[tuple[int, str]]:
@@ -439,9 +516,11 @@ def _frame_html(index: int, frame: _Frame, rows: list[tuple[int, str]]) -> str:
     if any(not number for number, _ in rows):
         where += ", around its steps"
     name = "" if frame.name == frame.file else f"<b>{_esc(frame.name)}</b>"
-    return (f'<div class="wf wf{index}" style="--n:{len(rows)}"><div class="wfh">{name}<span>{_esc(frame.file)}'
-            f'</span><span class="wfl">{where}</span></div><div class="wfw"><div class="wfp"><div class="wbar"></div>'
-            f'{"".join(body)}</div></div></div>')
+    return (
+        f'<div class="wf wf{index}" style="--n:{len(rows)}"><div class="wfh">{name}<span>{_esc(frame.file)}'
+        f'</span><span class="wfl">{where}</span></div><div class="wfw"><div class="wfp"><div class="wbar"></div>'
+        f"{''.join(body)}</div></div></div>"
+    )
 
 
 def _item_html(stops: list[_Stop], i: int, card: str) -> str:
@@ -455,16 +534,20 @@ def _item_html(stops: list[_Stop], i: int, card: str) -> str:
     if step.kind in ("def", "module"):
         name = step.file if step.kind == "module" else _name_of(step)
         where = "runs when it's imported" if step.kind == "module" else step.file
-        text = (f'<span class="wtx"><b>{_esc(name)}</b><span class="wof">'
-                f'{_esc("again, shown before" if step.seen else where)}</span></span>')
+        text = (
+            f'<span class="wtx"><b>{_esc(name)}</b><span class="wof">'
+            f"{_esc('again, shown before' if step.seen else where)}</span></span>"
+        )
     else:
         headline, said = _headline(stop)
         dot = f'<span class="wdot d-{said}" title="{_esc(_NOTE_TIPS.get(said, ""))}"></span>' if said in _DOTS else ""
         text = f'<span class="wtx">{headline}</span>{dot}'
     checked = " checked" if i == 0 else ""
-    return (f'<input type="radio" class="wr" name="{_GROUP}" id="cw{i}"{checked}><label class="wil k-{_esc(step.kind)}" '
-            f'for="cw{i}" style="--d:{stop.depth}"><span class="wno">{i + 1}</span><span class="wx">{text}</span>'
-            f"</label>{card}")
+    return (
+        f'<input type="radio" class="wr" name="{_GROUP}" id="cw{i}"{checked}><label class="wil k-{_esc(step.kind)}" '
+        f'for="cw{i}" style="--d:{stop.depth}"><span class="wno">{i + 1}</span><span class="wx">{text}</span>'
+        f"</label>{card}"
+    )
 
 
 @_draws(_Walk, "html")
@@ -516,10 +599,14 @@ def _walk_html(block: _Walk, report: _Report) -> str:
             report.rules.add(f".{root} #cw{i}:checked~.wf{stop.frame}{{--k:{at}}}")
     while opened:
         out.append(drawn[opened.pop()] + "</div>")
-    sub = (f'<div class="wsub">{_plural(len(stops), "step")}, in the order the code runs. Press Next or click a step to '
-           "light its line in the code; after a click, <kbd>↑</kbd> <kbd>↓</kbd> move through them.</div>")
-    return (f'{title}{sub}<div class="walk"><div class="wl" role="radiogroup" aria-label="The steps">{"".join(out)}'
-            '</div><div class="ws"></div></div>')
+    sub = (
+        f'<div class="wsub">{_plural(len(stops), "step")}, in the order the code runs. Press Next or click a step to '
+        "light its line in the code; after a click, <kbd>↑</kbd> <kbd>↓</kbd> move through them.</div>"
+    )
+    return (
+        f'{title}{sub}<div class="walk"><div class="wl" role="radiogroup" aria-label="The steps">{"".join(out)}'
+        '</div><div class="ws"></div></div>'
+    )
 
 
 @_draws(_Walk, "text")

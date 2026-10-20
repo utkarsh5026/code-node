@@ -15,10 +15,30 @@ from .analysis.syntax import _parse
 from .deploys import all_deployments, deploy_file_names
 from .platforms import platforms
 
-_SKIPPED_FOLDERS = frozenset({
-    ".git", ".hg", ".svn", ".venv", "venv", "env", ".env", "node_modules", "__pycache__", ".tox", ".nox",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "build", "dist", "site-packages", ".eggs", ".idea", ".vscode",
-})
+_SKIPPED_FOLDERS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        "env",
+        ".env",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        ".nox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "build",
+        "dist",
+        "site-packages",
+        ".eggs",
+        ".idea",
+        ".vscode",
+    }
+)
 
 _MAX_FILES = 5_000  # Python files read from one folder, at most
 
@@ -168,8 +188,12 @@ def _main_guard_calls(tree: ast.Module) -> list[str]:
     """
     called = []
     for node in tree.body:
-        is_guard = (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
-                    and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__")
+        is_guard = (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and node.test.left.id == "__name__"
+        )
         if not is_guard:
             continue
         for inner in ast.walk(node):
@@ -212,8 +236,13 @@ def _is_test(rel: str) -> bool:
     A test file: under tests/ or named test_*.py / *_test.py / conftest.py.
     """
     name = rel.rsplit("/", 1)[-1]
-    return ("tests/" in f"/{rel}" or "/test/" in f"/{rel}" or name.startswith("test_") or name.endswith("_test.py")
-            or name == "conftest.py")
+    return (
+        "tests/" in f"/{rel}"
+        or "/test/" in f"/{rel}"
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or name == "conftest.py"
+    )
 
 
 def entry_points(project: Project) -> list[EntryPoint]:
@@ -227,8 +256,11 @@ def entry_points(project: Project) -> list[EntryPoint]:
     def add(entry: EntryPoint) -> None:
         found.setdefault(entry.name, entry)
 
-    scripts = [(script, target, config) for config in project.configs
-               for script, target in _console_scripts(project.root / config).items()]
+    scripts = [
+        (script, target, config)
+        for config in project.configs
+        for script, target in _console_scripts(project.root / config).items()
+    ]
     for script, target, config in scripts:
         module, _, function = target.partition(":")
         rel = by_module.get(module)
@@ -248,8 +280,15 @@ def entry_points(project: Project) -> list[EntryPoint]:
         tree = project.trees.get(deployed.file)
         node = _module_functions(tree).get(deployed.function) if tree is not None else None
         if node is not None:
-            add(EntryPoint(f"{project.modules[deployed.file]}.{deployed.function}",
-                           f"{deployed.name} in {deployed.source}", deployed.file, node.lineno, deployed.platform))
+            add(
+                EntryPoint(
+                    f"{project.modules[deployed.file]}.{deployed.function}",
+                    f"{deployed.name} in {deployed.source}",
+                    deployed.file,
+                    node.lineno,
+                    deployed.platform,
+                )
+            )
     for rel, tree in code.items():
         module = project.modules[rel]
         for platform in platforms():
@@ -267,11 +306,20 @@ def entry_points(project: Project) -> list[EntryPoint]:
         functions = _module_functions(tree)
         for name in _MAIN_NAMES:
             if name in functions:
-                add(EntryPoint(f"{project.modules[rel]}.{name}", f"a function named {name}()", rel,
-                               functions[name].lineno))
+                add(
+                    EntryPoint(
+                        f"{project.modules[rel]}.{name}", f"a function named {name}()", rel, functions[name].lineno
+                    )
+                )
     # one another of its kind names, as include('orders.urls') does, comes after it: the site's URLs before an app's
-    named = {e.name for e in found.values() for other in found.values() if other.why == e.why and other.file != e.file
-             and re.search(rf"['\"]{re.escape(e.name.rsplit('.', 1)[0])}['\"]", project.files.get(other.file, ""))}
+    named = {
+        e.name
+        for e in found.values()
+        for other in found.values()
+        if other.why == e.why
+        and other.file != e.file
+        and re.search(rf"['\"]{re.escape(e.name.rsplit('.', 1)[0])}['\"]", project.files.get(other.file, ""))
+    }
     return [e for e in found.values() if e.name not in named] + [e for e in found.values() if e.name in named]
 
 
@@ -296,10 +344,15 @@ def functions_matching(project: Project, text: str) -> list[EntryPoint]:
     for rel, tree in project.trees.items():
         module = project.modules[rel]
         for node in tree.body:
-            members = [(f"{module}.{node.name}", node)] if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else []
+            members = (
+                [(f"{module}.{node.name}", node)] if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else []
+            )
             if isinstance(node, ast.ClassDef):
-                members = [(f"{module}.{node.name}.{m.name}", m) for m in node.body
-                           if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
+                members = [
+                    (f"{module}.{node.name}.{m.name}", m)
+                    for m in node.body
+                    if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                ]
             found += [EntryPoint(name, "matches", rel, fn.lineno) for name, fn in members if needle in name.lower()]
     return found
 
@@ -333,8 +386,9 @@ def entries_in_file(project: Project, rel: str, function: str = "") -> list[Entr
     functions = _module_functions(tree)
     for name in _main_guard_calls(tree):
         if name in functions and f"{module}.{name}" not in named:
-            found.insert(0, EntryPoint(f"{module}.{name}", 'runs under if __name__ == "__main__"', rel,
-                                       functions[name].lineno))
+            found.insert(
+                0, EntryPoint(f"{module}.{name}", 'runs under if __name__ == "__main__"', rel, functions[name].lineno)
+            )
             named.add(f"{module}.{name}")
     for name, node in functions.items():
         if f"{module}.{name}" not in named:
@@ -342,6 +396,7 @@ def entries_in_file(project: Project, rel: str, function: str = "") -> list[Entr
     for cls in [node for node in tree.body if isinstance(node, ast.ClassDef)]:
         methods = [m for m in cls.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
         for method in sorted(methods, key=lambda m: m.name.startswith("_")):
-            found.append(EntryPoint(f"{module}.{cls.name}.{method.name}", f"a method of {cls.name}", rel,
-                                    method.lineno))
+            found.append(
+                EntryPoint(f"{module}.{cls.name}.{method.name}", f"a method of {cls.name}", rel, method.lineno)
+            )
     return found

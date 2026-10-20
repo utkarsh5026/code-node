@@ -41,22 +41,33 @@ def _tabs_html(block: _Tabs, report: _Report) -> str:
         tab = f"{group}-{i}"
         checked = " checked" if i == 0 else ""
         radios.append(f'<input type="radio" class="tr" name="{group}" id="{tab}"{checked}>')
-        heads.append(f'<label class="tl" for="{tab}">{_esc(name)}{f"<small>{_esc(sub)}</small>" if sub else ""}</label>')
+        heads.append(
+            f'<label class="tl" for="{tab}">{_esc(name)}{f"<small>{_esc(sub)}</small>" if sub else ""}</label>'
+        )
         panels.append(f'<div class="tp tp{i}" role="tabpanel">{"".join(_block_html(b, report) for b in blocks)}</div>')
         report.rules.add(f".{root} #{tab}:checked~.tp{i}{{display:block}}")
         report.rules.add(f".{root} #{tab}:checked~.tbar [for={tab}]{{opacity:1;border-bottom-color:currentColor}}")
-        report.rules.add(f".{root} #{tab}:focus-visible~.tbar [for={tab}]"
-                         "{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px;border-radius:6px 6px 0 0}")
+        report.rules.add(
+            f".{root} #{tab}:focus-visible~.tbar [for={tab}]"
+            "{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px;border-radius:6px 6px 0 0}"
+        )
     if block.caption or block.about:
-        heads.append(f'<span class="tcap">{f"<code>{_esc(block.caption)}</code>" if block.caption else ""}'
-                     f'{f"<small>{_esc(block.about)}</small>" if block.about else ""}</span>')
+        heads.append(
+            f'<span class="tcap">{f"<code>{_esc(block.caption)}</code>" if block.caption else ""}'
+            f"{f'<small>{_esc(block.about)}</small>' if block.about else ''}</span>"
+        )
     foot = f'<p class="tfoot">{_esc(block.foot)}</p>' if block.foot else ""
-    return (f'<div class="tabs">{"".join(radios)}<div class="tbar" role="tablist">{"".join(heads)}</div>'
-            f'{"".join(panels)}{foot}</div>')
+    return (
+        f'<div class="tabs">{"".join(radios)}<div class="tbar" role="tablist">{"".join(heads)}</div>'
+        f"{''.join(panels)}{foot}</div>"
+    )
 
 
 @_draws(_Tabs, "text")
 def _tabs_lines(block: _Tabs, report: _Report) -> list[str]:
     head = [" · ".join(filter(None, [block.caption, block.about]))] if block.caption or block.about else []
-    return head + [line for _, _, blocks in block.tabs for b in blocks for line in _block_lines(b, report)] + (
-        [block.foot] if block.foot else [])
+    return (
+        head
+        + [line for _, _, blocks in block.tabs for b in blocks for line in _block_lines(b, report)]
+        + ([block.foot] if block.foot else [])
+    )

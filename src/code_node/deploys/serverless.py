@@ -73,8 +73,9 @@ class ServerlessFile(Deploy):
                 if statements != "elsewhere":
                     actions = statement_actions(as_list(statements) + as_list(function.get("iamRoleStatements")))
                     for policy in as_list(managed):
-                        granted = MANAGED_POLICIES.get(str(policy).rsplit("/", 1)[-1]) if isinstance(policy, str) \
-                            else None
+                        granted = (
+                            MANAGED_POLICIES.get(str(policy).rsplit("/", 1)[-1]) if isinstance(policy, str) else None
+                        )
                         actions = None if granted is None or actions is None else actions | granted
                     if actions is not None:
                         actions |= MANAGED_POLICIES["AWSLambdaBasicExecutionRole"]
@@ -82,18 +83,35 @@ class ServerlessFile(Deploy):
                             if isinstance(event, dict) and "sqs" in event:
                                 actions |= MANAGED_POLICIES["AWSLambdaSQSQueueExecutionRole"]
                             if isinstance(event, dict) and "stream" in event:
-                                actions |= (MANAGED_POLICIES["AWSLambdaDynamoDBExecutionRole"]
-                                            | MANAGED_POLICIES["AWSLambdaKinesisExecutionRole"])
+                                actions |= (
+                                    MANAGED_POLICIES["AWSLambdaDynamoDBExecutionRole"]
+                                    | MANAGED_POLICIES["AWSLambdaKinesisExecutionRole"]
+                                )
                 timeout = function.get("timeout", provider.get("timeout", _DEFAULT_TIMEOUT))
                 memory = function.get("memorySize", provider.get("memorySize", _DEFAULT_MEMORY))
                 layers = [str(layer) for layer in as_list(function.get("layers", provider.get("layers")))]
-                found.append(Deployment(
-                    str(name), path, self.name, where[0], where[1], "lambda", line_of(text, str(name), 2),
-                    runtime if isinstance(runtime, str) else None, timeout if isinstance(timeout, int) else None,
-                    memory if isinstance(memory, int) else None, env_names, env_error, layers, actions,
-                    ["provider.iam.role.statements"]))
+                found.append(
+                    Deployment(
+                        str(name),
+                        path,
+                        self.name,
+                        where[0],
+                        where[1],
+                        "lambda",
+                        line_of(text, str(name), 2),
+                        runtime if isinstance(runtime, str) else None,
+                        timeout if isinstance(timeout, int) else None,
+                        memory if isinstance(memory, int) else None,
+                        env_names,
+                        env_error,
+                        layers,
+                        actions,
+                        ["provider.iam.role.statements"],
+                    )
+                )
         return found
 
     def grant(self, deployment: Deployment, actions: list[str]) -> str:
-        return (f"add a statement that allows {', '.join(actions)} to provider.iam.role.statements in "
-                f"{deployment.source}")
+        return (
+            f"add a statement that allows {', '.join(actions)} to provider.iam.role.statements in {deployment.source}"
+        )

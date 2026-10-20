@@ -26,8 +26,14 @@ def _parse(text: str, filename: str = "<unknown>", mode: str = "exec") -> Any:
         return ast.parse(text, filename=filename, mode=mode)
 
 
-_OPPOSITES = {ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In, ast.Eq: ast.NotEq,
-              ast.NotEq: ast.Eq}  # a comparison's operator -> the one that's true when it isn't
+_OPPOSITES = {
+    ast.Is: ast.IsNot,
+    ast.IsNot: ast.Is,
+    ast.In: ast.NotIn,
+    ast.NotIn: ast.In,
+    ast.Eq: ast.NotEq,
+    ast.NotEq: ast.Eq,
+}  # a comparison's operator -> the one that's true when it isn't
 
 
 def _negated(test: Any) -> str:
@@ -61,17 +67,31 @@ def _secret_spots(node: Any) -> list[tuple[str, Any]]:
         pairs: list[tuple[Any, Any]] = []
         if isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None:
             for target in n.targets if isinstance(n, ast.Assign) else [n.target]:
-                pairs.append((target.id if isinstance(target, ast.Name) else target.attr
-                              if isinstance(target, ast.Attribute) else _const(target.slice)
-                              if isinstance(target, ast.Subscript) else None, n.value))
+                pairs.append(
+                    (
+                        target.id
+                        if isinstance(target, ast.Name)
+                        else target.attr
+                        if isinstance(target, ast.Attribute)
+                        else _const(target.slice)
+                        if isinstance(target, ast.Subscript)
+                        else None,
+                        n.value,
+                    )
+                )
         elif isinstance(n, ast.Call):
             pairs += [(kw.arg, kw.value) for kw in n.keywords if kw.arg]
         elif isinstance(n, ast.Dict):
             pairs += [(_const(k), v) for k, v in zip(n.keys, n.values) if k is not None]
         for name, value in pairs:
             text = _const(value)
-            if (isinstance(name, str) and isinstance(text, str) and _SECRET_NAME_RE.search(name)
-                    and not _NOT_SECRET_NAME_RE.search(name) and _secret_value(text)):
+            if (
+                isinstance(name, str)
+                and isinstance(text, str)
+                and _SECRET_NAME_RE.search(name)
+                and not _NOT_SECRET_NAME_RE.search(name)
+                and _secret_value(text)
+            ):
                 found.append((name, value))
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and _AWS_KEY_RE.search(n.value):
             found.append(("an AWS access key", n))
@@ -162,8 +182,12 @@ def _is_main_guard(test: Any) -> bool:
     """
     `if __name__ == "__main__":`, which never runs when the code is imported.
     """
-    return (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == "__name__"
-            and any(_const(c) == "__main__" for c in test.comparators))
+    return (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and any(_const(c) == "__main__" for c in test.comparators)
+    )
 
 
 def _doc_line(node: Any) -> str:
@@ -184,7 +208,13 @@ def _secret_value(value: str) -> bool:
     Whether a literal looks like a real secret rather than a name, a path or a placeholder.
     """
     text = value.strip()
-    return (len(text) >= 6 and not re.search(r"\s", text) and not re.fullmatch(r"[A-Z0-9_]+", text)
-            and not text.startswith(("arn:", "/", "{", "$", "<", "%", "http", "s3://", "projects/"))
-            and text.lower() not in _PLACEHOLDERS and "xxx" not in text.lower() and len(set(text)) > 2
-            and not text.lower().startswith("your"))
+    return (
+        len(text) >= 6
+        and not re.search(r"\s", text)
+        and not re.fullmatch(r"[A-Z0-9_]+", text)
+        and not text.startswith(("arn:", "/", "{", "$", "<", "%", "http", "s3://", "projects/"))
+        and text.lower() not in _PLACEHOLDERS
+        and "xxx" not in text.lower()
+        and len(set(text)) > 2
+        and not text.lower().startswith("your")
+    )

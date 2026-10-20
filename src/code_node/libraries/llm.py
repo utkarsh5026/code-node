@@ -10,25 +10,60 @@ from ..analysis.syntax import _a
 from . import Call, Handle, Library, Use
 
 _CLIENTS = {
-    "OpenAI": "OpenAI", "AsyncOpenAI": "OpenAI", "AzureOpenAI": "Azure OpenAI", "AsyncAzureOpenAI": "Azure OpenAI",
-    "Anthropic": "Anthropic", "AsyncAnthropic": "Anthropic", "AnthropicBedrock": "Anthropic on Bedrock",
-    "AsyncAnthropicBedrock": "Anthropic on Bedrock", "AnthropicVertex": "Anthropic on Vertex AI",
+    "OpenAI": "OpenAI",
+    "AsyncOpenAI": "OpenAI",
+    "AzureOpenAI": "Azure OpenAI",
+    "AsyncAzureOpenAI": "Azure OpenAI",
+    "Anthropic": "Anthropic",
+    "AsyncAnthropic": "Anthropic",
+    "AnthropicBedrock": "Anthropic on Bedrock",
+    "AsyncAnthropicBedrock": "Anthropic on Bedrock",
+    "AnthropicVertex": "Anthropic on Vertex AI",
     "AsyncAnthropicVertex": "Anthropic on Vertex AI",
 }
 
-_PARTS = frozenset({  # a client's attributes that are parts of it, not methods: client.chat.completions.create
-    "chat", "completions", "embeddings", "images", "audio", "speech", "transcriptions", "translations", "moderations",
-    "responses", "files", "batches", "models", "fine_tuning", "jobs", "vector_stores", "uploads", "beta", "threads",
-    "runs", "messages", "assistants", "realtime", "containers", "conversations", "evals", "webhooks", "skills",
-})
+_PARTS = frozenset(
+    {  # a client's attributes that are parts of it, not methods: client.chat.completions.create
+        "chat",
+        "completions",
+        "embeddings",
+        "images",
+        "audio",
+        "speech",
+        "transcriptions",
+        "translations",
+        "moderations",
+        "responses",
+        "files",
+        "batches",
+        "models",
+        "fine_tuning",
+        "jobs",
+        "vector_stores",
+        "uploads",
+        "beta",
+        "threads",
+        "runs",
+        "messages",
+        "assistants",
+        "realtime",
+        "containers",
+        "conversations",
+        "evals",
+        "webhooks",
+        "skills",
+    }
+)
 
 _READS = frozenset({"list", "retrieve", "count_tokens", "content", "results", "get"})
 
 _WRITES = frozenset({"delete", "cancel", "upload"})
 
 _LEGACY = {  # openai < 1.0: module functions -> the call they made
-    "openai.ChatCompletion.create": "chat.completions.create", "openai.Completion.create": "completions.create",
-    "openai.Embedding.create": "embeddings.create", "openai.Image.create": "images.generate",
+    "openai.ChatCompletion.create": "chat.completions.create",
+    "openai.Completion.create": "completions.create",
+    "openai.Embedding.create": "embeddings.create",
+    "openai.Image.create": "images.generate",
 }
 
 _WAITS = "up to 10 minutes a try (the SDK's default timeout), and it tries 3 times"
@@ -48,8 +83,13 @@ class LlmLibrary(Library):
     def make(self, name: str, call: Call) -> Handle | Use | None:
         last = name.rsplit(".", 1)[-1]
         if last in _CLIENTS:
-            return Handle("client", _CLIENTS[last], opens=True, waits="" if call.given("timeout") else _WAITS,
-                          fix=f"{last}(timeout=20, max_retries=1)")
+            return Handle(
+                "client",
+                _CLIENTS[last],
+                opens=True,
+                waits="" if call.given("timeout") else _WAITS,
+                fix=f"{last}(timeout=20, max_retries=1)",
+            )
         if name in _LEGACY:
             return self._use("OpenAI", _LEGACY[name], call)
         return None

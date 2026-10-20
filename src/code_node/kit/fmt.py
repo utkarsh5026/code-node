@@ -144,8 +144,10 @@ def _named_zone(text: str, value: str) -> tzinfo:
 
     names = available_timezones()
     if not names:
-        raise ValueError(f"Can't look up {value!r}: this Python has no time zone database. pip install tzdata, or "
-                         "give an offset, like '+05:30'")
+        raise ValueError(
+            f"Can't look up {value!r}: this Python has no time zone database. pip install tzdata, or "
+            "give an offset, like '+05:30'"
+        )
     places = _zone_places(names)
     asked = re.sub(r"[\s_]+", " ", text.lower())
     if asked in places:
@@ -154,8 +156,10 @@ def _named_zone(text: str, value: str) -> tzinfo:
     hint = f" Did you mean {' or '.join(map(repr, close))}?" if close else ""
     if _SHORT_ZONE_RE.fullmatch(text):
         hint += f" A short name like {text} can mean more than one zone (IST is India's, Ireland's and Israel's)."
-    raise ValueError(f"{value!r} isn't a time zone set_timezone() knows.{hint} Name it the way the tz database does "
-                     "('Asia/Kolkata', 'America/New_York'), by its city ('kolkata'), or by its offset ('+05:30')")
+    raise ValueError(
+        f"{value!r} isn't a time zone set_timezone() knows.{hint} Name it the way the tz database does "
+        "('Asia/Kolkata', 'America/New_York'), by its city ('kolkata'), or by its offset ('+05:30')"
+    )
 
 
 def _display_zone() -> tzinfo | None:
@@ -208,9 +212,7 @@ def _tz_label() -> str:
     return "/".join(dict.fromkeys(name for _, name in named))
 
 
-def parse_time(
-    value: datetime | date | timedelta | str | None, now: datetime | None = None
-) -> datetime | None:
+def parse_time(value: datetime | date | timedelta | str | None, now: datetime | None = None) -> datetime | None:
     """
     datetime/date, ISO string ('2024-05-01', '2024-05-01T10:00Z'), or a relative
     age like '7d', '12h', '30m', '2w' meaning "that long ago". Naive values are in the zone reports show times in:
@@ -368,12 +370,7 @@ def file_extension(key: str) -> str:
     if len(parts) < 2 or parts[-1] == "" or (len(parts) == 2 and parts[0] == ""):
         return "(none)"
     ext = parts[-1]
-    if (
-        ext in _COMPRESSION_EXTS
-        and len(parts) > 2
-        and parts[-2].isalpha()
-        and len(parts[-2]) <= 8
-    ):
+    if ext in _COMPRESSION_EXTS and len(parts) > 2 and parts[-2].isalpha() and len(parts[-2]) <= 8:
         return f"{parts[-2]}.{ext}"
     return ext
 

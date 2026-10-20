@@ -69,10 +69,14 @@ def _aws_model(service: str) -> dict[str, Any] | None:
     meta = model.get("metadata", {})
     return {
         "ops": {xform_name(op): op for op in model.get("operations", {})},
-        "pages": {op: (frozenset(_tokens(spec.get("input_token"))),
-                       _tokens(spec.get("output_token")) + _tokens(spec.get("more_results")),
-                       str(spec.get("limit_key") or ""))
-                  for op, spec in pages.items()},
+        "pages": {
+            op: (
+                frozenset(_tokens(spec.get("input_token"))),
+                _tokens(spec.get("output_token")) + _tokens(spec.get("more_results")),
+                str(spec.get("limit_key") or ""),
+            )
+            for op, spec in pages.items()
+        },
         "name": meta.get("serviceId") or service,
         "iam": meta.get("signingName") or meta.get("endpointPrefix") or service,
     }
@@ -124,19 +128,37 @@ def _event_kind(fields: Iterable[EventField]) -> str | None:
     paths = [tuple(p.lower() for p in f.path) for f in fields]
 
     def has(*parts: str) -> bool:
-        return any(path[:len(parts)] == parts for path in paths)
+        return any(path[: len(parts)] == parts for path in paths)
 
-    for parts, kind in ((("records", "[]", "s3"), "an S3 event"), (("records", "[]", "sns"), "an SNS message"),
-                        (("records", "[]", "dynamodb"), "a DynamoDB stream batch"),
-                        (("records", "[]", "kinesis"), "a Kinesis batch"), (("records", "[]", "body"), "an SQS batch"),
-                        (("records", "[]", "receipthandle"), "an SQS batch"),
-                        (("records", "[]", "messageid"), "an SQS batch"), (("awslogs",), "CloudWatch Logs"),
-                        (("detail-type",), "an EventBridge event"), (("actiongroup",), "a Bedrock agent action"),
-                        (("apipath",), "a Bedrock agent action")):
+    for parts, kind in (
+        (("records", "[]", "s3"), "an S3 event"),
+        (("records", "[]", "sns"), "an SNS message"),
+        (("records", "[]", "dynamodb"), "a DynamoDB stream batch"),
+        (("records", "[]", "kinesis"), "a Kinesis batch"),
+        (("records", "[]", "body"), "an SQS batch"),
+        (("records", "[]", "receipthandle"), "an SQS batch"),
+        (("records", "[]", "messageid"), "an SQS batch"),
+        (("awslogs",), "CloudWatch Logs"),
+        (("detail-type",), "an EventBridge event"),
+        (("actiongroup",), "a Bedrock agent action"),
+        (("apipath",), "a Bedrock agent action"),
+    ):
         if has(*parts):
             return kind
-    if any(has(key) for key in ("httpmethod", "pathparameters", "querystringparameters", "requestcontext", "headers",
-                                "rawpath", "routekey", "multivalueheaders", "rawquerystring")):
+    if any(
+        has(key)
+        for key in (
+            "httpmethod",
+            "pathparameters",
+            "querystringparameters",
+            "requestcontext",
+            "headers",
+            "rawpath",
+            "routekey",
+            "multivalueheaders",
+            "rawquerystring",
+        )
+    ):
         return "an HTTP request"
     if has("detail") and has("source"):
         return "an EventBridge event"

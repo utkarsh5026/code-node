@@ -130,16 +130,22 @@ def _badge(node: Node) -> str:
     x, y = node.x, node.y
     found = logo_for(node.icon, 26)  # its small mark: the figure is drawn smaller than the page's graph
     if found is None:
-        return (f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
-                f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>')
+        return (
+            f'<rect class="bd" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
+            f'<path class="ic" transform="translate({x + 15},{y + 15})" d="{ICONS[node.icon]}"/>'
+        )
     width, height, body = found
     if fills(found):  # AWS's icons fill the badge, its corners rounded
-        return (f'<clipPath id="cn-badge-{node.id}"><rect x="{x + 10}" y="{y + 10}" width="26" height="26" rx="7"/>'
-                f'</clipPath><g clip-path="url(#cn-badge-{node.id})"><svg class="logo" x="{x + 10}" y="{y + 10}" '
-                f'width="26" height="26" viewBox="0 0 {width} {height}">{body}</svg></g>')
-    return (f'<rect class="bd lg" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
-            f'<svg class="logo" x="{x + 13}" y="{y + 13}" width="20" height="20" viewBox="0 0 {width} {height}" '
-            f'fill="currentColor">{body}</svg>')
+        return (
+            f'<clipPath id="cn-badge-{node.id}"><rect x="{x + 10}" y="{y + 10}" width="26" height="26" rx="7"/>'
+            f'</clipPath><g clip-path="url(#cn-badge-{node.id})"><svg class="logo" x="{x + 10}" y="{y + 10}" '
+            f'width="26" height="26" viewBox="0 0 {width} {height}">{body}</svg></g>'
+        )
+    return (
+        f'<rect class="bd lg" x="{x + 10}" y="{y + 10}" width="26" height="26" rx="8"/>'
+        f'<svg class="logo" x="{x + 13}" y="{y + 13}" width="20" height="20" viewBox="0 0 {width} {height}" '
+        f'fill="currentColor">{body}</svg>'
+    )
 
 
 def _node_svg(node: Node) -> str:
@@ -147,22 +153,30 @@ def _node_svg(node: Node) -> str:
     mono = node.kind in ("handler", "function")
     joined = [e for e in EDGES if node.id in (e.source, e.target)]
     neighbours = " ".join(f"a-{e.target if e.source == node.id else e.source}" for e in joined)
-    return (f'<g class="n k-{node.kind} n-{node.id} {neighbours}{" warn" if node.tone else ""}" '
-            f'data-node="{node.id}">'
-            f'<rect class="bg" x="{x}" y="{y}" width="{BOX_W}" height="{node.h}" rx="12"/>'
-            + _badge(node)
-            +             f'<text class="lb{" mono" if mono else ""}" x="{x + 44}" y="{y + 24}">{node.label}</text>'
-            f'<text class="sb" x="{x + 44}" y="{y + 41}">{node.sub}</text>'
-            + ('<circle class="wd" cx="{:.0f}" cy="{:.0f}" r="7"/><path class="wm" d="M{:.0f},{:.0f}v4.6M{:.0f},{:.0f}v.4"/>'
-               .format(x + BOX_W - 2, y + 2, x + BOX_W - 2, y - 1.4, x + BOX_W - 2, y + 5.4)
-               if node.tone else "")
-            + "</g>")
+    return (
+        f'<g class="n k-{node.kind} n-{node.id} {neighbours}{" warn" if node.tone else ""}" '
+        f'data-node="{node.id}">'
+        f'<rect class="bg" x="{x}" y="{y}" width="{BOX_W}" height="{node.h}" rx="12"/>'
+        + _badge(node)
+        + f'<text class="lb{" mono" if mono else ""}" x="{x + 44}" y="{y + 24}">{node.label}</text>'
+        f'<text class="sb" x="{x + 44}" y="{y + 41}">{node.sub}</text>'
+        + (
+            '<circle class="wd" cx="{:.0f}" cy="{:.0f}" r="7"/><path class="wm" d="M{:.0f},{:.0f}v4.6M{:.0f},{:.0f}v.4"/>'.format(
+                x + BOX_W - 2, y + 2, x + BOX_W - 2, y - 1.4, x + BOX_W - 2, y + 5.4
+            )
+            if node.tone
+            else ""
+        )
+        + "</g>"
+    )
 
 
 def _edge_svg(edge: Edge) -> str:
     d, end, direction = _curve(edge)
-    return (f'<g class="e k-{edge.kind} s-{edge.source} t-{edge.target}" data-edge="{edge.source}>{edge.target}">'
-            f'<path class="ln" d="{d}"/><path class="ah" d="{_head(end, direction)}"/></g>')
+    return (
+        f'<g class="e k-{edge.kind} s-{edge.source} t-{edge.target}" data-edge="{edge.source}>{edge.target}">'
+        f'<path class="ln" d="{d}"/><path class="ah" d="{_head(end, direction)}"/></g>'
+    )
 
 
 def graph_svg(label: str) -> str:
@@ -176,15 +190,18 @@ def graph_svg(label: str) -> str:
     captions = "".join(f'<text class="cap" x="{x + 2}" y="14">{text}</text>' for x, text in COLUMNS)
     edges = "".join(_edge_svg(edge) for edge in EDGES)
     nodes = "".join(_node_svg(node) for node in NODES)
-    return (f'<svg class="cn-graph" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{label}">'
-            f'<style>{"".join(rules)}</style>{captions}{edges}{nodes}</svg>')
+    return (
+        f'<svg class="cn-graph" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="{label}">'
+        f"<style>{''.join(rules)}</style>{captions}{edges}{nodes}</svg>"
+    )
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     graph = graph_svg(
         "A code graph: an S3 event comes in, lambda_handler calls read_orders, OrderStore.save and announce, and they "
-        "reach S3, DynamoDB, SNS and the web")
+        "reach S3, DynamoDB, SNS and the web"
+    )
     (OUT / "graph-trace.svg").write_text(graph + "\n", "utf-8")
     print(f"wrote {OUT / 'graph-trace.svg'}")
 

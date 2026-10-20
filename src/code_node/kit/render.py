@@ -28,7 +28,20 @@ from collections import Counter
 from typing import Any, Callable
 
 from .blocks import (
-    _CELLS, _HTML, _TEXT, _Cards, _Findings, _Next, _Note, _Report, _Table, _Text, _Title, _Tone, _drawer, _draws,
+    _CELLS,
+    _HTML,
+    _TEXT,
+    _Cards,
+    _Findings,
+    _Next,
+    _Note,
+    _Report,
+    _Table,
+    _Text,
+    _Title,
+    _Tone,
+    _drawer,
+    _draws,
 )
 from .fmt import _plural, file_extension
 from .text import _clip, _esc, _pad, _text_bar, _width
@@ -165,15 +178,24 @@ _BASE_RULES = """\
 .{root} .next{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin:12px 0 4px;padding-top:8px}
 .{root} .next{border-top:1px dashed rgba(127,127,127,.35)}
 .{root} .next .nl{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.6}
-.{root} .next .nw{font-size:12px;opacity:.65;margin-left:6px}""".replace("{sort_rules}", "".join(
-    f".{{root}} form.tbl:has(.k{j} .ra:checked) tbody tr{{order:var(--a{j})}}\n"
-    f".{{root}} form.tbl:has(.k{j} .rd:checked) tbody tr{{order:var(--d{j})}}\n"
-    for j in range(_SORT_COLUMNS)
-))
+.{root} .next .nw{font-size:12px;opacity:.65;margin-left:6px}""".replace(
+    "{sort_rules}",
+    "".join(
+        f".{{root}} form.tbl:has(.k{j} .ra:checked) tbody tr{{order:var(--a{j})}}\n"
+        f".{{root}} form.tbl:has(.k{j} .rd:checked) tbody tr{{order:var(--d{j})}}\n"
+        for j in range(_SORT_COLUMNS)
+    ),
+)
 
 
-def _base_css(root: str, extra: str = "", *, theme: str = "", restyle: dict[str, str] | None = None,
-              after: dict[str, str] | None = None) -> str:
+def _base_css(
+    root: str,
+    extra: str = "",
+    *,
+    theme: str = "",
+    restyle: dict[str, str] | None = None,
+    after: dict[str, str] | None = None,
+) -> str:
     """
     The <style> every report starts with: the shared rules for the root class `root`, then `extra`, the rules
     for the service's own blocks.
@@ -221,9 +243,13 @@ def _prose(value: Any, money: bool = False) -> str:
     """
     pieces = _CALL_RE.split("" if value is None else str(value))
     return "".join(
-        f"<code{_SELECT}>{_esc(piece)}</code>" if i % 2
-        else "".join(f'<span class="m">{_esc(part)}</span>' if k % 2 else _esc(part)
-                     for k, part in enumerate(_MONEY_RE.split(piece))) if money
+        f"<code{_SELECT}>{_esc(piece)}</code>"
+        if i % 2
+        else "".join(
+            f'<span class="m">{_esc(part)}</span>' if k % 2 else _esc(part)
+            for k, part in enumerate(_MONEY_RE.split(piece))
+        )
+        if money
         else _esc(piece)
         for i, piece in enumerate(pieces)
     )
@@ -251,7 +277,7 @@ def _split_lead(text: str, shortest: int = 8, longest: int = 160) -> tuple[str, 
     for match in _LEAD_END_RE.finditer(masked):
         if match.start() < shortest:
             continue
-        rest = text[match.end():].strip()
+        rest = text[match.end() :].strip()
         if match.start() > longest or not rest:
             break
         return text[: match.start()], text[match.start()], rest
@@ -341,11 +367,11 @@ def _signature(function: Callable) -> str:
 
 
 _SORT_UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4, "PB": 1024**5, "ms": 1}
-_SORT_NUMBER_RE = re.compile(
-    r"^(-?)(<?)\$?([\d,]*\.?\d+)\+?(?: ?(B|KB|MB|GB|TB|PB|%|ms))?(?: of [\d,]+| \([^()]*\))?$")
+_SORT_NUMBER_RE = re.compile(r"^(-?)(<?)\$?([\d,]*\.?\d+)\+?(?: ?(B|KB|MB|GB|TB|PB|%|ms))?(?: of [\d,]+| \([^()]*\))?$")
 _SORT_AGE_RE = re.compile(r"^(\d+)(y|mo|d|h|m) ago$")
 _SORT_DATE_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?: [A-Z]{2,5}(?:[+-]\d{2}(?::\d{2})?)?)?)?$")
+    r"^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?: [A-Z]{2,5}(?:[+-]\d{2}(?::\d{2})?)?)?)?$"
+)
 _AGE_SECONDS = {"y": 365 * 86400, "mo": 30 * 86400, "d": 86400, "h": 3600, "m": 60}
 _SORT_WORDS = {
     "number": ("largest first", "smallest first"),
@@ -448,8 +474,9 @@ _ICONS = {
     **dict.fromkeys(("wav", "mp3", "flac", "ogg", "m4a", "aac"), "🎵"),
     **dict.fromkeys(("mp4", "webm", "mov", "m4v", "avi", "mkv"), "🎬"),
     **dict.fromkeys(("zip", "tar", "tgz", "7z", "rar", "gz", "bz2", "xz", "zst"), "📦"),
-    **dict.fromkeys(("safetensors", "pt", "pth", "ckpt", "onnx", "h5", "keras", "pkl", "pickle", "joblib",
-                     "gguf", "bin"), "🧠"),
+    **dict.fromkeys(
+        ("safetensors", "pt", "pth", "ckpt", "onnx", "h5", "keras", "pkl", "pickle", "joblib", "gguf", "bin"), "🧠"
+    ),
     **dict.fromkeys(("npy", "npz"), "🔢"),
     **dict.fromkeys(("docx", "docm", "doc", "dotx", "rtf"), "📘"),
     **dict.fromkeys(("pptx", "pptm", "ppt", "ppsx"), "📙"),
@@ -491,15 +518,18 @@ def _path_html(text: str) -> str:
         if not icon and is_key and line not in ("", "-"):
             icon = _file_icon(line)
         folder, _, name = line.rstrip("/").rpartition("/")
-        name += line[len(line.rstrip("/")):]
+        name += line[len(line.rstrip("/")) :]
         folder = f"{folder}/" if folder and is_key else ""
         if not folder:
             name = line
         room = _PATH_CHARACTERS - len(name)
         cap = f' style="max-width:{max(room, _SHORTEST_FOLDER)}ch"' if room < _FOLDER_CHARACTERS else ""
-        lines.append('<span class="pl">' + (f'<span class="pi">{icon}</span>' if icon else "")
-                     + (f'<span class="pd"{cap}>{_esc(folder)}</span>' if folder else "")
-                     + f'<span class="pn">{_esc(name)}</span></span>')
+        lines.append(
+            '<span class="pl">'
+            + (f'<span class="pi">{icon}</span>' if icon else "")
+            + (f'<span class="pd"{cap}>{_esc(folder)}</span>' if folder else "")
+            + f'<span class="pn">{_esc(name)}</span></span>'
+        )
     return "".join(lines)
 
 
@@ -509,7 +539,7 @@ def _clip_path(text: str, width: int = 90) -> str:
     """
     if len(text) <= width:
         return text
-    tail = text[-(width - 1):]
+    tail = text[-(width - 1) :]
     cut = tail.find("/")
     return "…" + (tail[cut:] if 0 <= cut < len(tail) - 1 else tail)
 
@@ -533,8 +563,15 @@ def _counts(findings: list[tuple[str, str]], sep: str) -> str:
     '2 warnings · 3 notes'.
     """
     warns = sum(level == "warn" for level, _ in findings)
-    return sep.join(filter(None, [_plural(warns, "warning") if warns else "",
-                                  _plural(len(findings) - warns, "note") if len(findings) > warns else ""]))
+    return sep.join(
+        filter(
+            None,
+            [
+                _plural(warns, "warning") if warns else "",
+                _plural(len(findings) - warns, "note") if len(findings) > warns else "",
+            ],
+        )
+    )
 
 
 def _visible_rows(table: _Table, default_max: int) -> tuple[list[list[Any]], int]:
@@ -555,8 +592,11 @@ def _undrawn(block: Any) -> _Note:
     """
     The note shown in place of a block that nothing draws, rather than a traceback.
     """
-    return _Note(f"Part of this report isn't shown: there's no way to draw a {type(block).__name__} here "
-                 "(a bug in aws-analyzer).", "warn")
+    return _Note(
+        f"Part of this report isn't shown: there's no way to draw a {type(block).__name__} here "
+        "(a bug in aws-analyzer).",
+        "warn",
+    )
 
 
 @_draws(_Title, "html")
@@ -591,7 +631,8 @@ def _findings_html(block: _Findings, report: _Report) -> str:
         return f'<div class="note ok">{_lead(block.empty)}</div>' if block.empty else ""
     warns = sum(level == "warn" for level, _ in items)
     chips = (f'<span class="chip warn">{_plural(warns, "warning")}</span>' if warns else "") + (
-        f'<span class="chip info">{_plural(len(items) - warns, "note")}</span>' if len(items) > warns else "")
+        f'<span class="chip info">{_plural(len(items) - warns, "note")}</span>' if len(items) > warns else ""
+    )
     head = f'<div class="fh"><span class="fl">Findings</span>{chips}</div>'
     return f'<div class="fd">{head}{"".join(_finding_html(level, msg) for level, msg in items)}</div>'
 
@@ -626,8 +667,7 @@ def _column_texts(block: _Table, rows: list[list[Any]]) -> list[list[str]]:
     """
     Each column's cells as text: '' where a row is short of it or the cell is None.
     """
-    return [["" if j >= len(row) or row[j] is None else str(row[j]) for row in rows]
-            for j in range(len(block.headers))]
+    return [["" if j >= len(row) or row[j] is None else str(row[j]) for row in rows] for j in range(len(block.headers))]
 
 
 def _is_numeric(column: list[str]) -> bool:
@@ -639,8 +679,9 @@ def _is_numeric(column: list[str]) -> bool:
     return numbers * 2 > filled > 0
 
 
-def _table_sorts(block: _Table, rows: list[list[Any]],
-                 columns: list[list[str]]) -> dict[int, tuple[list[int], list[int], str]]:
+def _table_sorts(
+    block: _Table, rows: list[list[Any]], columns: list[list[str]]
+) -> dict[int, tuple[list[int], list[int], str]]:
     """
     The columns a click on their header sorts by -> each row's place sorted up and sorted down, and the column's
     kind (_sort_kind). A table sorts when it has _SORT_MIN_ROWS rows or more and isn't a tree or a list of calls
@@ -670,11 +711,16 @@ def _sort_labels(header: str, kind: str) -> str:
     """
     first, second = _SORT_WORDS[kind]
     radios = ("ra", "rd") if kind == "text" else ("rd", "ra")
-    steps = ((1, radios[0], f"Sort: {first}"), (2, radios[1], f"Sort: {second}"),
-             (3, "rn", "Back to the original order"))
-    return "".join(f'<label class="o{n}" title="{tip}"{_HIDE if n > 1 else ""}>'
-                   f'<input type="radio" name="s" class="{radio}"{_HIDE}>{_esc(header)}</label>'
-                   for n, radio, tip in steps)
+    steps = (
+        (1, radios[0], f"Sort: {first}"),
+        (2, radios[1], f"Sort: {second}"),
+        (3, "rn", "Back to the original order"),
+    )
+    return "".join(
+        f'<label class="o{n}" title="{tip}"{_HIDE if n > 1 else ""}>'
+        f'<input type="radio" name="s" class="{radio}"{_HIDE}>{_esc(header)}</label>'
+        for n, radio, tip in steps
+    )
 
 
 def _header_html(j: int, header: str, numeric: bool, sort: tuple[list[int], list[int], str] | None) -> str:
@@ -717,8 +763,9 @@ def _bar_td(fraction: float) -> str:
     The bar column's cell: the fraction as a bar and a percentage.
     """
     pct = max(0.0, min(1.0, fraction)) * 100
-    return (f'<td class="bar"><span class="track"><span class="fill" style="width:{pct:.1f}%">'
-            f"</span></span>{pct:.1f}%</td>")
+    return (
+        f'<td class="bar"><span class="track"><span class="fill" style="width:{pct:.1f}%"></span></span>{pct:.1f}%</td>'
+    )
 
 
 def _row_cells(block: _Table, i: int, row: list[Any]) -> str:
@@ -731,8 +778,12 @@ def _row_cells(block: _Table, i: int, row: list[Any]) -> str:
     return "".join(cells)
 
 
-def _row_attributes(i: int, columns: list[list[str]], sorts: dict[int, tuple[list[int], list[int], str]],
-                    positions: dict[int, dict[str, int]]) -> str:
+def _row_attributes(
+    i: int,
+    columns: list[list[str]],
+    sorts: dict[int, tuple[list[int], list[int], str]],
+    positions: dict[int, dict[str, int]],
+) -> str:
     """
     Row i's class, naming the value it holds in each filtered column (f<column>v<value's place>), and its style, its
     place in each sortable column sorted up and down (--a<column>, --d<column>), which the CSS orders rows by.
@@ -748,14 +799,18 @@ def _columns_menu(heads: list[str], report: _Report) -> str:
     the table. The rules that hide them go into report.rules.
     """
     root = report.root
-    report.rules.update(f".{root} form.tbl:has(.cv{j}:not(:checked)) tr>:nth-child({j + 1}){{display:none}}"
-                        for j in range(len(heads)))
-    boxes = "".join(f'<label><input type="checkbox" class="cv{j}" checked>{_esc(header)}</label>'
-                    for j, header in enumerate(heads))
-    return ('<details class="cols"><summary title="Choose the columns to show">Columns</summary><div class="menu">'
-            + boxes
-            + '<button type="reset" title="Every column, the original order and no filters">Reset table'
-            "</button></div></details>")
+    report.rules.update(
+        f".{root} form.tbl:has(.cv{j}:not(:checked)) tr>:nth-child({j + 1}){{display:none}}" for j in range(len(heads))
+    )
+    boxes = "".join(
+        f'<label><input type="checkbox" class="cv{j}" checked>{_esc(header)}</label>' for j, header in enumerate(heads)
+    )
+    return (
+        '<details class="cols"><summary title="Choose the columns to show">Columns</summary><div class="menu">'
+        + boxes
+        + '<button type="reset" title="Every column, the original order and no filters">Reset table'
+        "</button></div></details>"
+    )
 
 
 def _filter_controls(filters: list[tuple[int, list[tuple[str, int]]]], heads: list[str], report: _Report) -> str:
@@ -765,8 +820,10 @@ def _filter_controls(filters: list[tuple[int, list[tuple[str, int]]]], heads: li
     """
     root = report.root
     for j, values in filters:
-        report.rules.update(f".{root} form.tbl:has(.f{j} .v{i}:checked) tbody tr:not(.f{j}v{i}){{display:none}}"
-                            for i in range(len(values)))
+        report.rules.update(
+            f".{root} form.tbl:has(.f{j} .v{i}:checked) tbody tr:not(.f{j}v{i}){{display:none}}"
+            for i in range(len(values))
+        )
     selects = "".join(
         f'<label class="flt">{_esc(heads[j])}<select class="f{j}"><option class="all" selected>All</option>'
         + "".join(f'<option class="v{i}">{_esc(value)} ({count:,})</option>' for i, (value, count) in enumerate(values))
@@ -780,8 +837,10 @@ def _filter_foot(row_count: int) -> str:
     """
     The line under a filtered table: how many rows match, and a button that clears the filters.
     """
-    return (f'<div class="tf"{_HIDE}><span><span class="cnt"></span> of {row_count:,} rows match</span>'
-            '<button type="reset">Clear filters</button></div>')
+    return (
+        f'<div class="tf"{_HIDE}><span><span class="cnt"></span> of {row_count:,} rows match</span>'
+        '<button type="reset">Clear filters</button></div>'
+    )
 
 
 def _table_frame(block: _Table, tools: str, content: str) -> str:
@@ -789,8 +848,10 @@ def _table_frame(block: _Table, tools: str, content: str) -> str:
     The table under its title, with its controls beside the title, or folded under its title when it's collapsed.
     """
     if block.collapsed:
-        return (f'<details class="sec"><summary>{_prose(block.title or "Details")} ({len(block.rows):,})</summary>'
-                f"{tools}{content}</details>")
+        return (
+            f'<details class="sec"><summary>{_prose(block.title or "Details")} ({len(block.rows):,})</summary>'
+            f"{tools}{content}</details>"
+        )
     title = f"<h4>{_prose(block.title)}</h4>" if block.title else ""
     head = f'<div class="tt">{title}{tools}</div>' if title and tools else title + tools
     return head + content
@@ -818,15 +879,20 @@ def _table_html(block: _Table, report: _Report) -> str:
     chooses_columns = len(heads) >= _CHOOSER_MIN_COLUMNS
     interactive = bool(sorts or filters or chooses_columns)
 
-    header_cells = "".join(_header_html(j, header, j < len(block.headers) and numeric[j], sorts.get(j))
-                           for j, header in enumerate(heads))
+    header_cells = "".join(
+        _header_html(j, header, j < len(block.headers) and numeric[j], sorts.get(j)) for j, header in enumerate(heads)
+    )
     positions = {j: {value: i for i, (value, _) in enumerate(values)} for j, values in filters}
-    body = "".join(f"<tr{_row_attributes(i, columns, sorts, positions)}>{_row_cells(block, i, row)}</tr>"
-                   for i, row in enumerate(rows))
+    body = "".join(
+        f"<tr{_row_attributes(i, columns, sorts, positions)}>{_row_cells(block, i, row)}</tr>"
+        for i, row in enumerate(rows)
+    )
     grid = f' style="--gc:repeat({len(heads)},auto)"' if interactive else ""
     scroll = " scroll" if len(rows) > _SCROLL_ROWS else ""
-    table = (f'<div class="tw{scroll}"><table class="t"{grid}><thead><tr>{header_cells}'
-             f"</tr></thead><tbody>{body}</tbody></table></div>")
+    table = (
+        f'<div class="tw{scroll}"><table class="t"{grid}><thead><tr>{header_cells}'
+        f"</tr></thead><tbody>{body}</tbody></table></div>"
+    )
 
     tools = _columns_menu(heads, report) if chooses_columns else ""
     foot = ""
@@ -905,8 +971,10 @@ def _table_lines(block: _Table, report: _Report) -> list[str]:
     rows, hidden = _visible_rows(block, report.max_rows)
     headers = list(block.headers) + ([block.bar_label] if block.bars is not None else [])
     cells = [
-        [", ".join(map(_clip_path, text.split("\n"))) if j in block.path_cols else _clip(text.replace("\n", ", "))
-         for j, text in enumerate("" if c is None else str(c) for c in row)]
+        [
+            ", ".join(map(_clip_path, text.split("\n"))) if j in block.path_cols else _clip(text.replace("\n", ", "))
+            for j, text in enumerate("" if c is None else str(c) for c in row)
+        ]
         + ([_text_bar(block.bars[i])] if block.bars is not None else [])
         for i, row in enumerate(rows)
     ]
@@ -986,11 +1054,13 @@ def _page_document(report_html: str, title: str, head: str = "") -> str:
     A report's HTML as a page of its own, to open in a browser tab: a whole HTML document with the report in it, in
     the browser's own light or dark colours. Still no JavaScript. `head` is added to the <head> (a favicon, say).
     """
-    return "".join([
-        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
-        head,
-        f"<title>{_esc(title)}</title>\n<style>\n{_PAGE_CSS}</style>\n</head>\n<body>\n",
-        report_html,
-        "\n</body>\n</html>\n",
-    ])
+    return "".join(
+        [
+            '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
+            head,
+            f"<title>{_esc(title)}</title>\n<style>\n{_PAGE_CSS}</style>\n</head>\n<body>\n",
+            report_html,
+            "\n</body>\n</html>\n",
+        ]
+    )
