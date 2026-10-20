@@ -1,7 +1,20 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/logo.svg" width="72" alt="">
+
 # code-node
 
-**See how Python code works, without running it.** Point `code-node` at a repository. It opens a page that shows
-where the code starts, which of its functions call which, and what each path ends up touching: AWS, the web,
+**See how Python code works, without running it.**
+
+[![PyPI](https://img.shields.io/pypi/v/code-node-graph)](https://pypi.org/project/code-node-graph/)
+[![Python](https://img.shields.io/pypi/pyversions/code-node-graph)](https://pypi.org/project/code-node-graph/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
+[Docs](https://utkarsh5026.github.io/code-node/) · [Plugins](https://utkarsh5026.github.io/code-node/plugins.html) · [How it works](https://utkarsh5026.github.io/code-node/how-it-works.html) · [Changelog](CHANGELOG.md)
+
+</div>
+
+Point it at a repo. Get a page showing where the code starts, who calls whom, and what each path touches: AWS, HTTP,
 environment variables.
 
 <picture>
@@ -9,101 +22,75 @@ environment variables.
   <img alt="code-node's graph of a small Lambda function: an S3 event comes in, the handler calls its own functions, and they reach S3, DynamoDB, SNS and the web" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/graph-light.webp">
 </picture>
 
+## Install
+
 ```bash
 pip install code-node-graph        # or: uv tool install code-node-graph
 cd your/repo && code-node
 ```
 
-Nothing is run. The code is read with Python's `ast` module, and AWS operations are named from botocore's service
-models on disk. No module is imported and no request is made.
-
-**[Docs](https://utkarsh5026.github.io/code-node/)** · [Changelog](CHANGELOG.md)
+> [!NOTE]
+> Nothing is run. Code is read with `ast`, AWS operations come from botocore's models on disk. No imports, no requests.
 
 ## What you get
 
-- **A graph of the paths.** What comes in, who calls whom, and what each path reaches, arranged left to right. AWS
-  calls are coloured by what they do (reads, writes, sends, runs) and a ↻ marks calls made in a loop. Point at a box
-  to see only what it's joined to; click it to read its code in a panel on the right.
-- **Every call, step by step.** In a tab beside the graph, walk through the code in the order it runs, as a
-  debugger steps: every line that does something in a list, said in plain words, and the function it's in with that
-  line lit. Next goes into each function it calls, Skip call and Finish skip past them, and once you've clicked a
-  step the arrow keys move through the rest.
-- **The graph as Mermaid**, to paste in a Markdown file, a wiki or a pull request.
-- **Plugins that mix.** Besides boto3, it follows Redis, SQL databases (sqlite3, psycopg, PyMySQL, asyncpg,
-  SQLAlchemy), MongoDB, and the OpenAI and Anthropic SDKs, a box for each service they reach. It reads a SAM
-  `template.yaml` or a `serverless.yml` in the folder, and checks the code against it: a variable that isn't set,
-  an AWS call the role doesn't allow, a client that waits longer than the function's timeout. SQL or a shell
-  command built from the input is flagged wherever it's run. [Plugins](https://utkarsh5026.github.io/code-node/plugins.html)
-  shows them on [`examples/cart-service`](examples/cart-service), and how to write your own.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/page-dark.webp">
-  <img alt="A code-node page: the graph in its tab, with Step by step beside it" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/page-light.webp">
-</picture>
-
-## Pick where to start
-
-Every page follows the code from one **entry point**.
-
-```bash
-code-node                              # finds the entry points in this folder, and asks which one
-code-node --list                       # just list them
-
-code-node src/app/main.py              # start from a file: what its __main__ block runs, or pick a function
-code-node src/app/main.py:run          # a function in that file
-code-node src/app/store.py:Store.save  # a method
-
-code-node -e pkg.cli.main              # a dotted name
-code-node -e save                      # part of a name: it lists the matches
-```
-
-It finds console scripts in every `pyproject.toml` (a monorepo's too), the functions a SAM template or
-`serverless.yml` names, Lambda handlers, FastAPI / Flask apps (each route), Typer apps (each command), what runs under
-`if __name__ == "__main__":`, and functions named `main`. Test files are skipped.
+| | |
+| --- | --- |
+| 🗺️ **Graph** | What comes in, who calls whom, what each path reaches. AWS calls coloured by kind (read, write, send, run); ↻ marks loops |
+| 👣 **Step by step** | Walk the code in run order, like a debugger: Next, Skip call, Finish, arrow keys |
+| 🔌 **Plugins** | boto3, Redis, SQL (sqlite3, psycopg, PyMySQL, asyncpg, SQLAlchemy), MongoDB, OpenAI, Anthropic |
+| 📄 **Deploy checks** | Reads SAM `template.yaml` / `serverless.yml`: unset variables, IAM calls the role won't allow, timeouts that don't fit |
+| 🚨 **Findings** | SQL or shell commands built from input, clients with no timeout, queries in loops |
+| 🧜 **Mermaid** | Paste the graph into Markdown, a wiki or a PR |
+| 🔁 **Live** | `--serve` redraws on every save |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-dark.webp">
-  <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit, with Back, Next and Finish" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
+  <img alt="The Step by step tab: every step in the order the code runs on the left, and on the right the function the current one is in, its line lit" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/steps-light.webp">
 </picture>
 
-## Plugins that mix
-
-A platform says where the code runs; library plugins (Redis, SQL, MongoDB, OpenAI and Anthropic) and deploy files
-(SAM, Serverless) stack on top, and the checks see all of them at once. On
-[`examples/cart-service`](examples/cart-service):
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-dark.svg">
-  <img alt="The cart example: template.yaml, AWS Lambda and its libraries read on_checkout(), and together find a role that doesn't allow two AWS calls, two unset variables, SQL injection, a client with no timeout, a connection on every call and a query run once per item" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-light.svg">
-</picture>
-
-## Keep it open while you work
+## Usage
 
 ```bash
-code-node --serve                      # http://localhost:8765 (or the next free port), redrawn on every save
-code-node src/app/main.py --serve --port 9000
+code-node                              # find entry points and pick one
+code-node --list                       # just list them
+code-node src/app/main.py:run          # start from a function
+code-node src/app/store.py:Store.save  # ...or a method
+code-node -e save                      # part of a name
+code-node --serve                      # live page on localhost:8765
+code-node --mermaid                    # print the graph as Mermaid
 ```
 
-The server watches the folder. When a file changes it reads the code again, redraws the page, and the browser reloads
-at the same scroll position. If the code can't be drawn, the page says why and comes back on the next save.
+<details>
+<summary><b>Entry points it finds</b></summary>
 
-## Options
+Console scripts in any `pyproject.toml` (monorepos too), functions named in SAM / Serverless files, Lambda handlers,
+FastAPI / Flask routes, Typer commands, `if __name__ == "__main__":` blocks, and functions named `main`. Test files
+are skipped.
+
+</details>
+
+<details>
+<summary><b>All options</b></summary>
 
 | Option | What it does |
 | --- | --- |
-| `path` | The folder to read, or a file to start from (`main.py`, `main.py:function`) |
-| `-e`, `--entry` | Where to start: `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
-| `-l`, `--list` | List the entry points, then stop |
-| `--plugins` | List the platforms, libraries and deploy files it reads code with, then stop |
-| `--all` | Draw every function, however deep (by default the graph shows 24, 5 calls deep: the ones that lead to the most code) |
+| `path` | Folder to read, or a file to start from (`main.py`, `main.py:function`) |
+| `-e`, `--entry` | `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
+| `-l`, `--list` | List entry points and stop |
+| `--plugins` | List platforms, libraries and deploy files and stop |
+| `--all` | Draw every function (default: 24 functions, 5 calls deep) |
 | `--depth N`, `--functions N` | Your own limits |
-| `--serve`, `--port N` | Serve the page on localhost (8765, or the next free port) and redraw it whenever a `.py` file (or a deploy file) changes |
+| `--serve`, `--port N` | Serve on localhost, redraw on change |
 | `--mermaid` | Print the graph as Mermaid |
-| `-o`, `--out`, `--no-open` | Where to save the page (default `~/.cache/code-node/`), and whether to open it |
-| `--platform NAME`, `--lambda` | Run a platform's checks (`lambda`) on any entry point. A found Lambda handler (or one a deploy file names) sets it; anything else is plain Python |
-| `--editor vscode\|cursor\|none` | The editor the page's line links open (default `vscode`; links into WSL open in Windows' editor) |
+| `-o`, `--out`, `--no-open` | Where to save (default `~/.cache/code-node/`), and whether to open it |
+| `--platform NAME`, `--lambda` | Run a platform's checks on any entry point |
+| `--editor vscode\|cursor\|none` | Editor the line links open (default `vscode`, WSL-aware) |
 
-## From Python
+</details>
+
+<details>
+<summary><b>From Python</b></summary>
 
 ```python
 from code_node import code_graph, map_code, read_project
@@ -114,23 +101,34 @@ print([call.label for call in cmap.aws])
 print(code_graph(cmap).mermaid())
 ```
 
-## What it can't see
+</details>
 
-Calls through values from outside the code it reads (a client a library hands back, a function picked at run time
-from a registry), installed libraries' own code, and dynamic tricks like `getattr` with a computed name. A page can
-miss calls, but everything it shows is in the code. [How it works](https://utkarsh5026.github.io/code-node/how-it-works.html)
-explains the rest.
+## Plugins that mix
+
+One platform, any number of libraries and deploy files, checked together. On
+[`examples/cart-service`](examples/cart-service):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-dark.svg">
+  <img alt="The cart example: template.yaml, AWS Lambda and its libraries read on_checkout(), and together find a role that doesn't allow two AWS calls, two unset variables, SQL injection, a client with no timeout, a connection on every call and a query run once per item" src="https://raw.githubusercontent.com/utkarsh5026/code-node/main/docs/images/plugins-mix-light.svg">
+</picture>
+
+## Limits
+
+It can't follow values from outside the code (a client a library hands back, a function picked from a registry at
+run time), installed libraries' own code, or `getattr` with a computed name. **A page can miss calls, but everything
+it shows is in the code.**
 
 ## Develop
 
 ```bash
-make install    # .venv with code-node and the dev tools (needs uv)
-make check      # lint, tests, the example, the docs build and the package, as CI runs them
-make shots      # remake the screenshots (needs Chrome)
+make install    # .venv with the dev tools (needs uv)
+make check      # everything CI runs
+make shots      # remake screenshots (needs Chrome)
 ```
 
-`make` alone lists the rest. `python makefile.py` has the same tasks, drawn with rich, and runs on Windows too
-(`python makefile.py check`; with no `.venv` yet, `uv run makefile.py install`).
+`python makefile.py <task>` does the same on any OS.
 
-code-node was extracted from [aws-analyzer](https://github.com/utkarsh5026/aws-analyzer)'s `how_it_works()`.
-Apache 2.0.
+---
+
+<sub>Extracted from [aws-analyzer](https://github.com/utkarsh5026/aws-analyzer)'s `how_it_works()`. Apache 2.0.</sub>
