@@ -1,6 +1,7 @@
 """
 What git says about the functions a map shows: `git blame` on the lines of each one, once per file, for the commit
-that last changed it, how many commits and people its lines come from, and the lines changed since the last commit.
+that last changed it, how many commits and people its lines come from, the lines changed since the last commit, and
+the commit each line comes from.
 
 git is run on the folder, never the code in it, and only to read: blame with no text conversion and no file system
 monitor. A folder whose own git config names a filter command (one git would run on the files) isn't read at all.
@@ -98,12 +99,14 @@ def _history(blamed: dict[int, tuple[str, dict[str, str]]], start: int, end: int
     commits: dict[str, Commit] = {}
     by_author: Counter[str] = Counter()
     uncommitted = 0
+    lines: dict[int, Commit | None] = {}
     for k in range(start, end + 1):
         if k not in blamed:
             continue
         sha, said = blamed[k]
         if sha == _UNCOMMITTED:
             uncommitted += 1
+            lines[k] = None
             continue
         if sha not in commits:
             commits[sha] = Commit(
@@ -114,6 +117,7 @@ def _history(blamed: dict[int, tuple[str, dict[str, str]]], start: int, end: int
                 page.format(sha) if page else "",
             )
         by_author[commits[sha].author] += 1
+        lines[k] = commits[sha]
     last = max(commits.values(), key=lambda c: c.time, default=None)
     return History(
         last=last,
@@ -122,6 +126,7 @@ def _history(blamed: dict[int, tuple[str, dict[str, str]]], start: int, end: int
         first=min((c.time for c in commits.values()), default=0),
         uncommitted=uncommitted,
         now=now,
+        lines=lines,
     )
 
 

@@ -51,7 +51,9 @@ Read it left to right.
 ??? more "Click a box to read its code"
     A panel slides in from the right, over the graph, with the code the box is about, its lines numbered. A function
     shows whole, with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the
-    input and *At import* show a few lines around each place the code uses them. Close it with ×, Escape, a click
+    input and *At import* show a few lines around each place the code uses them. When the folder is in git, each line
+    of a function says who changed it last and how long ago, and pointing at one puts its commit in the panel's last
+    row; the gear by × turns that off. Close it with ×, Escape, a click
     anywhere outside it, or the browser's Back button. Without JavaScript, × and Back still close it.
 
 ??? more "Open the calls a box leaves out"

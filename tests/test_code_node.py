@@ -383,8 +383,12 @@ def test_each_function_says_what_git_says_about_it(tmp_path: Path) -> None:
     assert main([str(root), "--no-open", "-o", str(out)]) == 0
     page = out.read_text()
     assert "by Ben in" in page and f'href="{load.last.url}"' in page and "2 lines changed since the last commit" in page
+    # the code's panel says beside each line who changed it, and in its last row what git says about all of it
+    assert '<pre class="csc blame">' in page and ">Ben · " in page and '<span class="sb au" data-k="u"' in page
+    assert "commits by 2 people" in page and 'class="csg" checked' in page
+    assert handler.lines and None in handler.lines.values() and load.lines[min(load.lines)] is not None
     assert main([str(root), "--no-open", "--no-git", "-o", str(out)]) == 0
-    assert "Last changed" not in out.read_text()
+    assert "Last changed" not in out.read_text() and 'class="csg"' not in out.read_text()
     # a folder not in git, or whose own config would have git run a filter, has no history
     assert read_history(write(tmp_path / "plain", {"app.py": HANDLER}), cmap.functions[:1]) == 0
     subprocess.run(["git", "-C", str(root), "config", "filter.x.clean", "touch ran"], check=True)
