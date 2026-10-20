@@ -15,7 +15,7 @@ from ..kit.text import _clip
 
 from .syntax import _a
 from .aws_model import _service_name
-from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep
+from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, LibraryCall
 from .findings import _listed, _short_name
 from ..platforms import get_platform
 
@@ -40,8 +40,8 @@ class GraphNode:
     one of its own functions, or what it reaches (an AWS service, the web).
     """
 
-    id: str  # 'event', 'env', 'start', 'f0' (a function), 'aws-s3', 'http'
-    kind: str  # 'event', 'env', 'start', 'handler', 'function', 'aws', 'http'
+    id: str  # 'event', 'env', 'start', 'f0' (a function), 'aws-s3', 'http', 'lib-redis-redis'
+    kind: str  # 'event', 'env', 'start', 'handler', 'function', 'aws', 'http', 'service' (one a library reaches)
     label: str  # 'handler()', 'S3', 'an SQS batch'
     sub: str = ""  # under the label: 'etl.py line 13', 'reads · writes'
     lines: list[str] = field(default_factory=list)  # what the box lists: its operations, fields or variables
@@ -53,6 +53,7 @@ class GraphNode:
     code: list[CodeSpan] = field(default_factory=list)  # the lines of code it's about
     more: list[str] = field(default_factory=list)  # its own functions it calls that the graph leaves out: 'save()'
     when: str = ""  # a function called only under an if, everywhere it's called: 'check(order)'
+    icon: str = ""  # a service's icon, when its plugin names one: 'database', 'queue', 'spark'
 
 
 @dataclass
@@ -91,8 +92,8 @@ class CodeGraph:
         """
         The graph in Mermaid's language, for a Markdown file, a wiki or a pull request that renders it.
         """
-        shapes = {"event": ("([", "])"), "env": ("[/", "/]"), "aws": ("[(", ")]"), "http": ("{{", "}}"),
-                  "start": ("[[", "]]")}
+        shapes = {"event": ("([", "])"), "env": ("[/", "/]"), "aws": ("[(", ")]"), "service": ("[(", ")]"),
+                  "http": ("{{", "}}"), "start": ("[[", "]]")}
         out = ["flowchart LR"]
         for n in self.nodes:
             left, right = shapes.get(n.kind, ("[", "]"))
@@ -123,6 +124,13 @@ def _mermaid_text(text: str) -> str:
     return (text.replace("#", "#35;").replace("&", "#amp;").replace('"', "#quot;").replace("<br/>", "\0").replace("<small>", "\1")
             .replace("</small>", "\2").replace("<", "#lt;").replace(">", "#gt;").replace("\0", "<br/>")
             .replace("\1", "<small>").replace("\2", "</small>"))
+
+
+def _service_node(library: str, service: str) -> str:
+    """
+    The box id of a service a library reaches: 'lib-sql-postgresql'. Letters, digits and hyphens only, as for AWS.
+    """
+    return "lib-" + (re.sub(r"[^a-z0-9]+", "-", f"{library} {service}".lower()).strip("-") or "service")
 
 
 def _aws_node(service: str) -> str:
@@ -201,8 +209,8 @@ def _weights(cmap: CodeMap, children: dict[str, list[tuple[str, str]]]) -> dict[
     counted once), and _REACH_WEIGHT more for each AWS call, HTTP request and environment variable among them.
     """
     lines = {f.name: f.lines for f in cmap.functions}
-    for function in [c.function for c in cmap.aws] + [e.function for e in cmap.env] + [
-            s.function for s in cmap.spots if s.kind == "http"]:
+    for function in [c.function for c in cmap.aws] + [c.function for c in cmap.library_calls] + [
+            e.function for e in cmap.env] + [s.function for s in cmap.spots if s.kind == "http"]:
         if function in lines:
             lines[function] += _REACH_WEIGHT
     weight: dict[str, int] = {}
@@ -352,6 +360,16 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     for call in cmap.aws:
         if call.pages == "one" and call.operation.startswith(("List", "Scan", "Query")) and not call.guessed:
             reasons[call.function].append(f"{call.label} reads only its first page (line {call.line})")
+    for spot in cmap.spots:
+        if spot.kind == "command" and not spot.ok:
+            reasons[spot.function].append(f"runs a shell command built from {spot.detail} (line {spot.line})")
+    for lib_call in cmap.library_calls:
+        if lib_call.flag:
+            reasons[lib_call.function].append(f"{lib_call.label}: {lib_call.flag} (line {lib_call.line})")
+    denied = platform.denied(cmap)
+    for call in cmap.aws:
+        if call.permission in denied:
+            reasons[call.function].append(f"{call.label} isn't allowed: {denied[call.permission]} (line {call.line})")
     for function, why in platform.marks(cmap).items():
         reasons[function] += why
     handler_reasons = [m.split(":")[0] for level_, m in platform.entry_findings(cmap) if level_ == "warn"]
@@ -361,7 +379,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     lit: dict[str, set[int]] = defaultdict(set)
     for caller, called in children.items():
         lit[caller] |= {int(line) for _, line in called if line.isdigit()}
-    for function, line in ([(c.function, c.line) for c in cmap.aws] + [(e.function, e.line) for e in cmap.env]
+    for function, line in ([(c.function, c.line) for c in cmap.aws] + [(c.function, c.line) for c in cmap.library_calls]
+                           + [(e.function, e.line) for e in cmap.env]
                            + [(s.function, s.line) for s in cmap.spots if s.kind == "http"]):
         lit[function].add(line)
 
@@ -410,6 +429,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         node_id = _aws_node(service)
         why = [f"{c.operation} reads only its first page ({c.file} line {c.line})" for c in calls
                if c.pages == "one" and c.operation.startswith(("List", "Scan", "Query")) and not c.guessed]
+        why += list(dict.fromkeys(f"{c.operation} isn't allowed: {denied[c.permission]}" for c in calls
+                                  if c.permission in denied))
         ops = list(dict.fromkeys(c.operation for c in calls))
         does = list(dict.fromkeys(c.access for c in calls))
         tip = f"{_service_name(service)}: " + ", ".join(
@@ -420,8 +441,9 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             tip += "\nKnown only by the methods' names: their client couldn't be followed"
         reach.append(GraphNode(node_id, "aws", _service_name(service), " · ".join(does), _listed_lines(ops),
                                "warn" if why else "", warned_tip(tip, why), flags={
-                                   c.operation: "first page only" for c in calls if c.pages == "one" and not c.guessed
-                                   and c.operation.startswith(("List", "Scan", "Query"))},
+                                   **{c.operation: "first page only" for c in calls if c.pages == "one"
+                                      and not c.guessed and c.operation.startswith(("List", "Scan", "Query"))},
+                                   **{c.operation: "not allowed" for c in calls if c.permission in denied}},
                                code=_around([(c.file, c.line, c.function) for c in calls], by_name)))
         grouped: dict[tuple[str, str, bool], list[AwsCall]] = {}
         for call in calls:
@@ -432,9 +454,38 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             uses_start |= source == "start"
             edges.append(GraphEdge(
                 source, node_id, access, ", ".join(dict.fromkeys(c.operation for c in group)),
-                "warn" if any(c.pages == "one" and c.operation.startswith(("List", "Scan", "Query")) and not c.guessed
-                              for c in group) else "",
+                "warn" if any((c.pages == "one" and c.operation.startswith(("List", "Scan", "Query")) and not c.guessed)
+                              or c.permission in denied for c in group) else "",
                 any(c.loop for c in group), all(c.guessed for c in group), indirect))
+
+    # ...the services the libraries plugins know reach (Redis, a SQL database, OpenAI)
+    by_service: dict[tuple[str, str], list[LibraryCall]] = {}
+    for lib_call in cmap.library_calls:
+        by_service.setdefault((lib_call.library, lib_call.service), []).append(lib_call)
+    slow_clients = {s.detail: s for s in cmap.spots if s.kind == "connect" and s.waits}
+    for (library, service), lib_calls in by_service.items():
+        node_id = _service_node(library, service)
+        rows = list(dict.fromkeys(c.row for c in lib_calls))
+        flags = {c.row: c.flag for c in lib_calls if c.flag}
+        why = list(dict.fromkeys(f"{c.row}: {c.flag} ({c.file} line {c.line})" for c in lib_calls if c.flag))
+        if service in slow_clients:
+            spot = slow_clients[service]
+            why.append(f"its client has no timeout ({spot.file} line {spot.line}): a call waits {spot.waits}")
+        tip = f"{service}: " + ", ".join(rows[:8]) + (", …" if len(rows) > 8 else "")
+        reach.append(GraphNode(node_id, "service", service, " · ".join(dict.fromkeys(c.access for c in lib_calls)),
+                               _listed_lines(rows), "warn" if why else "", warned_tip(tip, why), flags=flags,
+                               code=_around([(c.file, c.line, c.function) for c in lib_calls], by_name),
+                               icon=lib_calls[0].icon))
+        lib_grouped: dict[tuple[str, str, bool], list[LibraryCall]] = {}
+        for lib_call in lib_calls:
+            source, indirect = owner(lib_call.function)
+            if source is not None:
+                lib_grouped.setdefault((source, lib_call.access, indirect), []).append(lib_call)
+        for (source, access, indirect), group in lib_grouped.items():
+            uses_start |= source == "start"
+            edges.append(GraphEdge(source, node_id, access, ", ".join(dict.fromkeys(c.row for c in group)),
+                                   "warn" if any(c.flag for c in group) else "", any(c.loop for c in group),
+                                   indirect=indirect))
 
     # ...the clients start-up (or a function it runs) makes, for the services they're for
     clients = [s for s in cmap.spots if s.kind == "client" and s.startup]
@@ -449,6 +500,16 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
         if not any(e.source == source and e.target == target and e.kind == "client" for e in edges):
             uses_start |= source == "start"
             edges.append(GraphEdge(source, target, "client", f"makes its {_service_name(spot.detail)} client"))
+    for spot in [s for s in cmap.spots if s.kind == "connect"]:  # a library's, wherever it's made: connect() opens one
+        source, _ = owner(spot.function)
+        target = next((n.id for n in reach if n.kind == "service" and n.label == spot.detail), None)
+        if source is None or target is None:
+            continue
+        if source == "start":
+            made.append(spot.detail)
+        if not any(e.source == source and e.target == target and e.kind == "client" for e in edges):
+            uses_start |= source == "start"
+            edges.append(GraphEdge(source, target, "client", f"makes its {spot.detail} client", loop=bool(spot.loop)))
 
     # ...and the web
     http = [s for s in cmap.spots if s.kind == "http"]

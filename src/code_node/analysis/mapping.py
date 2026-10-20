@@ -10,7 +10,7 @@ from typing import Iterable
 from ..kit.text import _clip
 
 from .terms import _LIBRARIES, _RUNTIME_MODULES
-from .model import CodeMap
+from .model import CodeMap, Deployment
 from .reader import _CodeReader
 
 
@@ -63,6 +63,7 @@ def map_code(
     python: str | None = None,
     max_depth: int | None = None,
     platform: str = "",
+    deployment: Deployment | None = None,
 ) -> CodeMap:
     """
     How Python code works, read with Python's ast module and never run: files is {path: source}, entry the function
@@ -72,13 +73,18 @@ def map_code(
     with the IAM permission each needs, the environment variables it reads, the libraries it imports. file is the
     entry point's file when it's known (else the first file whose path matches its module); platform names where it
     runs (a code_node.platforms name: 'lambda' adds the checks only a Lambda handler needs), '' for plain Python.
+    deployment is what a deploy file says about where it runs (code_node.deploys: a function in template.yaml): its
+    runtime, environment variables and role are checked against the code, and it sets the platform when none is given.
 
         map_code({"app.py": open("app.py").read()}, "app.handler")
     """
     texts = {path: text.decode("utf-8", "replace") if isinstance(text, bytes) else str(text)
              for path, text in files.items()}
     names = list(names) if names is not None else list(texts)
-    cmap = CodeMap(None, entry, platform=platform)
+    if deployment is not None:
+        platform = platform or deployment.platform
+        python = python or deployment.runtime
+    cmap = CodeMap(deployment, entry, platform=platform)
     if not entry or "." not in entry:
         cmap.note = f"The entry point ({entry or 'none'}) doesn't name a module and a function, like app.main."
         return cmap
@@ -90,7 +96,8 @@ def map_code(
     cmap.handler_file, root = found
     libs = set(libraries) | _RUNTIME_MODULES | _LIBRARIES
     libs.discard(entry.split(".")[0])  # its own top package is never a library
-    reader = _CodeReader(texts, names, root, cmap, _python_version(python), libs, False)
+    reader = _CodeReader(texts, names, root, cmap, _python_version(python), libs,
+                         bool(deployment is not None and deployment.layers))
     if max_depth is not None:
         reader.max_depth = max_depth
     try:

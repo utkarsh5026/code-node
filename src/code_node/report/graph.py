@@ -18,6 +18,7 @@ from ..kit.render import _prose
 from ..kit.text import _esc
 
 from ..analysis.graph import CodeGraph, GraphEdge, GraphNode
+from .brands import AWS_LOGOS, SERVICE_LOGOS, logo
 from .editor import editor_name, open_at
 from .style import _ROOT
 
@@ -70,7 +71,8 @@ _GRAPH_ROUTE = 28  # a web route's pill
 
 _GRAPH_SWEEPS = 6  # passes that reorder each column by where its neighbours are, so fewer arrows cross
 
-_GRAPH_LISTS = ("event", "env", "aws", "http")  # boxes whose lines are names: fields, variables, operations, requests
+_GRAPH_LISTS = ("event", "env", "aws", "service", "http")  # boxes whose lines are names: fields, variables,
+# operations, requests
 
 # Arial / Helvetica advance widths (per 1000 em), what the system sans stack draws on most machines; mono is 0.6 em
 _G_SANS = dict(zip(
@@ -175,7 +177,41 @@ def _g_wrap(text: str, room: float, measure: Callable[[str], float], most: int =
     return [_g_fit(x, room, measure) for x in lines[:most]]
 
 
+def _g_logo(n: GraphNode) -> tuple[int, int, str] | None:
+    """
+    The real logo a box shows, when it has one: the one its plugin names as its icon, else its AWS service's
+    ('aws-s3'), else its service's by name (Redis, PostgreSQL, OpenAI). None for a box drawn with a line icon.
+    """
+    if n.icon:
+        found = logo(n.icon)
+        if found is not None:
+            return found
+    if n.kind == "aws":
+        name = AWS_LOGOS.get(n.id.removeprefix("aws-"))
+    elif n.kind == "service":
+        name = SERVICE_LOGOS.get(n.label.lower())
+    else:
+        return None
+    return logo(name) if name else None
+
+
+def _g_badge(n: GraphNode, badge_y: float) -> str:
+    """
+    A box's badge: its service's logo on a plain tile, else a line icon in the box's colour.
+    """
+    found = _g_logo(n)
+    if found is None:
+        return (f'<rect class="bdg" x="12" y="{badge_y}" width="28" height="28" rx="8"/>'
+                f'<path class="ico" transform="translate(18,{badge_y + 6})" d="{_G_ICONS[_g_icon(n)]}"/>')
+    width, height, body = found
+    return (f'<rect class="bdg lg" x="12" y="{badge_y}" width="28" height="28" rx="8"/>'
+            f'<svg class="logo" x="16" y="{badge_y + 4}" width="20" height="20" viewBox="0 0 {width} {height}" '
+            f'fill="currentColor" aria-hidden="true">{body}</svg>')
+
+
 def _g_icon(n: GraphNode) -> str:
+    if n.icon in _G_ICONS:
+        return n.icon
     if n.kind == "aws":
         return next((icon for starts, icon in _G_SERVICE_ICONS if n.id.startswith(starts)), "cloud")
     return n.kind if n.kind in _G_ICONS else "cloud"
@@ -614,7 +650,7 @@ def _g_sub_svg(n: GraphNode, room: float) -> str:
             if not parts and _g_sans(folder + rest, 12.5) > room:
                 folder = ""
         return (f'<tspan class="dir">{_esc(folder)}</tspan>' if folder else "") + _esc(rest)
-    if n.kind == "aws" and n.sub:  # 'reads · writes', each in its arrows' colour, cut with … when they don't fit
+    if n.kind in ("aws", "service") and n.sub:  # 'reads · writes', each in its arrows' colour, cut with … when they don't fit
         words = n.sub.split(" · ")
         shown = list(words)
         while len(shown) > 1 and _g_sans(" · ".join(shown) + (" · …" if shown != words else ""), 12.5, True) > room:
@@ -644,8 +680,7 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
         parts.append(f'<text class="sb" x="52" y="{45 + _GRAPH_LABEL_LINE * (len(card.label) - 1)}">'
                      f"{_g_sub_svg(n, w - 52 - 12)}</text>")
     badge_y = 13 if n.sub else 11
-    parts.append(f'<rect class="bdg" x="12" y="{badge_y}" width="28" height="28" rx="8"/>'
-                 f'<path class="ico" transform="translate(18,{badge_y + 6})" d="{_G_ICONS[_g_icon(n)]}"/>')
+    parts.append(_g_badge(n, badge_y))
     top = card.head
     if card.route:
         first, method, more = _g_route(card)
@@ -671,7 +706,7 @@ def _node_svg(card: _GCard, box: tuple[float, float, float, float], neighbours: 
             if row.startswith("(") or (row.startswith("+") and row.endswith(" more")):
                 parts.append(f'<text class="rw mo" x="16" y="{ry + 4.3:.1f}">{_esc(row)}</text>')
                 continue
-            tone = (" ac ek-" + _esc(access[row])) if n.kind == "aws" and row in access else ""
+            tone = (" ac ek-" + _esc(access[row])) if n.kind in ("aws", "service") and row in access else ""
             flag = n.flags.get(row, "")
             room = w - 28 - 14 - (_g_sans(flag, 12, True) + 12 if flag else 0)
             parts.append(f'<circle class="bu{tone}{" flagged" if flag else ""}" cx="17" cy="{ry:.1f}" r="2.6"/>'
@@ -704,7 +739,7 @@ _G_PANEL_LINES = 400  # lines of one function a box's panel shows, at most
 _G_PANEL_SPANS = 12  # places a box's panel shows, at most
 
 _G_PANEL_KINDS = {"event": "What comes in", "env": "Environment", "start": "At import", "handler": "Entry point",
-                  "function": "Function", "aws": "AWS service", "http": "HTTP"}
+                  "function": "Function", "aws": "AWS service", "service": "Service", "http": "HTTP"}
 
 
 def _g_panel_id(n: GraphNode) -> str:
@@ -777,7 +812,7 @@ def _g_captions(graph: CodeGraph, xs: dict[int, float], widths: dict[int, float]
         kinds[column_of[n.id]].add(n.kind)
 
     def word(found: set[str]) -> str:
-        return ("Reaches" if found & {"aws", "http"} else "Entry" if "handler" in found else
+        return ("Reaches" if found & {"aws", "service", "http"} else "Entry" if "handler" in found else
                 "Comes in" if found & {"event", "env"} else "Calls" if "function" in found else "Start-up")
 
     groups: list[list[Any]] = []
@@ -900,7 +935,7 @@ def _graph_lines(block: _Graph, report: _Report) -> list[str]:
     for e in graph.edges:
         leaving[e.source].append(e)
     for n in sorted(graph.nodes, key=lambda n: n.column):
-        if n.kind in ("aws", "http"):
+        if n.kind in ("aws", "service", "http"):
             continue
         lines = [f"{line} ({n.flags[line]})" if line in n.flags else line for line in n.lines]
         head = n.label + (f": {', '.join(lines)}" if n.kind in ("event", "env") and n.lines else

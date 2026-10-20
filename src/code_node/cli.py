@@ -10,6 +10,7 @@ as a graph of who calls whom and what each path reaches, and the steps of each c
     code-node --all                 # every function in the graph, however deep
     code-node --serve               # a live page on localhost that redraws whenever the code changes
     code-node --editor cursor       # line links open in Cursor (vscode by default, none for no links)
+    code-node --plugins             # the platforms, libraries and deploy files it reads code with
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from .deploys import deploys
+from .libraries import libraries
 from .pages import GRAPH_DEPTH, GRAPH_FUNCTIONS, PageOptions, make_mermaid, make_page
 from .platforms import platforms
 from .report.editor import EDITORS
@@ -41,6 +44,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("-e", "--entry", help="where to start: module.function, module.Class.method, "
                                               "path/to/file.py[:function], or part of a function's name")
     parser.add_argument("-l", "--list", action="store_true", help="list the entry points found, and stop")
+    parser.add_argument("--plugins", action="store_true",
+                        help="list the plugins it reads code with (platforms, libraries, deploy files), and stop")
     parser.add_argument("-o", "--out", help="where to save the page (default: ~/.cache/code-node/)")
     parser.add_argument("--no-open", action="store_true", help="save the page without opening a browser")
     parser.add_argument("--all", action="store_true", help="draw every function, however deep (big graphs)")
@@ -110,6 +115,25 @@ def _pick_entry(project: Project, given: str | None) -> EntryPoint | None:
               "module.function.", file=sys.stderr)
         return None
     return _ask(found[:30])
+
+
+def _print_plugins() -> None:
+    """
+    Every plugin installed, by kind: built-in ones and those other packages add.
+    """
+    kinds = [
+        ("Platforms (one per entry point: where it runs)",
+         [(p.name, p.title, p.entry_kind or "") for p in platforms()]),
+        ("Libraries (as many as the code imports: what it reaches)",
+         [(lib.name, lib.title, ", ".join(lib.modules)) for lib in libraries()]),
+        ("Deploy files (each found in the folder: how it's deployed)",
+         [(d.name, d.title, ", ".join(d.files)) for d in deploys()]),
+    ]
+    for title, rows in kinds:
+        print(title)
+        width = max((len(name) for name, _, _ in rows), default=0)
+        for name, label, what in rows:
+            print(f"  {name:<{width}}  {label}" + (f"  ({what})" if what else ""))
 
 
 def _is_wsl() -> bool:
@@ -185,6 +209,9 @@ def main(argv: list[str] | None = None) -> int:
     The code-node command.
     """
     args = _parse_args(argv)
+    if args.plugins:
+        _print_plugins()
+        return 0
     in_file = _split_file(args.path) or (_split_file(args.entry) if args.entry else None)
     root = _root_for(Path(args.path).expanduser(), in_file[0] if in_file else None)
     if not root.is_dir():
@@ -215,8 +242,12 @@ def main(argv: list[str] | None = None) -> int:
     out = _out_path(args.out, project, entry.name)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, "utf-8")
+    services = list(dict.fromkeys(call.service for call in cmap.library_calls))
     print(f"{entry.name}: {len(cmap.functions)} functions, {len(cmap.aws)} AWS calls"
-          + (f" ({cmap.note})" if cmap.note else "") + f"\nSaved {out}")
+          + (f", {len(cmap.library_calls)} through libraries ({', '.join(services)})" if services else "")
+          + (f" ({cmap.note})" if cmap.note else "")
+          + (f"\nDeployed as {cmap.function.name} in {cmap.function.source}" if cmap.function is not None else "")
+          + f"\nSaved {out}")
     if not args.no_open:
         _open(str(out))
     return 0

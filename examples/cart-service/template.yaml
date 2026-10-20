@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: The cart service's checkout. An example for code-node; it's never deployed or run.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 512
+    Environment:
+      Variables:
+        REDIS_HOST: cache.internal
+
+Resources:
+  CheckoutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: cart.app.on_checkout
+      Environment:
+        Variables:
+          DATABASE_URL: "{{resolve:secretsmanager:cart-db:SecretString:url}}"
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref Receipts
+      Events:
+        Checkout:
+          Type: Api
+          Properties:
+            Path: /checkout
+            Method: post
+
+  Receipts:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: customer
+          AttributeType: S
+      KeySchema:
+        - AttributeName: customer
+          KeyType: HASH

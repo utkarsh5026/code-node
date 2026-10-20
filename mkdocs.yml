@@ -72,4 +72,5 @@ nav:
   - Start: usage.md
   - Read the map: reading.md
   - Under the hood: how-it-works.md
+  - Plugins: plugins.md
   - Python API: api.md

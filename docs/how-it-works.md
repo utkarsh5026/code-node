@@ -10,6 +10,7 @@ How code-node follows your code without running it, and what it can't see.
 3. **Remember** what each name holds: a boto3 client, one of your classes, an env var.
 4. **Follow** calls into your own functions, up to 8 deep.
 5. **Name** each AWS call from botocore's files on disk. No request is made.
+6. **Ask** a [library plugin](plugins.md) about each call through a client it knows: a Redis GET, a SQL INSERT.
 
 So `self.store.save()` opens `Store.save`. And `s3.get_object(...)` becomes **S3 GetObject**, which needs
 `s3:GetObject`.
@@ -40,7 +41,8 @@ then `Store.__exit__`.
 
 | Step | Module | In → out |
 | --- | --- | --- |
-| Folder | `project` | path → files, starts |
+| Folder | `project` | path → files, deploy files, starts |
+| Plugins | `platforms`, `libraries`, `deploys` | where it runs, what it calls through, how it's deployed |
 | Reader | `analysis.reader` | files → `CodeMap` |
 | Graph | `analysis.graph` | `CodeMap` → `CodeGraph` |
 | Drawing | `report.graph` | `CodeGraph` → SVG |

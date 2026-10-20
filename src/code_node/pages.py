@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .analysis.graph import code_graph
-from .analysis.mapping import map_code
+from .analysis.mapping import entry_file, map_code
 from .analysis.model import CodeMap
+from .deploys import find_deployment
 from .project import EntryPoint, Project, read_project
 from .report.build import page_blocks
 from .report.editor import editor_link
@@ -51,9 +52,11 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
     The folder read as it is now, and the code followed from the entry point: the CodeMap, and the folder.
     """
     project = read_project(root)
+    file = entry.file or (entry_file(entry.name, project.files) or ("",))[0]
+    deployment = find_deployment(project.deploy_files, project.files, file, entry.name.rsplit(".", 1)[-1])
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file or None,
                     max_depth=_ALL_READ_DEPTH if options.draw_all else None,
-                    platform=options.platform or entry.platform)
+                    platform=options.platform or entry.platform, deployment=deployment)
     return cmap, project
 
 

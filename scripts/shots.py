@@ -1,6 +1,7 @@
 """
 Remakes the screenshots in docs/images/ (README and the docs site use them): code-node's own pages for
-examples/orders-service, each figure a page holding only the blocks it shows, drawn by headless Chrome in light and
+examples/orders-service (and examples/cart-service for the plugins figure), each figure a page holding only the
+blocks it shows, drawn by headless Chrome in light and
 dark and trimmed to what's drawn.
 
     python scripts/shots.py                 # every figure
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from code_node.analysis.mapping import map_code
+from code_node.pages import PageOptions, map_entry
 from code_node.project import entry_points, read_project
 from code_node.report.build import page_blocks
 from code_node.report.graph import _Graph
@@ -31,6 +33,7 @@ from code_node.report.walk import _Walk
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE = ROOT / "examples" / "orders-service"
+CART = ROOT / "examples" / "cart-service"  # every kind of plugin: its SAM template, Redis, PostgreSQL, OpenAI
 IMAGES = ROOT / "docs" / "images"
 WIDTH = 1240  # the browser window: the figures are trimmed to what's drawn in it
 SCALE = 2  # device pixels per CSS pixel, for sharp text
@@ -50,6 +53,7 @@ FIGURES: dict[str, Callable[[list[Any]], list[Any]]] = {
     "page": lambda blocks: blocks,
     "graph": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],
     "steps": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Walk)],
+    "plugins": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],  # drawn from the cart example
 }
 
 STEP_SHOWN = 14  # the step the steps figure has open: inside read_orders(), its S3 call lit
@@ -69,6 +73,11 @@ def _blocks() -> list[Any]:
     entry = entry_points(project)[0]
     cmap = map_code(project.files, entry.name, libraries=project.libraries(), file=entry.file, platform="lambda")
     return page_blocks(cmap, project="orders-service", max_functions=24, max_depth=5, sources=project.files)
+
+
+def _cart_blocks() -> list[Any]:
+    cmap, project = map_entry(CART, entry_points(read_project(CART))[0], PageOptions())  # with its template.yaml
+    return page_blocks(cmap, project="cart-service", max_functions=24, max_depth=5, sources=project.files)
 
 
 def _trim(path: Path) -> tuple[int, int]:
@@ -112,9 +121,10 @@ def main(names: list[str]) -> None:
     chrome = _chrome()
     IMAGES.mkdir(parents=True, exist_ok=True)
     blocks = _blocks()
+    cart = _cart_blocks()
     with tempfile.TemporaryDirectory() as work:
         for name in names or list(FIGURES):
-            shoot(name, FIGURES[name](blocks), chrome, Path(work))
+            shoot(name, FIGURES[name](cart if name == "plugins" else blocks), chrome, Path(work))
 
 
 if __name__ == "__main__":
