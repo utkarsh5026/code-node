@@ -4,6 +4,8 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Changed
 
 - Pointing at a box in the graph shows a card instead of the browser's plain tooltip: what kind of box it is and
@@ -160,5 +162,6 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 - `--platform NAME` runs a platform's checks whatever the entry point is; `--lambda` is short for
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
-[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/utkarsh5026/code-node/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/utkarsh5026/code-node/releases/tag/v0.1.0
