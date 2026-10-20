@@ -104,8 +104,8 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
 
 `docs/` is MkDocs Material (`mkdocs.yml`). It is plain on purpose, and it sells the tool by showing its real output:
 
-- **Look**: white paper (dark slate in dark mode), black type, one link blue, IBM Plex Sans and IBM Plex Mono. The
-  only colour is the graph's, where it means something (calls grey, reads blue, writes orange, sends pink); amber
+- **Look**: white paper (dark slate in dark mode), black type, one link blue, IBM Plex Sans, and Cascadia Code for code.
+  The only colour is the graph's, where it means something (calls grey, reads blue, writes orange, sends pink); amber
   is for warnings and the lit code line. No gradients, glows, shadows, pills, eyebrow labels or numbered sections.
   All of it is in `docs/stylesheets/extra.css`.
 - **Home page** (`docs/index.md`): one figure, `orders/handler.py`'s `lambda_handler` next to its graph. Then the

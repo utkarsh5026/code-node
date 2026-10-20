@@ -31,7 +31,7 @@ FAVICON_LINK = f'<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,
 _ROOT = "cnd"  # the class around each page's HTML: its stylesheet's rules are scoped to it
 
 _EXTRA_CSS = """\
-.cnd{--mono:"Cascadia Mono","Cascadia Code",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.cnd{--mono:"Cascadia Code","Cascadia Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
 .cnd code,.cnd table.t td.tree{font-family:var(--mono)}
 .cnd .wire{display:grid;grid-template-columns:minmax(0,1fr) 26px minmax(0,.9fr) 26px minmax(0,1fr);align-items:center;margin:6px 0 10px;max-width:980px}
 .cnd .wire .wc{display:flex;flex-direction:column;gap:6px;min-width:0}

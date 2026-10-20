@@ -14,7 +14,7 @@ theme:
     repo: fontawesome/brands/github
   font:
     text: IBM Plex Sans
-    code: IBM Plex Mono
+    code: Cascadia Code
   features:
     - content.code.copy
     - navigation.tabs
