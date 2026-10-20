@@ -84,8 +84,10 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
   platform, through hooks (`Platform.hang`, `Platform.denied`), so any plugin of each kind gets them.
 - **Partial, never a traceback.** `map_code` catches what the reader can't follow and records it in `cmap.limited`.
   The page says what was cut short.
-- **No JavaScript in the page.** Interactivity is CSS (`:has()`, `<details>`, radio buttons), as in aws-analyzer.
-  The one exception is `serve.py`'s `_LIVE_SCRIPT`, which is added only to the served page, for the reload.
+- **The page works without JavaScript; JavaScript only adds to it.** What every reader needs is CSS (`:has()`,
+  `<details>`, radio buttons), so a page opened where scripts are stripped still works. A script may add what CSS
+  can't (`report/graph.py`'s `_G_SCRIPT` opens a box's calls not drawn as a graph of their own, from `<template>`s),
+  with its controls hidden until it has run (`.cgw.js`). `serve.py`'s `_LIVE_SCRIPT` is added only to the served page.
 - **No `:has()` on an ancestor of the walk's radio buttons** (`.cnd`, `.tabs`, `body`). Chrome then restyles the
   whole page on every step, which takes seconds on a big one; use sibling selectors, or `:has()` on a box that
   doesn't hold the walk (the graph's are on `.cgw`).

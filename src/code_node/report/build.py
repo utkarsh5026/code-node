@@ -10,7 +10,7 @@ from ..kit.blocks import _Note, _Text
 from ..kit.fmt import _plural
 
 from ..analysis.findings import _listed, _short_name
-from ..analysis.graph import CodeGraph, code_graph
+from ..analysis.graph import CodeGraph, code_graph, everything_graph, graph_views
 from ..analysis.model import CodeMap
 from .graph import _Graph
 from .tabs import _Tabs
@@ -34,8 +34,8 @@ def _closing_note(cmap: CodeMap, graph: CodeGraph) -> str:
         said.append(f"Calls to {_listed(services, 4)} are read by code-node's library plugins.")
     if graph.hidden:
         said.append(
-            f"The graph leaves out {_plural(graph.hidden, 'function')} to stay readable: run with --all to "
-            "draw every one."
+            f"The graph leaves out {_plural(graph.hidden, 'function')} to stay readable: a box's line of calls not "
+            "drawn opens them, and --all draws every one."
         )
     if cmap.other_files:
         said.append(
@@ -99,6 +99,8 @@ def page_blocks(
                         "How it fits together: what comes in, who calls whom, and what it reaches",
                         sources=sources or {},
                         editor=editor,
+                        views=graph_views(cmap, graph, max_functions=max_functions, max_depth=max_depth),
+                        everything=everything_graph(cmap, graph),
                     ),
                     _Text(
                         graph.mermaid(),

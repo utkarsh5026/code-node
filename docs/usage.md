@@ -67,8 +67,9 @@ with the folder's name, so you can tell them apart.
 
 The graph shows 24 functions, 5 calls deep: starting from the entry point, it keeps taking the function that leads to
 the most code (and to AWS, the web and environment variables), so the boxes are the ones doing the work, not the
-nearest helpers. A box whose calls are left out says so ("+3 calls not drawn"), and its code panel names them. The
-step-by-step list always has all of them.
+nearest helpers. A box whose calls are left out says so ("+3 calls not drawn"): click that line and the graph starts
+from that function instead, with every call it makes, and a path above it back up to the whole graph. **All** in
+the graph's bar draws every function at once, for up to 150 of them. The step-by-step list always has all of them.
 
 ```bash
 code-node --all                     # draw everything

@@ -44,7 +44,9 @@ An `EntryPoint` from `entry_points` has a `platform` too (`"lambda"` for a Lambd
 ## `code_graph(cmap)` { #code_graph }
 
 Boxes (`nodes`) and arrows (`edges`). `max_functions=24` and `max_depth=5` set how much it draws. `hidden` counts
-what it left out. `.mermaid()` writes it as Mermaid.
+what it left out, `too_deep` how many of those are past `max_depth`. `focus="module.function"` draws it from one of
+its functions instead, with every call that function makes. `graph_views(cmap, graph)` gives one of those for each
+box whose calls are left out, each with its `path` from the entry point. `.mermaid()` writes it as Mermaid.
 
 ## Platforms { #platforms }
 

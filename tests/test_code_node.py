@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from code_node.analysis.graph import code_graph
+from code_node.analysis.graph import code_graph, everything_graph, graph_views
 from code_node.analysis.mapping import map_code
 from code_node.cli import main
 from code_node.project import entry_points, read_project
@@ -92,6 +92,57 @@ def test_graph_limits_and_all(tmp_path: Path) -> None:
     assert code_graph(cmap, max_functions=100, max_depth=100).hidden == 0
 
 
+FAN = (
+    "import os\nimport boto3\n\n\ndef lambda_handler(event, context):\n    route(event)\n\n\n"
+    "def route(event):\n"
+    + "".join(f"    step{i}()\n" for i in range(8))
+    + "\n\n"
+    + "".join(f"def step{i}():\n    leaf{i}()\n\n\n" for i in range(8))
+    + "".join(f"def leaf{i}():\n    pass\n\n\n" for i in range(8))
+    + "def leaf7():\n    boto3.client('s3').put_object(Bucket=os.environ['BUCKET'], Key='k', Body=b'')\n"
+)
+
+
+def test_a_function_whose_calls_are_left_out_has_a_graph_of_its_own(tmp_path: Path) -> None:
+    project = read_project(write(tmp_path, {"app.py": FAN}))
+    cmap = map_code(project.files, "app.lambda_handler", platform="lambda")
+    graph = code_graph(cmap, max_functions=4)
+    route = next(n for n in graph.nodes if n.name == "app.route")
+    assert route.more and graph.hidden and not graph.too_deep
+    # from route(): every call it makes, though that's past max_functions, and nothing from above it
+    opened = code_graph(cmap, max_functions=4, focus="app.route")
+    names = {n.name for n in opened.nodes if n.kind in ("handler", "function")}
+    assert {"app.route", *(f"app.step{i}" for i in range(8))} <= names and "app.lambda_handler" not in names
+    assert next(n for n in opened.nodes if n.name == "app.route").kind == "handler"
+    assert not any(n.kind in ("event", "start") for n in opened.nodes)
+    assert [n.label for n in opened.nodes if n.kind == "aws"] == ["S3"]  # what's below it still reaches S3
+    views = graph_views(cmap, graph, max_functions=4)
+    assert views[0].name == "app.route" and views[0].path == ["app.lambda_handler", "app.route"]
+    assert everything_graph(cmap, graph).hidden == 0
+
+
+def test_the_page_opens_a_box_s_calls_with_javascript_and_works_without(tmp_path: Path) -> None:
+    write(tmp_path / "code", {"app.py": FAN})
+    out = tmp_path / "page.html"
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out), "--functions", "4"]) == 0
+    page = out.read_text()
+    # each graph a box's calls open is a template the script swaps in, with the path down to it
+    assert '<div class="cgw" data-group="cn-graph0">' in page and page.count("<script>") == 1
+    assert '<template id="cn-graph0-v1">' in page and '<a class="dr" href="#cn-graph0-v' in page
+    assert '<a class="cgcb" href="#cn-graph0-main">← The whole graph</a>' in page
+    assert '<template id="cn-graph0-all">' in page and '<a class="cgta oj" href="#cn-graph0-all"' in page
+    # without JavaScript the links are hidden and the legend says where the rest are, as before
+    assert 'class="kp kh nj"' in page and "the Step by step tab has them all" in page
+    assert ".cnd .cgw:not(.js) :is(.oj,.dr),.cnd .cgw.js .nj{display:none}" in page
+    # a function drawn in several graphs has one panel of code
+    panels = re.findall(r'<aside class="cside" id="([^"]+)"', page)
+    assert len(panels) == len(set(panels)) and len(panels) < 2 * len(re.findall(r'<a class="cl" href="#cn-code-', page))
+    step = re.search(r'<aside class="cside" id="([^"]+)" aria-label="The code of step3\(\)"', page)
+    assert step is not None and page.count(f'href="#{step.group(1)}"') > 1
+    assert main([str(tmp_path / "code"), "--no-open", "-o", str(out), "--all"]) == 0
+    assert '<div class="cgw">' in out.read_text() and "<template id=" not in out.read_text()  # nothing left out
+
+
 def test_the_command_saves_a_page(tmp_path: Path, capsys) -> None:
     write(tmp_path / "code", {"app.py": HANDLER})
     out = tmp_path / "page.html"
@@ -124,7 +175,8 @@ def test_clicking_a_box_shows_its_code(tmp_path: Path) -> None:
     page = out.read_text()
     assert f'<a class="cl" href="#cn-code-{load.id}"' in page and f'id="cn-code-{load.id}"' in page
     assert '<span class="sl lit"><span class="sn">10</span>' in page
-    assert "<script" not in page
+    # a click outside the panel closes it, as its × does; without JavaScript the × still does
+    assert page.count("<script>") == 1 and 'location.hash = "cn-closed"' in page and 'href="#cn-closed"' in page
 
 
 def test_the_steps_are_walked_in_the_order_the_code_runs(tmp_path: Path) -> None:
@@ -157,7 +209,7 @@ def test_the_steps_are_walked_in_the_order_the_code_runs(tmp_path: Path) -> None
     assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
     page = out.read_text()
     assert '<input type="radio" class="tr" name="cnd-tab0" id="cnd-tab0-0" checked>' in page
-    assert "Step by step<small>7 steps</small>" in page and "<script" not in page
+    assert "Step by step<small>7 steps</small>" in page and page.count("<script>") == 1
 
 
 def test_starting_from_a_file(tmp_path: Path, capsys) -> None:
@@ -525,7 +577,7 @@ def test_arrows_from_one_box_run_together_and_the_graph_zooms(tmp_path: Path) ->
     assert main([str(tmp_path / "code"), "--no-open", "-o", str(out)]) == 0
     page = out.read_text()
     assert 'class="cgs cgz-auto" name="cn-graph0-zoom" id="cn-graph0-auto" checked' in page
-    assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and "<script" not in page
+    assert 'class="cgs cgfs" id="cn-graph0-full"' in page and ">Full screen<" in page and page.count("<script>") == 1
 
 
 def test_a_box_says_what_it_is_in_a_card_on_hover(tmp_path: Path) -> None:

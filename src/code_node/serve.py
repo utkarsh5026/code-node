@@ -3,8 +3,8 @@ code-node --serve: the page on a local server, made again whenever a .py file (o
 under the folder changes, and the browser told to reload (keeping its scroll position, and the tab and step that were
 open). Standard library only: a polling watcher thread, a threaded HTTP server, and Server-Sent Events for the reload.
 
-The saved pages have no JavaScript; the served one gets a few lines (_LIVE_SCRIPT) to reload and to say when the
-server has stopped.
+The served page gets a few lines more than a saved one (_LIVE_SCRIPT), to reload and to say when the server has
+stopped.
 """
 
 from __future__ import annotations
