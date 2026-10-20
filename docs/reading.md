@@ -40,15 +40,17 @@ Read it left to right.
     Point at a box and everything it isn't connected to fades out.
 
 ??? more "Zoom, full screen and big graphs"
-    The graph is drawn at its real size. **Auto** shrinks it a little to fit the page and scrolls sideways past
-    that; **Fit** puts all of it in sight; **100%** and **150%** are as big as it is and bigger. **Full screen** gives
-    it the whole window, with the same buttons. Arrows that skip columns from one box (the environment's, start-up's)
-    or into one run as a single line and part near the end, and a column too tall to take in is split into lanes
-    side by side, so `--functions 100` draws a wide map rather than a long strip.
+    The graph sits in a box of one size, about the window's height, and is drawn at its real size. **Auto** shrinks
+    it a little to fit the page's width; **Fit** puts all of it in the box; **100%** and **150%** are as big as it is
+    and bigger. **Full screen** gives it the whole window, with the same buttons. Move about it as on a canvas: drag
+    it to pan, hold Ctrl (⌘ on a Mac) and scroll, or pinch a trackpad, to zoom around the pointer, and with the graph
+    focused `+`, `-` and `0` (back to **Auto**). The **−** and **+** in its bottom-right corner zoom too, around how
+    big it's drawn. Arrows that skip columns from one box (the environment's, start-up's) or into one run as a single
+    line and part near the end, and a column too tall to take in is split into lanes side by side, so `--functions 100` draws a wide map rather than a long strip.
 
 ??? more "Click a box to read its code"
-    A panel slides in from the right with the code the box is about, its lines numbered. A function shows whole,
-    with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the
+    A panel slides in from the right, over the graph, with the code the box is about, its lines numbered. A function
+    shows whole, with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the
     input and *At import* show a few lines around each place the code uses them. Close it with ×, Escape, a click
     anywhere outside it, or the browser's Back button. Without JavaScript, × and Back still close it.
 

@@ -102,7 +102,8 @@ _EXTRA_CSS = """\
 .cnd :is(.flow,.cside,.walk,.ctip) .pa{font-style:italic}
 .cnd :is(.flow,.cside,.walk,.ctip) .pc{opacity:.6;font-style:italic}
 .cnd .cgb{width:fit-content;max-width:min(100%,1180px)}
-.cnd .cg{border:1px solid rgba(127,127,127,.2);border-radius:14px;margin:6px 0 8px;overflow:auto;background-color:rgba(127,127,127,.035);background-attachment:local;background-size:18px 18px;
+.cnd .cgv{position:relative;margin:6px 0 8px}
+.cnd .cg{border:1px solid rgba(127,127,127,.2);border-radius:14px;overflow:auto;background-color:rgba(127,127,127,.035);background-attachment:local;background-size:18px 18px;
  background-image:radial-gradient(circle at 1px 1px,rgba(127,127,127,.3) 1px,transparent 0);background-position:9px 9px}
 .cnd .cg svg{display:block;width:calc(var(--w)*var(--z,1));max-width:none;height:auto;overflow:visible;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 .cnd .cgw{position:relative}
@@ -121,11 +122,25 @@ _EXTRA_CSS = """\
 .cnd .cgz-auto:checked~.cgb .cg svg{width:var(--w);max-width:100%;min-width:calc(var(--w)*.8)}
 .cnd .cgz-fit:checked~.cgb .cg svg{width:var(--w);max-width:100%}
 .cnd .cgfs:checked~.cgb{position:fixed;inset:0;z-index:25;width:auto;max-width:none;display:flex;flex-direction:column;box-sizing:border-box;padding:12px clamp(12px,2vw,28px) 4px;background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas))}
-.cnd .cgfs:checked~.cgb .cg{flex:1;min-height:0;margin:0 0 8px}
+.cnd .cgfs:checked~.cgb .cgv{flex:1;min-height:0;display:flex;flex-direction:column;margin:0 0 8px}
+.cnd .cgfs:checked~.cgb .cg{flex:1;min-height:0}
 .cnd .cgfs:checked~.cgz-fit:checked~.cgb .cg svg{width:100%;height:100%;max-width:none}
 .cnd .cgfs:checked~.cgz-auto:checked~.cgb .cg svg{min-width:0}
-@media (min-width:1100px){.cnd .cgw:has(.cside:target) .cgfs:checked~.cgb{right:min(660px,94vw)}}
 .cnd .cgw:not(.js) :is(.oj,.dr),.cnd .cgw.js .nj{display:none}
+.cnd .cgw:not(.pz) .pzo{display:none}
+.cnd .cgw.pz .cg{cursor:grab;user-select:none;-webkit-user-select:none}
+.cnd .cgw.pz .cg.pan,.cnd .cgw.pz .cg.pan *{cursor:grabbing}
+.cnd .cgw.pz .cg:focus-visible{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px}
+.cnd .cgw.pz>.cgfs:not(:checked)~.cgb{width:min(100%,1180px)}
+.cnd .cgw.pz>.cgfs:not(:checked)~.cgb .cg{height:max(360px,72vh)}
+.cnd .cgw.pz .cg{display:flex}
+.cnd .cgw.pz .cg svg{flex:none;margin:auto}
+.cnd .cgw.pz>.cgz-fit:checked~.cgb .cg svg{width:calc(var(--w)*var(--fit,1));height:auto;max-width:none}
+.cnd .cgtm{position:absolute;right:14px;bottom:14px;z-index:2;display:inline-flex;align-items:center;font-size:12px;user-select:none;-webkit-user-select:none;border:1px solid rgba(127,127,127,.3);border-radius:8px;overflow:hidden;background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas));box-shadow:0 1px 2px rgba(0,0,0,.06),0 4px 12px rgba(15,23,42,.08)}
+.cnd .cgtm button{font:inherit;font-size:16px;line-height:1;color:inherit;background:none;border:0;padding:6px 11px;cursor:pointer;opacity:.75}
+.cnd .cgtm button:hover{opacity:1;background:rgba(127,127,127,.08)}
+.cnd .cgtm button:focus-visible{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px}
+.cnd .cgtp{min-width:3.4em;padding:3px 2px;text-align:center;opacity:.7;font-variant-numeric:tabular-nums;border-inline:1px solid rgba(127,127,127,.2)}
 .cnd .cgta{padding:3px 10px;border:1px solid rgba(127,127,127,.28);border-radius:8px;color:inherit;text-decoration:none;opacity:.7}
 .cnd .cgta:hover{opacity:.95;background:rgba(127,127,127,.08)}
 .cnd .cgw[data-view$="-all"] .cgta{opacity:1;font-weight:650;background:rgba(127,127,127,.14)}
@@ -284,7 +299,6 @@ _EXTRA_CSS = """\
 .cnd .cside .sl.lit{background:rgba(245,158,11,.16);box-shadow:inset 3px 0 #f59e0b}
 .cnd .cside .sn{display:inline-block;width:3.2em;padding-right:14px;text-align:right;opacity:.42;user-select:none;-webkit-user-select:none}
 .cnd .cside .csm{font-size:12px;font-style:italic;opacity:.6;margin:6px 2px 0}
-@media (min-width:1100px){.cnd .cgw:has(.cside:target){margin-right:min(660px,94vw)}}
 @media (prefers-reduced-motion:reduce){.cnd .cside,.cnd .cside:target{transition:none}}
 .cnd .tabs{position:relative;margin:0 0 8px}
 .cnd .tbar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:flex-end;gap:2px;padding-top:6px;margin:0 0 18px;border-bottom:1px solid rgba(127,127,127,.22);background:var(--jp-layout-color0,var(--vscode-editor-background,Canvas))}

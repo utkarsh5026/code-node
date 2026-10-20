@@ -4,6 +4,18 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Added
+
+- The graph moves like a canvas: drag it to pan in any direction, hold Ctrl (⌘ on a Mac) and scroll, or pinch a
+  trackpad, to zoom around the pointer, and `+`, `-` and `0` when it has focus. It stays in a box of one size, about
+  the window's height, however far it's zoomed, so the scroll bar under a tall graph is no longer the only way across;
+  **Fit** puts all of it in that box, and − and + buttons in its corner say how big it's drawn. This needs JavaScript;
+  without it the graph scrolls as before.
+
+### Changed
+
+- A box's code opens in a panel over the graph, rather than pushing the graph aside on a wide screen.
+
 ## [0.4.0] - 2026-10-20
 
 ### Fixed
