@@ -4,6 +4,19 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Added
+
+- A box's "+12 calls not drawn" line opens them: click it and the graph starts from that function, with every call it
+  makes, a path above it back up to the whole graph, and the browser's Back button to return. **All** in the graph's
+  bar draws every function at once, for up to 150. This needs JavaScript; without it the page works as before.
+- A box's code panel closes when you click anywhere outside it, or press Escape, as well as with its ×. Clicking
+  another box still opens that one's code.
+
+### Changed
+
+- The graph says why functions are left out: too many to draw at once, or too deep, instead of always "too deep or
+  too many".
+
 ## [0.3.0] - 2026-10-20
 
 ### Changed

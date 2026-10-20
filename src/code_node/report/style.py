@@ -125,6 +125,20 @@ _EXTRA_CSS = """\
 .cnd .cgfs:checked~.cgz-fit:checked~.cgb .cg svg{width:100%;height:100%;max-width:none}
 .cnd .cgfs:checked~.cgz-auto:checked~.cgb .cg svg{min-width:0}
 @media (min-width:1100px){.cnd .cgw:has(.cside:target) .cgfs:checked~.cgb{right:min(660px,94vw)}}
+.cnd .cgw:not(.js) :is(.oj,.dr),.cnd .cgw.js .nj{display:none}
+.cnd .cgta{padding:3px 10px;border:1px solid rgba(127,127,127,.28);border-radius:8px;color:inherit;text-decoration:none;opacity:.7}
+.cnd .cgta:hover{opacity:.95;background:rgba(127,127,127,.08)}
+.cnd .cgw[data-view$="-all"] .cgta{opacity:1;font-weight:650;background:rgba(127,127,127,.14)}
+.cnd .cgc{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 7px;margin:0 0 6px;font-size:13px}
+.cnd .cgc:empty{display:none}
+.cnd .cgc a{color:light-dark(#2563eb,#60a5fa);text-decoration:none}
+.cnd .cgc a:hover{text-decoration:underline}
+.cnd .cgc code{font-family:var(--mono);font-size:12.5px}
+.cnd .cgc .cgcs{opacity:.4}
+.cnd .cg .dr rect{fill:transparent;cursor:pointer}
+.cnd .cg .dr:hover rect{fill:rgba(37,99,235,.09)}
+.cnd .cg .dr:focus-visible{outline:2px solid light-dark(#2563eb,#60a5fa)}
+.cnd .cgw.js .cg .hd .md{fill:light-dark(#2563eb,#60a5fa);fill-opacity:1;font-style:normal}
 .cnd .cg .cap{font-size:12px;font-weight:650;letter-spacing:1.2px;fill:currentColor;fill-opacity:.6}
 .cnd .cg .capl{stroke:currentColor;stroke-opacity:.14;stroke-width:1;fill:none}
 .cnd .cg .cn,.cnd .cg .ce{transition:opacity .15s}

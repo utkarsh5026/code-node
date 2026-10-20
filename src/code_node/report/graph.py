@@ -17,7 +17,8 @@ from ..kit.highlight import _python_html, _python_lines
 from ..kit.render import _CALL_RE, _prose
 from ..kit.text import _esc
 
-from ..analysis.graph import CodeGraph, GraphEdge, GraphNode
+from ..analysis.findings import _short_name
+from ..analysis.graph import CodeGraph, GraphEdge, GraphNode, GraphView
 from .brands import AWS_LOGOS, SERVICE_LOGOS, fills, logo, small_logo
 from .editor import editor_name, open_at
 from .style import _ROOT
@@ -36,6 +37,9 @@ class _Graph:
     empty: str = "(nothing to draw)"
     sources: dict[str, str] = field(default_factory=dict)
     editor: str = ""  # a link to open a line in an editor, from editor_link(): each place in a panel links to it
+    views: list[GraphView] = field(default_factory=list)  # with JavaScript, a box's line of calls not drawn opens the
+    # graph from that function, from these (graph_views())
+    everything: CodeGraph | None = None  # ...and a button in the bar draws every function, this graph
 
 
 _EDGE_WORDS = {
@@ -999,12 +1003,32 @@ def _g_calls(count: int) -> str:
     return f"{count} call" if count == 1 else f"{count} calls"
 
 
+def _g_prose_top(card: _GCard) -> float:
+    """
+    Where a box's prose starts: under its header, its route's pill and its when pill.
+    """
+    return card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if card.node.when else 0)
+
+
+def _g_more_y(card: _GCard) -> float:
+    """
+    The baseline of a box's line of calls not drawn.
+    """
+    return _g_prose_top(card) + 13 + _GRAPH_PROSE * len(card.prose)
+
+
 def _node_svg(
-    card: _GCard, box: tuple[float, float, float, float], neighbours: list[str], access: dict[str, str]
+    card: _GCard,
+    box: tuple[float, float, float, float],
+    neighbours: list[str],
+    access: dict[str, str],
+    panel: str = "",
+    opens: bool = False,
 ) -> str:
     """
     A box: its badge and name, what's under it, a route's pill, its listed lines (an operation's dot in its arrows'
-    colour, a line a warning is about with its flag) or its docstring, and a warning badge.
+    colour, a line a warning is about with its flag) or its docstring, and a warning badge. panel is the id of its
+    code's panel, and opens says its line of calls not drawn opens a graph of its own (a link drawn over it).
     """
     n = card.node
     x, y, w, h = box
@@ -1071,15 +1095,18 @@ def _node_svg(
             if _g_sans(f"{said}: {names}", 12.5) <= w - 28:
                 said = f"{said}: {names}"
                 break
-        parts.append(
-            f'<text class="pr mo" x="14" y="{top + 13 + _GRAPH_PROSE * len(card.prose):.1f}">{_esc(said)}</text>'
-        )
+        parts.append(f'<text class="pr mo md" x="14" y="{_g_more_y(card):.1f}">{_esc(said)}</text>')
     if warn:
         parts.append(
             f'<g class="wb" transform="translate({w - 21:.0f},{badge_y + _G_BADGE / 2:.0f})"><circle r="8.5"/>'
             '<path d="M0,-4.2V.6M0,3.9V4"/></g>'
         )
-    classes = " ".join(["cn", f"k-{n.kind}", f"n-{n.id}", *(f"a-{m}" for m in neighbours)]) + (" warn" if warn else "")
+    classes = " ".join(
+        ["cn", f"k-{n.kind}", f"n-{n.id}", *(f"a-{m}" for m in neighbours)]
+        + ([f"p-{panel}"] if panel else [])
+        + (["hd"] if opens else [])
+        + (["warn"] if warn else [])
+    )
     return (
         f'<g class="{_esc(classes)}" transform="translate({x:.1f},{y:.1f})">'
         f'<rect class="bg" width="{w:.0f}" height="{h:.0f}" rx="11"/>'
@@ -1114,11 +1141,11 @@ def _g_filled(line: str) -> bool:
     return bool(re.sub(r"<[^>]*>", "", line).strip())
 
 
-def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "") -> str:
+def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "", panel: str = "") -> str:
     """
-    A box's code, in a panel that slides in from the right when the box is clicked (its id is the link's target, so
-    it's CSS's :target that opens it): what the box is, then each place it's about with its lines numbered, the lines
-    worth pointing at lit. '' when none of its code is in the files read.
+    A box's code, in a panel that slides in from the right when the box is clicked (its id, panel or the box's own, is
+    the link's target, so it's CSS's :target that opens it): what the box is, then each place it's about with its
+    lines numbered, the lines worth pointing at lit. '' when none of its code is in the files read.
     """
     shown, lit_any = [], False
     for span in n.code[:_G_PANEL_SPANS]:
@@ -1157,7 +1184,11 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
     rest = len(n.code) - _G_PANEL_SPANS
     if rest > 0:
         shown.append(f'<div class="csm">+{_plural(rest, "more place")}: the tables below list them all</div>')
-    said = "".join(f'<p class="csd">{_prose(line)}</p>' for line in (n.tip or "").split("\n") if line)
+    said = "".join(  # not the calls this graph leaves out: a function's panel is the same in every graph it's in
+        f'<p class="csd">{_prose(line)}</p>'
+        for line in (n.tip or "").split("\n")
+        if line and not (n.more and line.startswith("It calls ") and "the graph leaves out" in line)
+    )
     if lit_any:
         said += (
             '<p class="csd csl">The lit lines are where it calls, reads or sends what its arrows show.</p>'
@@ -1166,7 +1197,7 @@ def _g_panel(n: GraphNode, lines_of: Callable[[str], list[str]], editor: str = "
         )
     mono = " mono" if n.kind in ("handler", "function") else ""
     return (
-        f'<aside class="cside" id="{_esc(_g_panel_id(n))}" aria-label="{_esc("The code of " + n.label)}">'
+        f'<aside class="cside" id="{_esc(panel or _g_panel_id(n))}" aria-label="{_esc("The code of " + n.label)}">'
         f'<div class="csh"><div class="cst"><span class="csk">{_esc(_G_PANEL_KINDS.get(n.kind, n.kind))}</span>'
         f'<b class="csn{mono}">{_esc(n.label)}</b>'
         + (f'<span class="css">{_esc(n.sub)}</span>' if n.sub else "")
@@ -1368,12 +1399,87 @@ def _g_swatch(kind: str) -> str:
     )
 
 
-@_draws(_Graph, "html")
-def _graph_html(block: _Graph, report: _Report) -> str:
-    title = f"<h4>{_prose(block.title)}</h4>" if block.title else ""
-    graph = block.graph
-    if not graph.nodes:
-        return title + f'<div class="more">{_esc(block.empty)}</div>'
+_G_SCRIPT = """<script>
+(() => {
+  // A graph's views: a box's line of calls not drawn, the path over a view and the bar's All button link to
+  // #<group>-v<k> (or -all, or -main), and each is a <template> the graph's box, path and key are swapped from.
+  // Any other address (a box's code open, or closed) leaves the view as it is.
+  const parts = ["cgc", "cg", "cgk"];
+  const show = (wrap) => {
+    const group = wrap.dataset.group, id = decodeURIComponent(location.hash.slice(1));
+    const named = id === group + "-main" || id === group + "-all" || id.startsWith(group + "-v");
+    if (id && !named) return;
+    const view = named && id !== group + "-main" ? id : "";
+    if ((wrap.dataset.view || "") === view) return;
+    const from = view ? document.getElementById(view)?.content : wrap.main;
+    if (!from) return;
+    for (const part of parts) {
+      wrap.querySelector(".cgb > ." + part).innerHTML = from.querySelector(".x-" + part).innerHTML;
+    }
+    wrap.dataset.view = view;
+    wrap.querySelector(".cgb").scrollIntoView({block: "nearest"});
+  };
+  for (const wrap of document.querySelectorAll(".cgw[data-group]")) {
+    const main = document.createElement("template");
+    for (const part of parts) {
+      const kept = document.createElement("div");
+      kept.className = "x-" + part;
+      kept.innerHTML = wrap.querySelector(".cgb > ." + part).innerHTML;
+      main.content.append(kept);
+    }
+    wrap.main = main.content;
+    wrap.classList.add("js");
+    show(wrap);
+  }
+  addEventListener("hashchange", () => document.querySelectorAll(".cgw.js").forEach(show));
+  // A box's code: a click anywhere outside its panel closes it, as its × does, and so does Escape. A link (another
+  // box, a view) and the graph's bar do what they do with the panel left to them.
+  const close = () => { if (document.querySelector(".cside:target")) location.hash = "cn-closed"; };
+  document.addEventListener("click", (e) => {
+    const open = document.querySelector(".cside:target");
+    if (open && !open.contains(e.target) && !e.target.closest("a[href], label, input, .cgt")) close();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
+</script>"""
+
+
+def _g_hidden(graph: CodeGraph, opens: bool) -> str:
+    """
+    The legend's pill for the functions a graph leaves out, and why: without JavaScript where to find them, with it
+    (when opens) that a box's line of them opens them.
+    """
+    if not graph.hidden:
+        return ""
+    why = (
+        "too deep"
+        if graph.too_deep == graph.hidden
+        else "too many to draw at once"
+        if not graph.too_deep
+        else "too deep or too many"
+    )
+    head = f"<b>+{graph.hidden}</b>{'more function' if graph.hidden == 1 else 'more functions'} not drawn ({why})"
+    pill = f'<span class="kp kh{" nj" if opens else ""}">{head}: the Step by step tab has them all</span>'
+    if opens:
+        pill += f'<span class="kp kh oj">{head}: click a box\'s blue line of calls to open them</span>'
+    return pill
+
+
+def _g_canvas(
+    graph: CodeGraph,
+    block: _Graph,
+    report: _Report,
+    lines_of: Callable[[str], list[str]],
+    panels: dict[str, tuple[str, str]],
+    opens: dict[str, str],
+    prefix: str,
+) -> tuple[str, str]:
+    """
+    One graph drawn: its SVG and its legend. Its boxes' panels go into panels ({a function, or a panel without its
+    id: (its id, the panel)}, one for a function or the same code wherever it's drawn, the first graph's; a new one's
+    id starts with prefix), and a box whose function is in opens ({module.name: a
+    link}) has its line of calls not drawn made that link.
+    """
     cards = _g_cards(graph)
     boxes, routes, width, tall, xs, widths, column_of = _graph_layout(graph, cards)
     ends = _g_anchors(graph, cards, boxes)
@@ -1386,20 +1492,24 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             for name in _g_names(e):
                 access[e.target].setdefault(name, e.kind)
     root = report.root or _ROOT
-    highlighted: dict[str, list[str]] = {}
-
-    def lines_of(file: str) -> list[str]:  # a file's lines in colour, each file coloured once
-        if file not in highlighted:
-            highlighted[file] = _python_lines(block.sources[file]) if file in block.sources else []
-        return highlighted[file]
-
-    panels = {n.id: _g_panel(n, lines_of, block.editor) for n in graph.nodes} if block.sources else {}
-    for n in graph.nodes:
-        if panels.get(n.id):  # the box whose code is open, outlined
-            report.rules.add(
-                f".{root} .cgw:has(#{_g_panel_id(n)}:target) .cg .n-{n.id} .fg"
-                "{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}"
-            )
+    panel_of: dict[str, str] = {}  # a box -> its panel's id
+    if block.sources:
+        for n in graph.nodes:
+            same = "\0" + n.name if n.name else ""
+            if same not in panels:
+                html = _g_panel(n, lines_of, block.editor, "\0")
+                if not html:
+                    continue
+                same = same or html
+                if same not in panels:
+                    key = prefix + _g_panel_id(n)
+                    panels[same] = (key, html.replace('id="\0"', f'id="{key}"', 1))
+            panel_of[n.id] = panels[same][0]
+    for key in set(panel_of.values()):  # the box whose code is open, outlined
+        report.rules.add(
+            f".{root} .cgw:has(#{key}:target) .cg .p-{key} .fg"
+            "{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}"
+        )
     for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
@@ -1446,16 +1556,33 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             marked.add((e.source, e.target))
     edges = "".join(body for body, _ in drawn)
     ports = "".join(dots for _, dots in drawn)
+    opened = {n.id: opens[n.name] for n in graph.nodes if n.more and n.name in opens}
     nodes = "".join(
         (
-            f'<a class="cl" href="#{_esc(_g_panel_id(n))}" aria-label="{_esc("Show the code of " + n.label)}">{box}</a>'
-            if panels.get(n.id)
+            f'<a class="cl" href="#{_esc(panel_of[n.id])}" aria-label="{_esc("Show the code of " + n.label)}">{box}</a>'
+            if n.id in panel_of
             else box
         )
         for n in graph.nodes
-        for box in [_node_svg(cards[n.id], boxes[n.id], list(dict.fromkeys(near[n.id])), access[n.id])]
+        for box in [
+            _node_svg(
+                cards[n.id],
+                boxes[n.id],
+                list(dict.fromkeys(near[n.id])),
+                access[n.id],
+                panel_of.get(n.id, ""),
+                n.id in opened,
+            )
+        ]
     )
-    tips = "".join(_g_tip_svg(n, boxes[n.id], width, tall, lines_of, bool(panels.get(n.id))) for n in graph.nodes)
+    links = "".join(  # over each line of calls not drawn that opens a graph of its own: drawn with JavaScript only
+        f'<a class="dr" href="#{_esc(link)}" aria-label="{_esc(f"Open the calls {n.label} makes")}">'
+        f'<rect x="{boxes[n.id][0] + 8:.1f}" y="{boxes[n.id][1] + _g_more_y(cards[n.id]) - 14:.1f}" '
+        f'width="{boxes[n.id][2] - 16:.0f}" height="19" rx="5"/></a>'
+        for n in graph.nodes
+        if (link := opened.get(n.id))
+    )
+    tips = "".join(_g_tip_svg(n, boxes[n.id], width, tall, lines_of, n.id in panel_of) for n in graph.nodes)
     kinds = {e.kind for e in graph.edges}
     pills = [f'<span class="kp">{_g_swatch(k)}{_esc(word)}</span>' for k, word in _G_LEGEND if k in kinds]
     if any(e.guessed for e in graph.edges):
@@ -1474,22 +1601,71 @@ def _graph_html(block: _Graph, report: _Report) -> str:
             f'aria-hidden="true"><circle r="7"/><path transform="scale(.6) translate(-8,-8)" d="{_G_LOOP}"/>'
             "</svg>in a loop: once per item</span>"
         )
-    hidden = (
-        (
-            f'<span class="kp kh"><b>+{graph.hidden}</b>{"more function" if graph.hidden == 1 else "more functions"} '
-            "not drawn (too deep or too many): the Step by step tab has them all</span>"
-        )
-        if graph.hidden
-        else ""
-    )
     hint = (
         '<span class="kt">Point at a box to see only what it\'s joined to'
-        + ("; click it to read its code" if any(panels.values()) else "")
+        + ("; click it to read its code" if panel_of else "")
         + "</span>"
     )
+    svg = (
+        f'<svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" height="{tall:.0f}" '
+        f'style="--w:{width:.0f}px" role="img" aria-label="{_esc(block.title or "How the code fits together")}">'
+        f"{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{links}{ports}{tips}</svg>"
+    )
+    return svg, "".join(pills) + _g_hidden(graph, bool(opened)) + hint
+
+
+def _g_path(path: list[str], links: dict[str, str], main: str, last: str = "") -> str:
+    """
+    The calls from the entry point down to a view's function, over its graph: each one that has a view of its own a
+    link to it, and a link back to the whole graph first. last, when given, is said after them in place of the last.
+    """
+    names = [_esc(_short_name(name)) + "()" for name in path]
+    steps = [
+        f'<a href="#{_esc(links[name])}"><code>{said}</code></a>' if name in links else f"<code>{said}</code>"
+        for name, said in zip(path[:-1], names[:-1])
+    ]
+    steps.append(_esc(last) if last else f"<b><code>{names[-1]}</code></b>" if names else "")
+    return f'<a class="cgcb" href="#{_esc(main)}">← The whole graph</a>' + "".join(
+        f'<span class="cgcs">›</span>{step}' for step in steps
+    )
+
+
+@_draws(_Graph, "html")
+def _graph_html(block: _Graph, report: _Report) -> str:
+    title = f"<h4>{_prose(block.title)}</h4>" if block.title else ""
+    graph = block.graph
+    if not graph.nodes:
+        return title + f'<div class="more">{_esc(block.empty)}</div>'
+    highlighted: dict[str, list[str]] = {}
+
+    def lines_of(file: str) -> list[str]:  # a file's lines in colour, each file coloured once
+        if file not in highlighted:
+            highlighted[file] = _python_lines(block.sources[file]) if file in block.sources else []
+        return highlighted[file]
+
     made = report.shared("graphs", lambda: [0])  # graphs drawn so far, so each one's buttons have ids of their own
     group = f"cn-graph{made[0]}"
     made[0] += 1
+    links = {view.name: f"{group}-v{k}" for k, view in enumerate(block.views, 1)}
+    panels: dict[str, tuple[str, str]] = {}
+    svg, legend = _g_canvas(graph, block, report, lines_of, panels, links, "")
+    views = []
+    for k, view in enumerate(block.views, 1):
+        drawn, key = _g_canvas(view.graph, block, report, lines_of, panels, links, f"v{k}-")
+        views.append(
+            f'<template id="{group}-v{k}"><div class="x-cgc">{_g_path(view.path, links, group + "-main")}</div>'
+            f'<div class="x-cg">{drawn}</div><div class="x-cgk">{key}</div></template>'
+        )
+    everything = ""
+    if block.everything is not None and block.everything.nodes:
+        count = sum(1 for n in block.everything.nodes if n.kind in ("handler", "function"))
+        drawn, key = _g_canvas(block.everything, block, report, lines_of, panels, {}, "all-")
+        views.append(
+            f'<template id="{group}-all"><div class="x-cgc">'
+            f"{_g_path([], links, group + '-main', f'Every function, all {count} of them')}</div>"
+            f'<div class="x-cg">{drawn}</div><div class="x-cgk">{key}</div></template>'
+        )
+        everything = f'<a class="cgta oj" href="#{group}-all" title="Every function in one graph">All {count}</a>'
     # its zoom and full screen: inputs before the box they change, so CSS reaches it with ~ (no :has(), no script)
     switches = f'<input type="checkbox" class="cgs cgfs" id="{group}-full">' + "".join(
         f'<input type="radio" class="cgs cgz-{key}" name="{group}-zoom" id="{group}-{key}"'
@@ -1497,7 +1673,7 @@ def _graph_html(block: _Graph, report: _Report) -> str:
         for key, _, _ in _GRAPH_ZOOMS
     )
     bar = (
-        '<div class="cgt"><span class="cgtz" role="group" aria-label="Zoom">'
+        f'<div class="cgt">{everything}<span class="cgtz" role="group" aria-label="Zoom">'
         + "".join(
             f'<label class="zl-{key}" for="{group}-{key}" title="{_esc(tip)}">{_esc(word)}</label>'
             for key, word, tip in _GRAPH_ZOOMS
@@ -1505,14 +1681,18 @@ def _graph_html(block: _Graph, report: _Report) -> str:
         + f'</span><label class="cgtf" for="{group}-full"><span class="on">Full screen</span>'
         '<span class="off">Close full screen</span></label></div>'
     )
+    script = ""
+    if (views or panels) and not report.shared("graph-script", lambda: [False])[0]:
+        report.shared("graph-script", lambda: [False])[0] = True
+        script = _G_SCRIPT
     # in a box of its own with its panels: the :has() rules that outline a box whose code is open look only in here,
     # so a radio button elsewhere (the walk's steps) doesn't make the browser restyle the whole page
+    data = f' data-group="{group}"' if views else ""
     return (
-        f'{title}<div class="cgw">{switches}<div class="cgb">{bar}<div class="cg">'
-        f'<svg viewBox="0 0 {width:.0f} {tall:.0f}" width="{width:.0f}" height="{tall:.0f}" '
-        f'style="--w:{width:.0f}px" role="img" aria-label="{_esc(block.title or "How the code fits together")}">'
-        f"{_g_captions(graph, xs, widths, column_of)}{edges}{nodes}{ports}{tips}</svg></div>"
-        f'<div class="cgk">{"".join(pills)}{hidden}{hint}</div></div>{"".join(panels.values())}</div>'
+        f'{title}<div class="cgw"{data}>{switches}<div class="cgb">{bar}'
+        f'<nav class="cgc" aria-label="Where this graph starts"></nav><div class="cg">{svg}</div>'
+        f'<div class="cgk">{legend}</div></div>{"".join(html for _, html in panels.values())}{"".join(views)}</div>'
+        f"{script}"
     )
 
 

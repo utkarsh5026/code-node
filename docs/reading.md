@@ -49,8 +49,15 @@ Read it left to right.
 ??? more "Click a box to read its code"
     A panel slides in from the right with the code the box is about, its lines numbered. A function shows whole,
     with the lines that make the calls its arrows show lit in amber. An AWS service, the web, the environment, the
-    input and *At import* show a few lines around each place the code uses them. Close it with × or the browser's
-    Back button. Like the rest of the page, it works without JavaScript.
+    input and *At import* show a few lines around each place the code uses them. Close it with ×, Escape, a click
+    anywhere outside it, or the browser's Back button. Without JavaScript, × and Back still close it.
+
+??? more "Open the calls a box leaves out"
+    A box whose calls aren't drawn says so in blue, "+12 calls not drawn". Click it and the graph starts from that
+    function, with every call it makes and whatever they reach. The line over the graph is the path down to it from
+    the entry point: click a name in it to go back up, or the browser's Back button. **All** in the graph's bar draws
+    every function at once. This is the one part of the page that needs JavaScript; without it the line is plain
+    text, and the Step by step tab has every call.
 
 ## Step by step { #steps }
 

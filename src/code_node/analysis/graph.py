@@ -8,7 +8,7 @@ from __future__ import annotations
 import heapq
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ..kit.fmt import _plural
 from ..kit.text import _clip
@@ -55,6 +55,7 @@ class GraphNode:
     when: str = ""  # a function called only under an if, everywhere it's called: 'check(order)'
     icon: str = ""  # a service's icon, when its plugin names one: 'database', 'queue', 'spark'; or the entry
     # point's logo, when its platform names one: 'fastapi-icon'
+    name: str = ""  # a function's box: the function, as module.name ('orders.repo.save')
 
 
 @dataclass
@@ -85,6 +86,7 @@ class CodeGraph:
     nodes: list[GraphNode] = field(default_factory=list)
     edges: list[GraphEdge] = field(default_factory=list)
     hidden: int = 0  # functions left out to keep the graph readable (too deep, or too many)
+    too_deep: int = 0  # ...of them, the ones deeper than it draws
 
     def node(self, node_id: str) -> GraphNode | None:
         return next((n for n in self.nodes if n.id == node_id), None)
@@ -256,11 +258,13 @@ def _pick(
     order: dict[str, int],
     room: int,
     max_depth: int,
+    first: bool = False,
 ) -> list[str]:
     """
     The functions the graph draws besides the entry point, at most `room` of them and max_depth calls deep: grown out
     from the entry point (and what runs at import), each time taking the one the drawn boxes call that leads to the
-    most code, so the boxes are the ones that do the work and each is joined to one above it.
+    most code, so the boxes are the ones that do the work and each is joined to one above it. first takes every
+    function the entry point calls before the rest.
     """
 
     def depth(name: str) -> int:
@@ -283,6 +287,14 @@ def _pick(
         if name not in level:
             offer(name)
     picked: list[str] = []
+    if first:
+        for child, _ in children.get(entry, []):
+            if child in by_name and child != entry and child not in picked and depth(child) <= max_depth:
+                picked.append(child)
+        for name in list(picked):
+            for child, _ in children.get(name, []):
+                if child not in picked:
+                    offer(child)
     while queue and len(picked) < room:
         name = heapq.heappop(queue)[3]
         if name in picked:
@@ -294,7 +306,46 @@ def _pick(
     return picked
 
 
-def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_depth: int = _GRAPH_DEPTH) -> CodeGraph:
+def _focused(cmap: CodeMap, focus: str) -> CodeMap:
+    """
+    The map cut down to one of its functions and what it calls, however deep, as if the code started there: its
+    calls in from elsewhere, what runs at import and the entry point's input left out.
+    """
+    children: dict[str, list[str]] = defaultdict(list)
+    for f in cmap.functions:
+        for where in f.called_from:
+            children[where.rpartition(" line ")[0]].append(f.name)
+    scope, todo = {focus}, [focus]
+    while todo:
+        for child in children.get(todo.pop(), []):
+            if child not in scope:
+                scope.add(child)
+                todo.append(child)
+    root = next(f for f in cmap.functions if f.name == focus)
+    functions = []
+    for f in cmap.functions:
+        if f.name in scope:
+            kept = [] if f.name == focus else [w for w in f.called_from if w.rpartition(" line ")[0] in scope]
+            functions.append(replace(f, called_from=kept, when={w: t for w, t in f.when.items() if w in kept}))
+    return replace(
+        cmap,
+        entry=focus,
+        handler_file=root.file,
+        entry_line=root.line,
+        startup=[],
+        event=[],
+        functions=functions,
+        aws=[c for c in cmap.aws if c.function in scope],
+        library_calls=[c for c in cmap.library_calls if c.function in scope],
+        env=[e for e in cmap.env if e.function in scope],
+        spots=[s for s in cmap.spots if s.function in scope and not s.startup],
+        routes=[r for r in cmap.routes if r[2] in scope],
+    )
+
+
+def code_graph(
+    cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_depth: int = _GRAPH_DEPTH, focus: str = ""
+) -> CodeGraph:
     """
     How the code fits together, as boxes and arrows, from a CodeMap: on the left what comes in (the event, with the
     fields it reads, and the environment variables), then the handler, what runs at start-up, and its own functions
@@ -304,10 +355,16 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     they do is drawn from the nearest box above them that is.
     The functions drawn are grown out from the entry point, each time the one that leads to the most code (and to AWS,
     the web and the environment), so the boxes are the ones that do the work, not the nearest helpers.
+    focus draws the graph from one of its functions instead (module.name): it and what it calls, every call it makes
+    drawn even past max_functions, and nothing from what comes in or what runs at import.
     """
     graph = CodeGraph()
     if cmap.note or cmap.entry is None:
         return graph
+    if focus:
+        if not any(f.name == focus for f in cmap.functions):
+            return graph
+        cmap = _focused(cmap, focus)
     platform = get_platform(cmap.platform)
     entry = cmap.entry
     by_name = {f.name: f for f in cmap.functions}
@@ -342,11 +399,15 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
                 todo.append(child)
     order = {f.name: i for i, f in enumerate(cmap.functions)}
     weight = _weights(cmap, children)
-    picked = _pick(cmap, entry, start_key, children, level, weight, order, max_functions - entry_is_function, max_depth)
+    room = max_functions - entry_is_function
+    if focus:  # a function opened on its own shows every call it makes
+        room = max(room, len({child for child, _ in children.get(entry, [])}))
+    picked = _pick(cmap, entry, start_key, children, level, weight, order, room, max_depth, first=bool(focus))
     shown = ([by_name[entry]] if entry_is_function else []) + sorted(
         (by_name[name] for name in picked), key=lambda f: (level.get(f.name, f.depth + 1), order[f.name])
     )
     graph.hidden = len(cmap.functions) - len(shown)
+    graph.too_deep = sum(1 for f in cmap.functions if level.get(f.name, f.depth + 1) > max_depth)
     ids = {f.name: f"f{i}" for i, f in enumerate(shown)}
     drawn_level = {entry: 0, start_key: 0}  # calls from the entry point through the boxes drawn: each box's column
     todo = [entry, start_key]
@@ -408,7 +469,9 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
             reasons[call.function].append(f"{call.label} isn't allowed: {denied[call.permission]} (line {call.line})")
     for function, why in platform.marks(cmap).items():
         reasons[function] += why
-    handler_reasons = [m.split(":")[0] for level_, m in platform.entry_findings(cmap) if level_ == "warn"]
+    handler_reasons = (
+        [] if focus else [m.split(":")[0] for level_, m in platform.entry_findings(cmap) if level_ == "warn"]
+    )
     unset = platform.unset_env(cmap)
 
     # the lines in each function worth pointing at: where it calls, reads or sends what the graph draws
@@ -455,7 +518,7 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
                     when=_when(f, [where for where in f.called_from if where.rpartition(" line ")[0] == caller]),
                 )
             )
-    has_input = bool(cmap.event) or platform.draws_input
+    has_input = not focus and (bool(cmap.event) or platform.draws_input)
     if has_input:
         edges.insert(0, GraphEdge("event", entry_id, "event", "its input"))
 
@@ -769,7 +832,8 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
                 ],
                 more=more,
                 when=_when(f, f.called_from),
-                icon=platform.entry_icon(cmap) if is_entry else "",
+                icon=platform.entry_icon(cmap) if is_entry and not focus else "",
+                name=f.name,
             )
         )
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
@@ -778,3 +842,80 @@ def code_graph(cmap: CodeMap, *, max_functions: int = _GRAPH_FUNCTIONS, max_dept
     graph.nodes += reach
     graph.edges = edges
     return graph
+
+
+_GRAPH_VIEWS = 120  # functions opened on their own, at most: past that a box's calls left out stay in the steps
+
+_GRAPH_EVERYTHING = 150  # functions, at most, for a graph of all of them besides the one drawn
+
+
+@dataclass
+class GraphView:
+    """
+    The graph from one of the functions a graph leaves calls out of: the function and what it calls (`graph`), and the
+    calls from the entry point down to it (`path`, module.name each, the entry point first and the function last).
+    """
+
+    name: str
+    graph: CodeGraph
+    path: list[str] = field(default_factory=list)
+
+
+def _call_path(cmap: CodeMap, name: str) -> list[str]:
+    """
+    The fewest calls from the entry point to a function: [entry, ..., name]. [name] when the entry point isn't above it.
+    """
+    known = {f.name for f in cmap.functions} | {cmap.entry or ""}
+    parents: dict[str, list[str]] = defaultdict(list)
+    for f in cmap.functions:
+        for where in f.called_from:
+            caller = where.rpartition(" line ")[0]
+            if caller in known:
+                parents[f.name].append(caller)
+    came: dict[str, str] = {name: ""}
+    todo = [name]
+    while todo:
+        key = todo.pop(0)
+        if key == cmap.entry:
+            path = [key]
+            while came[path[-1]]:
+                path.append(came[path[-1]])
+            return path
+        for parent in parents.get(key, []):
+            if parent not in came:
+                came[parent] = key
+                todo.append(parent)
+    return [name]
+
+
+def graph_views(
+    cmap: CodeMap,
+    graph: CodeGraph,
+    *,
+    max_functions: int = _GRAPH_FUNCTIONS,
+    max_depth: int = _GRAPH_DEPTH,
+    most: int = _GRAPH_VIEWS,
+) -> list[GraphView]:
+    """
+    A graph from each function whose calls `graph` leaves out, and from each such function in those, so that from any
+    box with calls not drawn, its own graph has them: at most `most`, nearest the entry point first.
+    """
+    views: dict[str, GraphView] = {}
+    todo = [graph]
+    while todo and len(views) < most:
+        for n in todo.pop(0).nodes:
+            if not (n.more and n.name) or n.name in views or len(views) >= most:
+                continue
+            opened = code_graph(cmap, max_functions=max_functions, max_depth=max_depth, focus=n.name)
+            views[n.name] = GraphView(n.name, opened, _call_path(cmap, n.name))
+            todo.append(opened)
+    return list(views.values())
+
+
+def everything_graph(cmap: CodeMap, graph: CodeGraph, most: int = _GRAPH_EVERYTHING) -> CodeGraph | None:
+    """
+    Every function in one graph, when `graph` leaves some out and there are at most `most` of them; else None.
+    """
+    if not graph.hidden or len(cmap.functions) > most:
+        return None
+    return code_graph(cmap, max_functions=len(cmap.functions) + 1, max_depth=len(cmap.functions) + 1)
