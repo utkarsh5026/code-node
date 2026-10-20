@@ -23,7 +23,7 @@ uv run ruff format .                                      # format (examples/ an
 uv run code-node examples/orders-service --no-open -o /tmp/page.html   # try it
 uv run python scripts/shots.py                            # remake docs/images/ (needs Chrome)
 uv run mkdocs build --strict                              # the docs site
-uv run python -m build && uv run twine check --strict dist/*   # the package
+uv run python -m build && uv run twine check --strict dist/*   # the package (make package also installs the wheel as your code-node)
 uv tool install -e .                                      # put code-node on your PATH, live-edited
 ```
 
