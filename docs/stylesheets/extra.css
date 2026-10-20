@@ -1,7 +1,7 @@
-/* code-node's site. Plain on purpose: white paper, black type, one link blue, and IBM Plex. The only colour that
-   carries meaning is the graph's, where it encodes the kind of each arrow (calls grey, reads blue, writes orange,
-   sends pink). The home page's figure is the one interactive thing; graph.js lights up the path each code line
-   takes, and nothing moves on its own when the reader asks for less motion. */
+/* code-node's site. Plain on purpose: white paper, black type, one link blue, IBM Plex Sans and Cascadia Code. The
+   only colour that carries meaning is the graph's, where it encodes the kind of each arrow (calls grey, reads blue,
+   writes orange, sends pink). The home page's figure is the one interactive thing; graph.js lights up the path each
+   code line takes, and nothing moves on its own when the reader asks for less motion. */
 
 :root, [data-md-color-scheme="default"] {
   --cn-paper: #ffffff;

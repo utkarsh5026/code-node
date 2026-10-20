@@ -12,6 +12,8 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
   that line's commit instead. The gear by × opens the panel's settings, where the history can be turned off; the
   page remembers that. The panel's head is plainer: the name, then what it is, where, and a link to open it in your
   editor, without the def repeated over the code.
+- Code on the page is set in Cascadia Code when it's installed, before Cascadia Mono and the system's monospace
+  font, and the docs site's code is in Cascadia Code instead of IBM Plex Mono.
 
 ## [0.5.0] - 2026-10-20
 
