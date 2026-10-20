@@ -15,7 +15,7 @@ from ..kit.text import _clip
 
 from .syntax import _a
 from .aws_model import _service_name
-from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, LibraryCall
+from .model import AwsCall, CodeFunction, CodeMap, CodeSpot, CodeStep, History, LibraryCall
 from .findings import _listed, _short_name
 from ..platforms import get_platform
 
@@ -56,6 +56,7 @@ class GraphNode:
     icon: str = ""  # a service's icon, when its plugin names one: 'database', 'queue', 'spark'; or the entry
     # point's logo, when its platform names one: 'fastapi-icon'
     name: str = ""  # a function's box: the function, as module.name ('orders.repo.save')
+    history: History | None = None  # a function's box: what git says about its lines
 
 
 @dataclass
@@ -834,6 +835,7 @@ def code_graph(
                 when=_when(f, f.called_from),
                 icon=platform.entry_icon(cmap) if is_entry and not focus else "",
                 name=f.name,
+                history=f.history,
             )
         )
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])

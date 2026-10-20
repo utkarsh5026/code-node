@@ -88,6 +88,10 @@ Without `-o`, pages are saved in `~/.cache/code-node/`. On WSL they open in your
 Each step's card and each place in a box's code panel links to that line in VS Code (`--editor cursor` for Cursor).
 The links hold the folder's full path, so pass `--editor none` for a page you'll share.
 
+When the folder is in git, each function's hover card, code panel and step card say who changed it last, when, and in
+which commit (a link to it on GitHub or GitLab), how many commits and people its lines come from, and how many of its
+lines have changed since the last commit. It's read with `git blame`, once per file; `--no-git` leaves it out.
+
 ## Every option { #options }
 
 | Option | Does |
@@ -104,3 +108,4 @@ The links hold the folder's full path, so pass `--editor none` for a page you'll
 | `--no-open` | Don't open a browser |
 | `--platform`, `--lambda` | Run a platform's checks |
 | `--editor` | What line links open: `vscode`, `cursor` or `none` |
+| `--no-git` | Leave out who changed each function, and when |

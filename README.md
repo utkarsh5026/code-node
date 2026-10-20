@@ -87,6 +87,7 @@ string is flagged.
 | `-o`, `--out`, `--no-open` | Where to save (default `~/.cache/code-node/`), and whether to open it |
 | `--platform NAME`, `--lambda` | Run a platform's checks on any entry point |
 | `--editor vscode\|cursor\|none` | Editor the line links open (default `vscode`, WSL-aware) |
+| `--no-git` | Leave out what git says about each function (who changed it last, when, in which commit) |
 
 </details>
 

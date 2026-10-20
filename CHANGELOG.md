@@ -7,10 +7,15 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 ### Added
 
 - The graph moves like a canvas: drag it to pan in any direction, hold Ctrl (⌘ on a Mac) and scroll, or pinch a
-  trackpad, to zoom around the pointer, and `+`, `-` and `0` when it has focus. It stays in a box of one size, about
-  the window's height, however far it's zoomed, so the scroll bar under a tall graph is no longer the only way across;
+  trackpad, to zoom around the pointer, and `+`, `-` and `0` when it has focus. It stays in a box as wide as the page and
+  about the window's height, however far it's zoomed, so the scroll bar under a tall graph is no longer the only way across;
   **Fit** puts all of it in that box, and − and + buttons in its corner say how big it's drawn. This needs JavaScript;
   without it the graph scrolls as before.
+
+- Each function says what git says about it, when the folder is in git: who changed it last, how long ago and in
+  which commit (a link to the commit on GitHub or GitLab), how many commits and people its lines come from, and how
+  many of its lines changed since the last commit. It's in a box's hover card and code panel and in the step that
+  goes into it. It's read with `git blame`, once per file; `--no-git` leaves it out.
 
 ### Changed
 

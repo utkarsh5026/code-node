@@ -27,6 +27,7 @@ from ..kit.text import _esc
 from ..analysis.findings import _short_name
 from ..analysis.model import CodeFunction, CodeStep
 from ..analysis.syntax import _a
+from .changes import history_html
 from .editor import editor_name, open_at
 from .outline import _NOTE_TIPS, _Outline, _chips_html, _outline_lines
 from .style import _ROOT
@@ -320,9 +321,12 @@ def _headline(stop: _Stop) -> tuple[str, str]:
     return f"Runs {_code(step.code)}", ""
 
 
-def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], over: bool) -> str:
+def _says(
+    stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], over: bool, changes: dict[str, str]
+) -> str:
     """
-    What the stop's line does, in a sentence or two (HTML), under its headline. over: it has a Skip call button.
+    What the stop's line does, in a sentence or two (HTML), under its headline. over: it has a Skip call button;
+    changes: what git says about each function, as HTML.
     """
     stop = stops[i]
     step = stop.step
@@ -335,6 +339,7 @@ def _says(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str
             said.append(f"Called from {_code(stop.stack[-2][0])}, line {stops[stop.caller].step.line}{when}.")
         doc = docs.get(step.name, "")
         out = "".join(f"<p>{line}</p>" for line in said) + (f'<p class="wdoc">{_esc(doc)}</p>' if doc else "")
+        out += changes.get(step.name, "")
         if step.seen and step.name in first:
             out += (
                 f'<p>Its steps are shown where it\'s first called: <label class="wjump" for="cw{first[step.name]}">'
@@ -414,7 +419,14 @@ def _button(target: int | None, text: str, css: str = "", tip: str = "") -> str:
     return f'<label class="{css}" for="cw{target}"{title}>{text}</label>'
 
 
-def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str, str], editor: str = "") -> str:
+def _card_html(
+    stops: list[_Stop],
+    i: int,
+    first: dict[str, int],
+    docs: dict[str, str],
+    editor: str = "",
+    changes: dict[str, str] | None = None,
+) -> str:
     """
     The current stop's card: Back and Next (and Skip call and Finish, past what a line calls), what the line does in
     plain words, the calls it's inside (each a link back to its start), and what it touches.
@@ -471,7 +483,7 @@ def _card_html(stops: list[_Stop], i: int, first: dict[str, int], docs: dict[str
         f'<div class="wc"><div class="wnav">{"".join(nav)}</div>'
         f'<div class="whead">{headline}</div>'
         f'<div class="wstk"><span class="win">In</span>{where}{line}</div>'
-        f'<div class="wsay">{_says(stops, i, first, docs, over is not None)}{_facts_html(stop.step, said)}</div>'
+        f'<div class="wsay">{_says(stops, i, first, docs, over is not None, changes or {})}{_facts_html(stop.step, said)}</div>'
         + (f'<div class="wthen">{_esc(then)}</div>' if then else "")
         + "</div>"
     )
@@ -600,6 +612,7 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         if stop.step.kind == "def" and not stop.step.seen:
             first.setdefault(stop.step.name, i)
     docs = {f.name: f.doc for f in block.functions if f.doc}
+    changes = {f.name: history_html(f.history) for f in block.functions if f.history}
     drawn, rows_of = [], []
     for k, frame in enumerate(frames):
         if frame.file in block.sources and frame.file not in highlighted:
@@ -625,7 +638,9 @@ def _walk_html(block: _Walk, report: _Report) -> str:
         if not opened or opened[-1] != stop.frame:  # into a call
             out.append('<div class="wfn">')
             opened.append(stop.frame)
-        out.append(_item_html(stops, i, _card_html(stops, i, first, docs, block.editor), under[i], tuple(above[i])))
+        out.append(
+            _item_html(stops, i, _card_html(stops, i, first, docs, block.editor, changes), under[i], tuple(above[i]))
+        )
         if under[i]:  # its fold hides the steps under it, beside it or in the boxes of what it calls
             report.rules.add(f".{root} #cx{i}:checked~.wu{i},.{root} #cx{i}:checked~* .wu{i}{{display:none}}")
         at = rows_of[stop.frame].get(stop.lit)

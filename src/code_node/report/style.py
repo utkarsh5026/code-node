@@ -131,7 +131,7 @@ _EXTRA_CSS = """\
 .cnd .cgw.pz .cg{cursor:grab;user-select:none;-webkit-user-select:none}
 .cnd .cgw.pz .cg.pan,.cnd .cgw.pz .cg.pan *{cursor:grabbing}
 .cnd .cgw.pz .cg:focus-visible{outline:2px solid light-dark(#2563eb,#60a5fa);outline-offset:-2px}
-.cnd .cgw.pz>.cgfs:not(:checked)~.cgb{width:min(100%,1180px)}
+.cnd .cgw.pz>.cgfs:not(:checked)~.cgb{width:100%;max-width:none}
 .cnd .cgw.pz>.cgfs:not(:checked)~.cgb .cg{height:max(360px,72vh)}
 .cnd .cgw.pz .cg{display:flex}
 .cnd .cgw.pz .cg svg{flex:none;margin:auto}
@@ -386,6 +386,14 @@ _EXTRA_CSS = """\
 .cnd .walk .wsay p{margin:4px 0 0;opacity:.85}
 .cnd .walk .wsay code{font-size:12.5px}
 .cnd .walk .wdoc{font-style:italic;opacity:.7}
+.cnd .cnh{margin:10px 0 0;padding:8px 0 0 10px;border-left:2px solid rgba(127,127,127,.3);font-size:12.5px;line-height:1.5}
+.cnd .cnh p{margin:0 0 3px;opacity:.75;overflow-wrap:anywhere}
+.cnd .cnh p:last-child{margin-bottom:0}
+.cnd .cnh b{font-weight:600}
+.cnd .cnh code{font:12px var(--mono)}
+.cnd .cnh a{color:light-dark(#2563eb,#60a5fa);text-decoration:none}
+.cnd .cnh a:hover{text-decoration:underline}
+.cnd .cnh .cnhu{color:light-dark(#b45309,#fbbf24)}
 .cnd .walk .wjump{user-select:none;-webkit-user-select:none;color:var(--blue);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .cnd .walk .wfacts{list-style:none;margin:10px 0 0;padding:10px 0 0;border-top:1px solid rgba(127,127,127,.14);display:flex;flex-direction:column;gap:5px}
 .cnd .walk .wfacts li{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-size:12.5px;overflow-wrap:anywhere}
