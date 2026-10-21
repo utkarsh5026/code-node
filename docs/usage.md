@@ -65,10 +65,13 @@ with the folder's name, so you can tell them apart.
 
 ## Large projects { #limits }
 
-The graph shows 24 functions, 5 calls deep: starting from the entry point, it keeps taking the function that leads to
+The graph shows 14 functions, 5 calls deep: starting from the entry point, it keeps taking the function that leads to
 the most code (and to AWS, the web and environment variables), so the boxes are the ones doing the work, not the
-nearest helpers. A box whose calls are left out says so ("+3 calls not drawn"): click that line and the graph starts
-from that function instead, with every call it makes, and a path above it back up to the whole graph. **All** in
+nearest helpers. A function that only passes on to another one doesn't take a box: the arrow goes past it, dashed, and
+says so ("via load_config()"). Each function's box lists up to 6 of its calls in the order they run; past 10
+functions the boxes drop their docstrings, which are in the card that shows when you point at a box. A call not drawn
+is dimmed in its box: click it, or **Open its calls ›**, and the graph starts from that function instead, with every
+call it makes, and a path above it back up to the whole graph. **All** in
 the graph's bar draws every function at once, for up to 150 of them. The step-by-step list always has all of them.
 
 ```bash
@@ -104,7 +107,7 @@ to see its commit. The gear in the panel's head turns that off. It's read with `
 | `--plugins` | List the plugins |
 | `--serve`, `--port` | Live page (8765, or the next free port) |
 | `--all` | Draw every function |
-| `--depth`, `--functions` | Graph limits (5, 24) |
+| `--depth`, `--functions` | Graph limits (5, 14) |
 | `--mermaid` | Print Mermaid |
 | `-o`, `--out` | Where to save |
 | `--no-open` | Don't open a browser |

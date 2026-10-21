@@ -4,6 +4,24 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Changed
+
+- A function's box in the graph lists what it does in the order its code does it: a numbered row for each call to
+  its own functions, each AWS or library call and each HTTP request, indented inside loops and ifs, marked ↻ in a
+  loop and "if" when it runs only sometimes. Each call's arrow leaves from its row, and the boxes it calls are stacked
+  in the same order, so the graph reads top to bottom. A call not drawn is a dimmed row; click it, or **Open its
+  calls ›**, to draw the graph from that function. Calls in a row to one service the same way are one row
+  ("SQLite SELECT (+2)"), and a box lists at most 6 rows besides the ones its arrows leave from.
+- Pointing at a box in the graph keeps every path through it in sight, not just the boxes next to it: what calls it
+  up to the entry point, and what it calls and reaches down to AWS, a database or the web. Pointing at a service
+  shows every path that reaches it. Clicking a box keeps its paths lit while its code is open.
+- The graph draws 14 functions by default, down from 24, so a big codebase opens on a picture you can take in.
+  `--functions` still sets your own limit, and a box's calls not drawn still open as a graph of their own.
+- A function that only passes on to one other no longer takes a box when the graph can't draw them all: the arrow
+  runs past it, dashed, and says which ("via load_config()").
+- On a graph of more than 10 functions, function boxes leave out their docstrings and when pills. Pointing at a box
+  shows all of it, and now also when it's called ("Called only when ...").
+
 ## [0.6.0] - 2026-10-20
 
 ### Changed

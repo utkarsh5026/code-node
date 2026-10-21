@@ -70,7 +70,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--all", action="store_true", help="draw every function, however deep (big graphs)")
     parser.add_argument("--depth", type=int, default=GRAPH_DEPTH, help="calls deep the graph draws (default 5)")
     parser.add_argument(
-        "--functions", type=int, default=GRAPH_FUNCTIONS, help="functions the graph draws at most (default 24)"
+        "--functions",
+        type=int,
+        default=GRAPH_FUNCTIONS,
+        help=f"functions the graph draws at most (default {GRAPH_FUNCTIONS})",
     )
     parser.add_argument("--mermaid", action="store_true", help="print the graph as Mermaid instead of a page")
     parser.add_argument(

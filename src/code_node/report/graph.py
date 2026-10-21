@@ -18,7 +18,7 @@ from ..kit.render import _CALL_RE, _prose
 from ..kit.text import _esc
 
 from ..analysis.findings import _short_name
-from ..analysis.graph import CodeGraph, GraphEdge, GraphNode, GraphView
+from ..analysis.graph import CodeGraph, GraphEdge, GraphNode, GraphStep, GraphView
 from .changes import blame_keys, blame_mark, blame_row, history_html
 from .brands import AWS_LOGOS, SERVICE_LOGOS, fills, logo, small_logo
 from .editor import editor_name, open_at
@@ -85,6 +85,9 @@ _GRAPH_ROW = 19  # a listed line: a field, a variable, an operation
 _GRAPH_PROSE = 17  # a line of prose: a docstring, what start-up does
 
 _GRAPH_ROUTE = 28  # a web route's pill
+
+_GRAPH_DENSE = 10  # function boxes past which a graph's boxes are compact: a line of their docstring, no when pill,
+# and their calls not drawn counted, not named (all of it is in the box's card on hover)
 
 _GRAPH_SWEEPS = 16  # passes that reorder each column by where its neighbours are, so fewer arrows cross; the order
 # with the fewest crossings is kept
@@ -262,6 +265,8 @@ _G_SERVICE_ICONS = (  # an AWS service's box id, by what it starts with -> its i
 
 _G_LOOP = "M12.4 9.3A4.6 4.6 0 1 1 11.3 4.7M12.1 2.3v2.8H9.3"
 
+_G_LOOP_MARK = "\u21bb"  # a row in a loop
+
 _G_ACCESS = ("reads", "writes", "sends", "runs", "signs")
 
 _G_LEGEND = (
@@ -422,6 +427,13 @@ class _GCard:
         self.prose: list[str] = []
         self.label: list[str] = []  # its name, in one line or two
         self.arrows = 0  # the most arrows on one of its sides: a box with many is tall enough to space them
+        self.compact = False  # a function's box in a dense graph (_GRAPH_DENSE)
+        self.steps: list[GraphStep] = []  # a function's box: what it does, in order, one row each (rows: their keys)
+        self.opens = False  # its calls not drawn open a graph of its own (with JavaScript)
+
+    @property
+    def when(self) -> str:  # its when pill's test, if it has one
+        return "" if self.compact else self.node.when
 
     def row_y(self, text: str) -> float | None:
         if text in self.rows:
@@ -448,6 +460,8 @@ def _g_need(card: _GCard) -> float:
         need = max(need, whole)
     if card.route:
         need = max(need, 16 + _g_mono(_g_route(card)[0] + _g_route(card)[2], 12.5) + 36)
+    for step in card.steps:
+        need = max(need, _g_step_x(step) + _g_step_width(step) + _g_tag_width(step) + 14)
     if n.kind in _GRAPH_LISTS:
         need = max(
             [need]
@@ -478,11 +492,16 @@ def _g_cards(graph: CodeGraph) -> dict[str, _GCard]:
         if node_id in cards:
             cards[node_id].arrows = max(cards[node_id].arrows, count)
     for e in graph.edges:  # a web app's route goes on the function it leads to
-        if e.kind == "call" and e.label and not e.label.startswith("line ") and e.target in cards:
+        if e.kind == "call" and e.label and not e.label.startswith("line ") and not e.indirect and e.target in cards:
             cards[e.target].route = e.label
+    dense = sum(n.kind in ("handler", "function") for n in graph.nodes) > _GRAPH_DENSE
     for card in cards.values():
         if card.node.kind in _GRAPH_LISTS:
             card.rows = list(card.node.lines)
+        elif card.node.steps:
+            card.steps = list(card.node.steps)
+            card.rows = [f"\0{k}" for k in range(len(card.steps))]
+        card.compact = dense and card.node.kind in ("handler", "function")
     return cards
 
 
@@ -507,10 +526,22 @@ def _g_size(cards: dict[str, _GCard], widths: dict[int, float], column_of: dict[
         else:
             card.label = _g_wrap(n.label, room, lambda t: _g_measure_label(n, t))
         card.head = (_GRAPH_HEAD if n.sub else _GRAPH_HEAD_BARE) + _GRAPH_LABEL_LINE * (len(card.label) - 1)
-        top = card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if n.when else 0)
+        top = card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if card.when else 0)
         card.body = top
         if n.kind in _GRAPH_LISTS and card.rows:
             card.height = top + 6 + _GRAPH_ROW * len(card.rows) + 8
+        elif card.steps:  # what it does, in order, under a line or two of its docstring (none in a dense graph)
+            wrapped = [part for line in n.lines for part in _g_wrap(line, card.width - 30, lambda t: _g_sans(t, 12.5))]
+            card.prose = [] if card.compact else wrapped[:2]
+            card.body = top + (_GRAPH_PROSE * len(card.prose) + 6 if card.prose else 0)
+            card.height = card.body + 6 + _GRAPH_ROW * len(card.rows) + 6 + (_GRAPH_PROSE + 4 if card.opens else 0)
+            card.height = max(card.height, 24 + 12 * card.arrows)
+        elif card.compact:  # its docstring's first line, cut to fit
+            card.prose = [_g_fit(n.lines[0], card.width - 30, lambda t: _g_sans(t, 12.5))] if n.lines else []
+            card.height = top + (_GRAPH_PROSE * len(card.prose) + 10 if card.prose else 4)
+            if n.more:
+                card.height += _GRAPH_PROSE + (0 if card.prose else 8)
+            card.height = max(card.height, 24 + 12 * card.arrows)
         else:
             card.prose = [
                 part for line in n.lines for part in _g_wrap(line, card.width - 30, lambda t: _g_sans(t, 12.5))
@@ -593,8 +624,12 @@ def _graph_layout(
         fan_in[e.target] += 1
     near: dict[str, list[str]] = defaultdict(list)
     hops: dict[int, list[str]] = {}
+    below: dict[tuple[str, str], float] = {}  # (a function's box, what its arrow goes to first) -> how far below the
+    # box's middle the arrow's row is: what a function calls is put in the order of its rows, the order its code runs
+    share: dict[tuple[str, str], float] = {}  # ...and how far down the box, from 0 to 1, for counting crossings
     for i, e in enumerate(graph.edges):
         a, b = column_of[e.source], column_of[e.target]
+        rows = [y for r in _g_rows(cards[e.source], e) if (y := cards[e.source].row_y(r)) is not None]
         chain = [e.source]
         if abs(b - a) > 1:  # a waypoint in each column it crosses, either way, shared with the arrows it bundles with
             step = 1 if b > a else -1
@@ -612,6 +647,9 @@ def _graph_layout(
                     height[hop] = 4.0
             chain += hops[i]
         chain.append(e.target)
+        if rows and cards[e.source].steps:
+            below[(e.source, chain[1])] = sum(rows) / len(rows) - height[e.source] / 2
+            share[(e.source, chain[1])] = (sum(rows) / len(rows)) / (height[e.source] + 1)
         for x, y in zip(chain, chain[1:]):
             if x != y:
                 near[x].append(y)
@@ -655,8 +693,8 @@ def _graph_layout(
         """
         rank = {item: j for items in columns.values() for j, item in enumerate(items)}
         count = 0
-        for pairs in by_gap.values():
-            ends = sorted((rank[x], rank[y]) for x, y in pairs)
+        for pairs in by_gap.values():  # an arrow leaving a function's row crosses the ones from the rows below it
+            ends = sorted((rank[x] + share.get((x, y), 0.0), rank[y] + share.get((y, x), 0.0)) for x, y in pairs)
             for j, (a1, b1) in enumerate(ends):
                 count += sum(1 for a2, b2 in ends[j + 1 :] if a2 > a1 and b2 < b1)
         return count
@@ -668,7 +706,11 @@ def _graph_layout(
             items = columns[k]
 
             def pull(item: str) -> float:
-                ys = [center[m] for m in near[item] if column_of[m] != k]
+                ys = [
+                    center[m] + below.get((m, item), 0.0) - below.get((item, m), 0.0)
+                    for m in near[item]
+                    if column_of[m] != k
+                ]
                 return sum(ys) / len(ys) if ys else center[item]
 
             items.sort(key=pull)
@@ -679,6 +721,25 @@ def _graph_layout(
         columns.clear()
         columns.update(best[1])
         center = best[2]
+    first_row: dict[str, tuple[str, float]] = {}  # a function's box -> the box that calls it first, and the row
+    for e in graph.edges:
+        if e.kind == "call" and cards[e.source].steps and e.target not in first_row:
+            ys = [y for r in _g_rows(cards[e.source], e) if (y := cards[e.source].row_y(r)) is not None]
+            if ys and column_of[e.source] < column_of[e.target]:
+                first_row[e.target] = (e.source, min(ys))
+    for k, items in columns.items():  # boxes one box calls, in the order of its rows: in the slots they're in
+        by_caller: dict[str, list[int]] = defaultdict(list)
+        for j, item in enumerate(items):
+            if item in first_row:
+                by_caller[first_row[item][0]].append(j)
+        moved = False
+        for slots in by_caller.values():
+            ordered = sorted((items[j] for j in slots), key=lambda item: first_row[item][1])
+            moved |= ordered != [items[j] for j in slots]
+            for j, item in zip(slots, ordered):
+                items[j] = item
+        if moved:
+            settle(items, sorted(center[item] for item in items))
     top = min(center[item] - height[item] / 2 for item in center)
     last = len(order) - 1  # a call within the last column curls round into the margin; the others, into a gap
     through: dict[int, int] = defaultdict(
@@ -721,6 +782,17 @@ def _g_rows(card: _GCard, e: GraphEdge) -> list[str]:
     The rows of its box an arrow leaves from or lands on: the variables it carries, the operations it calls (the
     '+3 more' row for one that isn't listed); none for the event as a whole or a client.
     """
+    if card.steps:  # a function's: the rows of the calls it leaves from (through a function not drawn, that one's)
+        if card.node.id != e.source or e.kind in ("event", "env", "client"):
+            return []
+        hit = [
+            key
+            for key, step in zip(card.rows, card.steps)
+            if (step.target == e.target and step.kind == e.kind) or (e.indirect and e.target in step.leads)
+        ]
+        if not hit and e.indirect and card.steps[-1].kind == "more":
+            hit = [card.rows[-1]]
+        return hit
     if card.node.kind not in _GRAPH_LISTS or e.kind in ("event", "client"):
         return []
     if e.label in card.rows:
@@ -751,6 +823,8 @@ def _g_anchors(
             for row in rows_for(cards[here], e):
                 joined[here][row].append(middle(there))
     for node_id, by_row in joined.items():
+        if cards[node_id].steps:  # a function's rows are in the order its code runs: never moved
+            continue
         rank = {row: sum(ys) / len(ys) for row, ys in by_row.items()}
         cards[node_id].rows.sort(key=lambda r: (r.startswith("+"), rank.get(r, 1e9)))
 
@@ -868,7 +942,7 @@ def _g_edge_tip(e: GraphEdge, graph: CodeGraph) -> str:
         said = f"{src} {_EDGE_WORDS.get(e.kind, e.kind)} {dst}: {e.label}"
     said += "; in a loop, once per item" if e.loop else ""
     said += "; known only by the methods' names (their client couldn't be followed)" if e.guessed else ""
-    said += "; in functions further down that the graph leaves out" if e.indirect else ""
+    said += "; in functions further down that the graph leaves out" if e.indirect and e.kind != "call" else ""
     return said + ("; a warning is about it" if e.tone == "warn" else "")
 
 
@@ -886,12 +960,14 @@ def _edge_svg(
     hot: set[tuple[int, int]] | None = None,
     taken: list[tuple[float, float]] | None = None,
     lane: int = 0,
+    lit: list[str] | None = None,
 ) -> tuple[str, str]:
     """
     An arrow: its lines (one from each row it leaves to each row it reaches), its head, its loop mark; and, drawn
     over the boxes, the dots where it leaves them. A warned arrow's glow and ! go on the lines in `hot` (by the index
     of the row each leaves and reaches), or on all of them. Its marks go on its line, clear of the marks in `taken`
     (other arrows'), which they're added to; `lane` puts a call within a column outside the ones drawn before it.
+    `lit` names the boxes that, pointed at, leave it in sight (from _g_lineage()).
     """
     sx, _, sw, _ = boxes[e.source]
     tx, _, tw, _ = boxes[e.target]
@@ -935,6 +1011,7 @@ def _edge_svg(
         + (" warn" if e.tone == "warn" else "")
         + (" guess" if e.guessed else "")
         + (" via" if e.indirect else "")
+        + "".join(f" l-{_esc(m)}" for m in lit or [e.source, e.target])
     )
     taken = [] if taken is None else taken
 
@@ -1008,14 +1085,98 @@ def _g_prose_top(card: _GCard) -> float:
     """
     Where a box's prose starts: under its header, its route's pill and its when pill.
     """
-    return card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if card.node.when else 0)
+    return card.head + (_GRAPH_ROUTE if card.route else 0) + (_GRAPH_ROUTE if card.when else 0)
 
 
 def _g_more_y(card: _GCard) -> float:
     """
     The baseline of a box's line of calls not drawn.
     """
+    if card.steps:
+        return card.body + 6 + _GRAPH_ROW * len(card.rows) + 17
     return _g_prose_top(card) + 13 + _GRAPH_PROSE * len(card.prose)
+
+
+def _g_step_x(step: GraphStep) -> float:
+    """
+    Where a row's text starts: past its number, indented for the loops and ifs around it, and past a dot for what it
+    reaches.
+    """
+    return 34 + 12 * min(step.depth, 4) + (10 if step.kind not in ("call", "more") else 0)
+
+
+def _g_step_width(step: GraphStep) -> float:
+    return _g_mono(step.text, 12.5) if step.kind != "more" else _g_sans(step.text, 12.5)
+
+
+def _g_tag(step: GraphStep) -> str:  # said at a row's right: in a loop, under an if
+    return " ".join(([_G_LOOP_MARK] if step.loop else []) + (["if"] if step.when else []))
+
+
+def _g_tag_width(step: GraphStep) -> float:
+    tag = _g_tag(step)
+    return _g_sans(tag, 11) + 10 if tag else 0
+
+
+def _g_step_tip(step: GraphStep) -> str:
+    """
+    What a row says on hover: what it does and where, and why it may run more than once or not at all.
+    """
+    said = f"{step.text}, line {step.line}"
+    if step.when:
+        said += f", only when {step.when}"
+    if step.loop:
+        said += ", in a loop: once per item"
+    if step.kind == "call" and not step.target:
+        said += "; not drawn"
+    return said
+
+
+def _g_steps_svg(card: _GCard, w: float) -> list[str]:
+    """
+    A function's rows: what it does in the order its code does it, numbered, indented for the loops and ifs around
+    each, a dot in its arrow's colour for what it reaches, ↻ for a loop and 'if' for a call made only sometimes. A
+    call to a function not drawn is dimmed.
+    """
+    parts = [f'<path class="dv" d="M1,{card.body:.0f}H{w - 1:.0f}"/>']
+    number = 0
+    for key, step in zip(card.rows, card.steps):
+        ry = card.row_y(key)
+        if ry is None:
+            continue
+        if step.kind == "more":
+            parts.append(f'<text class="rw mo" x="34" y="{ry + 4.3:.1f}">{_esc(step.text)}</text>')
+            continue
+        number += 1
+        x = _g_step_x(step)
+        tag = _g_tag(step)
+        room = w - x - 14 - _g_tag_width(step)
+        row = [
+            f"<title>{_esc(_g_step_tip(step))}</title>",
+            f'<text class="rn" x="14" y="{ry + 4.3:.1f}">{number}</text>',
+        ]
+        if step.kind != "call":
+            row.append(f'<circle class="bu ac ek-{_esc(step.kind)}" cx="{x - 6:.1f}" cy="{ry:.1f}" r="2.6"/>')
+        row.append(
+            f'<text class="rw" x="{x:.1f}" y="{ry + 4.3:.1f}">{_esc(_g_fit(step.text, room, lambda t: _g_mono(t, 12.5)))}'
+            "</text>"
+        )
+        if tag:
+            row.append(f'<text class="tg" x="{w - 12:.0f}" y="{ry + 4:.1f}" text-anchor="end">{_esc(tag)}</text>')
+        drawn = step.kind != "call" or bool(step.target)
+        parts.append(f'<g class="sr{"" if drawn else " off"}">{"".join(row)}</g>')
+    return parts
+
+
+def _g_off_rows(card: _GCard) -> list[float]:
+    """
+    The baselines of a function's rows of calls to functions not drawn.
+    """
+    return [
+        y + 4.3
+        for key, step in zip(card.rows, card.steps)
+        if step.kind == "call" and not step.target and (y := card.row_y(key)) is not None
+    ]
 
 
 def _node_svg(
@@ -1058,7 +1219,7 @@ def _node_svg(
             f"{_esc(more)}</text></g>"
         )
         top += _GRAPH_ROUTE
-    if n.when:  # called only under an if: its test, in a pill like a route's
+    if card.when:  # called only under an if: its test, in a pill like a route's
         test = _g_fit(n.when, w - 28 - 20 - _g_mono("when ", 12.5), lambda t: _g_mono(t, 12.5))
         pill_w = _g_mono("when " + test, 12.5) + 20
         parts.append(
@@ -1089,9 +1250,13 @@ def _node_svg(
                 )
     for k, line in enumerate(card.prose):
         parts.append(f'<text class="pr" x="14" y="{top + 13 + _GRAPH_PROSE * k:.1f}">{_esc(line)}</text>')
-    if n.more:
+    if card.steps:
+        parts += _g_steps_svg(card, w)
+        if card.opens:  # with JavaScript, a link to the graph of every call it makes
+            parts.append(f'<text class="pr mo md opn" x="14" y="{_g_more_y(card):.1f}">Open its calls \u203a</text>')
+    elif n.more:
         said = f"+{_g_calls(len(n.more))} not drawn"
-        for k in range(len(n.more), 0, -1):  # as many of their names as fit whole, the rest as …
+        for k in range(0 if card.compact else len(n.more), 0, -1):  # as many of their names as fit whole, the rest …
             names = ", ".join(n.more[:k]) + (", …" if k < len(n.more) else "")
             if _g_sans(f"{said}: {names}", 12.5) <= w - 28:
                 said = f"{said}: {names}"
@@ -1612,8 +1777,49 @@ def _g_hidden(graph: CodeGraph, opens: bool) -> str:
     head = f"<b>+{graph.hidden}</b>{'more function' if graph.hidden == 1 else 'more functions'} not drawn ({why})"
     pill = f'<span class="kp kh{" nj" if opens else ""}">{head}: the Step by step tab has them all</span>'
     if opens:
-        pill += f'<span class="kp kh oj">{head}: click a box\'s blue line of calls to open them</span>'
+        pill += f'<span class="kp kh oj">{head}: click a dimmed call in a box, or Open its calls, to draw them</span>'
     return pill
+
+
+def _g_lineage(graph: CodeGraph) -> tuple[dict[str, set[str]], list[set[str]]]:
+    """
+    What stays in sight when a box is pointed at: the boxes joined to it, and every box on a path through it, from
+    the entry point down to what it reaches; and for each arrow, the boxes it's on such a path of. Paths follow calls
+    and what the code reaches, never the input or the environment: those light only the boxes they go into.
+    """
+    into: dict[str, set[str]] = defaultdict(set)
+    out: dict[str, set[str]] = defaultdict(set)
+    for e in graph.edges:
+        if e.kind not in ("event", "env"):
+            into[e.target].add(e.source)
+            out[e.source].add(e.target)
+
+    def closure(start: str, step: dict[str, set[str]]) -> set[str]:
+        seen, todo = set(), [start]
+        while todo:
+            for other in step.get(todo.pop(), ()):
+                if other not in seen:
+                    seen.add(other)
+                    todo.append(other)
+        seen.discard(start)
+        return seen
+
+    up = {n.id: closure(n.id, into) for n in graph.nodes}
+    down = {n.id: closure(n.id, out) for n in graph.nodes}
+    boxes = {n.id: up[n.id] | down[n.id] for n in graph.nodes}
+    for e in graph.edges:
+        boxes[e.source].add(e.target)
+        boxes[e.target].add(e.source)
+    arrows = []
+    for e in graph.edges:
+        lit = {e.source, e.target}
+        if e.kind not in ("event", "env"):
+            for n in graph.nodes:
+                below, above = up[n.id] | {n.id}, down[n.id] | {n.id}
+                if (e.target in below and e.source in up[n.id]) or (e.source in above and e.target in down[n.id]):
+                    lit.add(n.id)
+        arrows.append(lit)
+    return boxes, arrows
 
 
 def _g_canvas(
@@ -1632,13 +1838,13 @@ def _g_canvas(
     link}) has its line of calls not drawn made that link.
     """
     cards = _g_cards(graph)
+    for n in graph.nodes:
+        cards[n.id].opens = bool(n.more and n.name in opens)
     boxes, routes, width, tall, xs, widths, column_of = _graph_layout(graph, cards)
     ends = _g_anchors(graph, cards, boxes)
-    near: dict[str, list[str]] = defaultdict(list)
+    near, lit = _g_lineage(graph)
     access: dict[str, dict[str, str]] = defaultdict(dict)  # an AWS box's operation -> what it does
     for e in graph.edges:
-        near[e.source].append(e.target)
-        near[e.target].append(e.source)
         if e.kind in _G_ACCESS:
             for name in _g_names(e):
                 access[e.target].setdefault(name, e.kind)
@@ -1661,9 +1867,15 @@ def _g_canvas(
             f".{root} .cgw:has(#{key}:target) .cg .p-{key} .fg"
             "{stroke:light-dark(#2563eb,#60a5fa);stroke-opacity:1;stroke-width:2}"
         )
-    for n in graph.nodes:  # pointing at a box leaves only it, its arrows and the boxes they join in sight
-        report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.s-{n.id}):not(.t-{n.id}){{opacity:.06}}")
+    for n in graph.nodes:  # pointing at a box leaves only it and the paths through it in sight, its own arrows bold
+        report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .ce:not(.l-{n.id}){{opacity:.06}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
+        if n.id in panel_of:  # ...and while its code is open, until another box is pointed at
+            open_box = (
+                f".{root} .cgw:has(#{panel_of[n.id]}:target) .cg:not(:has(.cn:hover)):has(.n-{n.id}.p-{panel_of[n.id]})"
+            )
+            report.rules.add(f"{open_box} .ce:not(.l-{n.id}){{opacity:.06}}")
+            report.rules.add(f"{open_box} .cn:not(.n-{n.id}):not(.a-{n.id}){{opacity:.28}}")
         report.rules.add(f".{root} .cg:has(.n-{n.id}:hover) .tp-{n.id}{{display:inline}}")
         report.rules.add(
             f".{root} .cg:has(.n-{n.id}:hover) :is(.s-{n.id},.t-{n.id}) .ln{{stroke-width:2.4;stroke-opacity:1}}"
@@ -1701,6 +1913,7 @@ def _g_canvas(
                 hot,
                 taken,
                 lane,
+                sorted(lit[i]),
             )
         )
         if e.loop:
@@ -1719,19 +1932,21 @@ def _g_canvas(
             _node_svg(
                 cards[n.id],
                 boxes[n.id],
-                list(dict.fromkeys(near[n.id])),
+                sorted(near[n.id]),
                 access[n.id],
                 panel_of.get(n.id, ""),
                 n.id in opened,
             )
         ]
     )
-    links = "".join(  # over each line of calls not drawn that opens a graph of its own: drawn with JavaScript only
+    links = "".join(  # over each line of calls not drawn that opens a graph of its own, and over each row of a call
+        # not drawn: drawn with JavaScript only
         f'<a class="dr" href="#{_esc(link)}" aria-label="{_esc(f"Open the calls {n.label} makes")}">'
-        f'<rect x="{boxes[n.id][0] + 8:.1f}" y="{boxes[n.id][1] + _g_more_y(cards[n.id]) - 14:.1f}" '
+        f'<rect x="{boxes[n.id][0] + 8:.1f}" y="{boxes[n.id][1] + y - 14:.1f}" '
         f'width="{boxes[n.id][2] - 16:.0f}" height="19" rx="5"/></a>'
         for n in graph.nodes
         if (link := opened.get(n.id))
+        for y in [_g_more_y(cards[n.id]), *_g_off_rows(cards[n.id])]
     )
     tips = "".join(_g_tip_svg(n, boxes[n.id], width, tall, lines_of, n.id in panel_of) for n in graph.nodes)
     kinds = {e.kind for e in graph.edges}
@@ -1753,7 +1968,7 @@ def _g_canvas(
             "</svg>in a loop: once per item</span>"
         )
     hint = (
-        '<span class="kt">Point at a box to see only what it\'s joined to'
+        '<span class="kt">Point at a box to see only the paths through it'
         + ("; click it to read its code" if panel_of else "")
         + '</span><span class="kt pzo">Drag to move about; Ctrl or ⌘ and scroll, or pinch, to zoom</span>'
     )
@@ -1884,7 +2099,7 @@ def _graph_lines(block: _Graph, report: _Report) -> list[str]:
                 [
                     ", in a loop" if e.loop else "",
                     ", guessed from a method's name" if e.guessed else "",
-                    ", through functions not drawn" if e.indirect else "",
+                    ", through functions not drawn" if e.indirect and e.kind != "call" else "",
                 ]
             )
             out.append(f"      {said}" + (" (!)" if e.tone == "warn" else ""))

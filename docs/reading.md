@@ -24,6 +24,21 @@ Read it left to right.
 ![A code-node graph](images/graph-light.webp#only-light){ loading=lazy }
 ![A code-node graph](images/graph-dark.webp#only-dark){ loading=lazy }
 
+### Inside a function's box { #rows }
+
+A function's box lists what it does, top to bottom in the order its code does it: each call to your own functions,
+each AWS or library call, and each HTTP request, one numbered row each. The arrow for a call leaves from its row,
+and the boxes it calls are stacked in the same order, so you can read down the box and across to the next column.
+
+| In a row | Means |
+| --- | --- |
+| Indented | Inside a loop or an `if` in this function |
+| ↻ | In a loop: once per item |
+| if | Only sometimes: point at the row for the test |
+| Dimmed | A function not drawn here: click it to open the calls |
+| `SQLite SELECT (+2)` | Three calls in a row to one service, the same way |
+| +4 more | Calls left out of the box: **Open its calls ›** draws them all |
+
 ### Arrow colours { #arrows }
 
 | Arrow | Means |
@@ -37,7 +52,9 @@ Read it left to right.
 | <span style="color:#f59e0b">●</span> amber | a warning is about it, such as an HTTP request with no timeout |
 
 !!! tip "Worth knowing"
-    Point at a box and everything it isn't connected to fades out.
+    Point at a box and everything not on a path through it fades out: what calls it, all the way up to the entry
+    point, and what it calls and reaches, all the way down. Point at S3 or a database to see every path that gets
+    there. Click a box and its paths stay lit while its code is open.
 
 ??? more "Zoom, full screen and big graphs"
     The graph sits in a box of one size, about the window's height, and is drawn at its real size. **Auto** shrinks
@@ -57,11 +74,11 @@ Read it left to right.
     anywhere outside it, or the browser's Back button. Without JavaScript, × and Back still close it.
 
 ??? more "Open the calls a box leaves out"
-    A box whose calls aren't drawn says so in blue, "+12 calls not drawn". Click it and the graph starts from that
-    function, with every call it makes and whatever they reach. The line over the graph is the path down to it from
+    A box whose calls aren't drawn ends with **Open its calls ›** in blue, and its rows for them are dimmed. Click
+    either and the graph starts from that function, with every call it makes, in order, and whatever they reach. The line over the graph is the path down to it from
     the entry point: click a name in it to go back up, or the browser's Back button. **All** in the graph's bar draws
-    every function at once. This is the one part of the page that needs JavaScript; without it the line is plain
-    text, and the Step by step tab has every call.
+    every function at once. This is the one part of the page that needs JavaScript; without it the link isn't shown,
+    and the Step by step tab has every call.
 
 ## Step by step { #steps }
 
