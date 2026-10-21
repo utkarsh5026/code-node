@@ -4,6 +4,18 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Added
+
+- `code-node -i` picks the file to start from in the terminal: move through the folders with the arrow keys, or type
+  to search every file by its path, then pick the function. Files an entry point is in have a ★, and a wide terminal
+  shows a file's functions or a function's code beside the list. Tab switches to the entry points found.
+
+### Changed
+
+- Where the command asks which entry point to start from, it opens the same picker instead of a numbered list, and
+  when it finds none in a terminal it lets you pick a file instead of stopping. `--list`, `--plugins` and what it
+  prints are drawn with rich, which is now a dependency.
+
 ## [0.7.0] - 2026-10-21
 
 ### Changed

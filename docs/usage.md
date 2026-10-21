@@ -27,12 +27,36 @@ in your browser.
 | You type | It starts at |
 | --- | --- |
 | `code-node` | Wherever you pick from what it finds |
+| `code-node -i` | The file you pick by walking the folder |
 | `code-node app/main.py` | That file's `main()` |
 | `code-node app/main.py:run` | `run()` in that file |
 | `code-node app/store.py:Store.save` | A method |
 | `code-node -e pkg.cli.main` | A dotted name |
 | `code-node -e save` | Anything with "save" in its name |
 | `code-node --list` | Nowhere: it lists the entry points it found |
+
+## Pick a file in the terminal { #interactive }
+
+```bash
+code-node -i
+```
+
+This opens a picker in the terminal. It lists the folder's Python files and the folders that hold them, with a ★ on
+each file an entry point is in. A terminal at least 110 columns wide also shows what's under the cursor: a file's
+functions, or a function's code.
+
+| Key | Does |
+| --- | --- |
+| ↑ ↓, PgUp PgDn, Home End | Move |
+| → or Enter | Open a folder; pick a file, then the function in it to start from |
+| ← or Backspace | Go up a folder, or back from a file's functions |
+| Any letters | Search every file by path: `ordhan` finds `orders/handler.py` |
+| Tab | Switch between the files and the entry points found |
+| Esc | Clear the search, go back, or quit |
+
+!!! tip "Worth knowing"
+    Plain `code-node` opens the same picker on the entry points it found when there are several, and on the files
+    when it found none. Press Tab there to see the files.
 
 ??? more "What it finds on its own"
     In this order:
@@ -103,6 +127,7 @@ to see its commit. The gear in the panel's head turns that off. It's read with `
 | --- | --- |
 | `path` | A folder, or a file to start from |
 | `-e`, `--entry` | Where to start |
+| `-i`, `--interactive` | Pick the file in the terminal |
 | `-l`, `--list` | List the starts |
 | `--plugins` | List the plugins |
 | `--serve`, `--port` | Live page (8765, or the next free port) |

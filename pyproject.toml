@@ -31,7 +31,11 @@ classifiers = [
 ]
 # botocore names AWS operations and their IAM actions from its own service models (no AWS call is ever made). PyYAML
 # reads deploy files (template.yaml, serverless.yml).
-dependencies = ["botocore>=1.35.72", "pyyaml>=6.0"]
+dependencies = [
+    "botocore>=1.35.72",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+]
 
 # What working on code-node needs. None of it ships in the wheel. `uv sync` installs every group into .venv at the
 # versions in uv.lock, and Dependabot proposes upgrades to both.

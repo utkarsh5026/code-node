@@ -18,10 +18,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from rich.text import Text
+
 from .deploys import deploy_file_names
 from .pages import PageOptions, make_page
 from .project import _SKIPPED_FOLDERS, EntryPoint
 from .report.style import FAVICON_LINK, FAVICON_SVG
+from .terminal import console, errors
 
 DEFAULT_PORT = 8765  # without --port, the first free port from here on is used, so several folders can be served
 
@@ -113,7 +116,7 @@ class LivePage:
     root: Path
     entry: EntryPoint
     options: PageOptions
-    log: Callable[[str], None] = field(default=lambda line: print(line, flush=True))
+    log: Callable[[str], None] = field(default=lambda line: console.print(Text(line, style="dim"), soft_wrap=True))
     page: str = ""
     version: int = 0
     changed: threading.Condition = field(default_factory=threading.Condition)
@@ -256,21 +259,34 @@ def serve(
     try:
         server = listen(_handler(live), port)
     except OSError as exc:
-        print(
-            f"Can't listen on port {port if port is not None else DEFAULT_PORT} ({exc.strerror}): pick another with "
-            "--port."
+        errors.print(
+            Text(
+                f"Can't listen on port {port if port is not None else DEFAULT_PORT} ({exc.strerror}): pick another "
+                "with --port.",
+                style="red",
+            ),
+            soft_wrap=True,
         )
         return 1
     url = f"http://localhost:{server.server_address[1]}/"
     watcher = threading.Thread(target=live.watch, name="code-node-watch", daemon=True)
     watcher.start()
-    print(f"Serving {entry.name} at {url}  (watching {root}; Ctrl-C to stop)", flush=True)
+    console.print(
+        Text.assemble(
+            ("Serving ", "green"),
+            (entry.name, "bold"),
+            " at ",
+            (url, "bold cyan underline"),
+            (f"  (watching {root}; Ctrl-C to stop)", "dim"),
+        ),
+        soft_wrap=True,
+    )
     if open_page is not None:
         open_page(url)
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
-        print("\nStopped.")
+        console.print("\nStopped.", style="dim")
     finally:
         live.stop()
         server.server_close()

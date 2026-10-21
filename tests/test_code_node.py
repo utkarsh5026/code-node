@@ -4,6 +4,7 @@ code-node end to end on small folders written into tmp_path: entry points found,
 
 from __future__ import annotations
 
+import io
 import os
 import re
 from pathlib import Path
@@ -244,6 +245,49 @@ def test_starting_from_a_file(tmp_path: Path, capsys) -> None:
     assert "tool.store.Store.save: 2 functions" in capsys.readouterr().out
     assert main([str(root), "-e", str(root / "src/tool/store.py"), "--no-open", "-o", str(out)]) == 0
     assert "tool.store.Store.save" in capsys.readouterr().out
+
+
+def test_the_picker_walks_folders_and_searches_files(tmp_path: Path) -> None:
+    from rich.console import Console
+
+    from code_node.browse import FILES, _match, _Picker
+
+    project = read_project(write(tmp_path / "repo", PACKAGE))
+    picker = _Picker(project, entry_points(project), mode=FILES)
+
+    def keys(*pressed: str):
+        picked = None
+        for key in pressed:
+            picked = picker.press(key)
+        return picked
+
+    def listed() -> list[str]:
+        return [row.key for row in picker.rows()]
+
+    assert listed() == ["src", "tests"] and keys("enter") is None and picker.folder == "src"
+    assert listed() == ["", "src/tool"] and picker.cursor == 1  # past '..'
+    assert keys("right") is None and listed()[1:] == ["src/tool/__init__.py", "src/tool/cli.py", "src/tool/store.py"]
+    assert "★" in str(picker.rows()[2].note)  # cli.py holds the console script
+    assert (
+        keys("left") is None and picker.folder == "src" and listed()[picker.cursor] == "src/tool"
+    )  # back where it was
+    keys("s", "t", "o")  # typing searches every file
+    assert listed()[0] == "src/tool/store.py" and keys("enter") is None and picker.mode == "functions"
+    assert [row.key for row in picker.rows()] == ["tool.store.Store.save", "tool.store.Store._write"]
+    assert keys("down", "enter").name == "tool.store.Store._write"
+    assert keys("esc") is None and picker.mode == FILES and listed()[picker.cursor] == "src/tool/store.py"
+    keys("backspace", "backspace", "tab")
+    assert picker.mode == "entries" and keys("enter").name == "tool.cli.main"
+    assert keys("tab", "c", "l", "i", "enter").name == "tool.cli.main"  # a file with one function picks it
+    assert keys("esc", "esc").name == ""  # Esc clears what's typed, then quits
+    assert _match("hdlr", "orders/handler.py") == (3, [7, 10, 11, 13]) and _match("zz", "a.py") is None
+    assert _match("orders", "orders/orders.py")[0] == 0 and _match("ders", "orders/x.py")[0] == 2
+    screen = Console(width=120, height=30, file=io.StringIO())
+    with screen.capture() as seen:
+        screen.print(picker.draw(120, 30))
+    assert all(text in seen.get() for text in ("Search", "Entry points 1", "src/", "★ tool.cli.main", "3 Python files"))
+    assert "repo /" not in seen.get()
+    assert main([str(tmp_path / "repo"), "-i", "--no-open"]) == 2  # no terminal to pick in
 
 
 def test_cli_commands_are_followed_from_the_app(tmp_path: Path) -> None:
@@ -1148,7 +1192,7 @@ functions:
 def test_the_command_lists_its_plugins(capsys) -> None:
     assert main(["--plugins"]) == 0
     out = capsys.readouterr().out
-    assert "lambda  AWS Lambda" in out and "redis    Redis  (redis)" in out and "sam         AWS SAM" in out
+    assert all(re.search(row, out) for row in (r"lambda +AWS Lambda", r"redis +Redis +redis", r"sam +AWS SAM"))
 
 
 def _matches_snapshot(example: str) -> None:
