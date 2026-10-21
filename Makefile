@@ -8,14 +8,14 @@ OUT    ?= /tmp/code-node-page.html
 PORT   ?= 8765
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint fix try serve mermaid shots site-graph logos figures docs docs-serve package check \
+.PHONY: help install test test-unit test-integration lint fix try serve mermaid shots site-graph logos figures docs docs-serve package check \
 	tool clean
 
 help:  # list the targets, by group
 	@printf "\033[1mcode-node\033[0m  make <target>\n"
 	@awk 'BEGIN {FS = ":.*## "} \
 		/^##@ / {printf "\n\033[1;35m%s\033[0m\n", substr($$0, 5); next} \
-		/^[a-z-]+:.*## / {printf "  \033[1;36m%-13s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+		/^[a-z-]+:.*## / {printf "  \033[1;36m%-17s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "  REPO=<folder> picks the code for try, serve and mermaid (default $(REPO))"
 
@@ -43,6 +43,12 @@ fix: ## ruff check --fix and ruff format
 
 test: ## run the tests
 	$(RUN) pytest -q
+
+test-unit: ## run the unit tests (tests/unit/): each part on its own, in memory
+	$(RUN) pytest -q -m unit
+
+test-integration: ## run the integration tests (tests/integration/): the command, the server and the examples
+	$(RUN) pytest -q -m integration
 
 check: lint test try docs package ## everything CI runs
 

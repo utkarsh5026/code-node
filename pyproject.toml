@@ -76,3 +76,9 @@ include = ["src/code_node", "tests", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]  # for tests/support.py
+addopts = ["--strict-markers"]
+markers = [
+    "unit: one part on its own, in memory (tests/unit/)",
+    "integration: the command, the server or an example end to end, with real files, processes or HTTP (tests/integration/)",
+]

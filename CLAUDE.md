@@ -17,7 +17,7 @@ command is `code-node` and the import is `code_node`.
 
 ```bash
 uv sync                                                   # .venv with every dependency group
-uv run pytest                                             # tests
+uv run pytest                                             # tests (-m unit, -m integration for one kind)
 uv run ruff check .                                       # lint
 uv run ruff format .                                      # format (examples/ and docs/ are left as they are)
 uv run code-node examples/orders-service --no-open -o /tmp/page.html   # try it
@@ -124,10 +124,18 @@ rendering and I/O (it uses `platforms/`, which is pure too) so another front end
 
 ## Tests
 
-`tests/test_code_node.py` writes small projects into `tmp_path` and checks entry point discovery, the map (functions,
-AWS calls, imports), the graph's limits, plain Python against `platform="lambda"`, a plugin platform, and the
-command end to end (`main([...])` with `--no-open -o`). Add a test
-there for each new kind of entry point or anything new the reader follows.
+Small projects written into `tmp_path` (or passed to `map_code` as a dict), checked by what the map, graph and page
+say. `tests/support.py` has what they share: `write(root, files)` and the small projects (`HANDLER`, `PACKAGE`,
+`STORES`...). `pytest -m unit` or `-m integration` runs one kind (`make test-unit`, `make test-integration`); the
+folder marks them, in `tests/conftest.py`.
+
+| Path | What it checks |
+|---|---|
+| `tests/unit/` | One part on its own, in memory: `test_project.py` (files, module names, import paths, entry points), `test_reader.py` (what the reader follows and what names hold, imports inside functions, partial maps), `test_graph.py`, `test_platforms.py` (Lambda, FastAPI, Flask, Django, a plugin platform), `test_libraries.py`, `test_deploys.py` (SAM, serverless.yml, the IAM and YAML helpers), `test_report.py` (boxes, code panels, the walk, logos, editor links), `test_picker.py`, `test_history.py` |
+| `tests/integration/` | End to end, with real files, processes and HTTP: `test_cli.py` (`main([...])` with `--no-open -o`, and `python -m code_node` as its own process; that the code read is never run, and broken code still gives a page), `test_serve.py` (the live page and its `/events` stream), `test_examples.py` (each example against `tests/snapshots/`, every entry point read to the end, each page whole and self-contained) |
+
+Add a unit test for each new kind of entry point or anything new the reader follows, in the file for that part. A
+new example gets a line in `SMOKE` in `test_examples.py`. `UPDATE_SNAPSHOTS=1 uv run pytest` rewrites the snapshots.
 
 ## Releasing
 

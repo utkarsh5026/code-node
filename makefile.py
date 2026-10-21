@@ -203,6 +203,21 @@ def test(options: Options) -> None:
     python("-m", "pytest", "-q")
 
 
+@task("test-unit", "🧩", "run the unit tests (tests/unit/): each part on its own, in memory", "Check")
+def test_unit(options: Options) -> None:
+    python("-m", "pytest", "-q", "-m", "unit")
+
+
+@task(
+    "test-integration",
+    "🔗",
+    "run the integration tests (tests/integration/): the command, the server and the examples",
+    "Check",
+)
+def test_integration(options: Options) -> None:
+    python("-m", "pytest", "-q", "-m", "integration")
+
+
 TASKS["check"] = Task(
     "check",
     "✅",
