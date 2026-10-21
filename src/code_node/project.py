@@ -5,6 +5,7 @@ A folder of Python code: its files, the names Python imports them by, and the en
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import sys
@@ -48,6 +49,14 @@ _MAIN_NAMES = ("main", "run", "cli", "app")
 
 _IMPORT_RE = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import|import[ \t]+([\w., \t]+))", re.M)
 
+_PATH_SETTINGS = (  # where a pyproject.toml puts folders on the import path: (table, key)
+    ("tool.pyright", "extraPaths"),
+    ("tool.basedpyright", "extraPaths"),
+    ("tool.pytest.ini_options", "pythonpath"),
+)
+
+_VSCODE_PATHS_RE = re.compile(r'"python\.(?:analysis|autoComplete)\.extraPaths"\s*:\s*\[(.*?)\]', re.S)
+
 _CLI_APPS = ("Typer",)  # web apps are a platform's (FastAPI for the web one, Chalice for Lambda's)
 
 
@@ -78,6 +87,8 @@ class Project:
     configs: list[str] = field(default_factory=list)  # its pyproject.toml files, the root's first
     deploy_files: dict[str, str] = field(default_factory=dict)  # files deploy plugins read (template.yaml,
     # serverless.yml): {path from the folder: text}
+    paths: list[str] = field(default_factory=list)  # the other folders imports start from, as the project puts
+    # them on sys.path (pyright's extraPaths, pytest's pythonpath): 'src/', or '' for the folder itself
     _trees: dict[str, ast.Module] | None = None
 
     @property
@@ -105,7 +116,12 @@ class Project:
         """
         Every top-level module the code imports that isn't its own: read as installed libraries, never as missing.
         """
-        own = self.own_tops
+        own = self.own_tops | {
+            rel[len(place) :].split("/")[0].split(".")[0]
+            for place in self.paths
+            for rel in self.files
+            if rel.startswith(place)
+        }
         found: set[str] = set()
         for text in self.files.values():
             for match in _IMPORT_RE.finditer(text):
@@ -156,7 +172,78 @@ def read_project(root: str | os.PathLike[str]) -> Project:
             text = path.read_text("utf-8", "replace")
             project.files[rel] = text
             project.modules[rel] = _module_name(path, base)
+    project.paths = import_paths(base)
     return project
+
+
+def _toml_lists(text: str, table: str, key: str) -> list[str]:
+    """
+    A pyproject.toml setting that's a list of strings, or one string: ["src"] for extraPaths = ["src"].
+    """
+    try:
+        import tomllib
+    except ImportError:  # Python 3.10: find the table and the key by hand
+        body = re.search(rf"^\[{re.escape(table)}\]\s*$(.*?)(?=^\[|\Z)", text, re.M | re.S)
+        value = body and re.search(rf"^\s*{key}\s*=\s*(\[.*?\]|\"[^\"]*\"|'[^']*')", body.group(1), re.M | re.S)
+        if not value:
+            return []
+        if value.group(1).startswith("["):
+            return re.findall(r"[\"']([^\"']*)[\"']", value.group(1))
+        return value.group(1)[1:-1].split()
+    try:
+        data: object = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return []
+    for part in [*table.split("."), key]:
+        data = data.get(part) if isinstance(data, dict) else None
+    if isinstance(data, str):
+        return data.split()  # pytest's pythonpath = "src lib" is split on spaces
+    return [str(item) for item in data] if isinstance(data, list) else []
+
+
+def import_paths(root: Path) -> list[str]:
+    """
+    The folders under root the project puts on the import path, as prefixes of its files' paths ('src/', or '' for
+    root itself): pyright's (and Pylance's) extraPaths, in pyproject.toml, pyrightconfig.json or .vscode/settings.json,
+    and pytest's pythonpath. Folders outside root, or that aren't there, are left out.
+    """
+    found: list[str] = []
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        text = pyproject.read_text("utf-8", "replace")
+        for table, key in _PATH_SETTINGS:
+            found += _toml_lists(text, table, key)
+    pyright = root / "pyrightconfig.json"
+    if pyright.is_file():
+        try:
+            data = json.loads(pyright.read_text("utf-8", "replace"))
+        except ValueError:
+            data = {}
+        extra = data.get("extraPaths") if isinstance(data, dict) else None
+        found += [str(item) for item in extra] if isinstance(extra, list) else []
+    vscode = root / ".vscode" / "settings.json"
+    if vscode.is_file():  # JSON with comments, so the lists are found as text
+        for match in _VSCODE_PATHS_RE.finditer(vscode.read_text("utf-8", "replace")):
+            found += re.findall(r'"([^"]*)"', match.group(1))
+    return folder_prefixes(root, [root / item.replace("${workspaceFolder}", ".") for item in found])
+
+
+def folder_prefixes(root: Path, folders: list[Path]) -> list[str]:
+    """
+    Folders as prefixes of the paths of root's files: [root/'src'] -> ['src/']; root itself is ''. Folders outside
+    root, or that aren't there, are left out.
+    """
+    base = root.resolve()
+    prefixes: list[str] = []
+    for folder in folders:
+        folder = folder.resolve()
+        if not folder.is_dir() or (folder != base and base not in folder.parents):
+            continue
+        rel = folder.relative_to(base).as_posix()
+        prefix = "" if rel == "." else rel + "/"
+        if prefix not in prefixes:
+            prefixes.append(prefix)
+    return prefixes
 
 
 def _console_scripts(path: Path) -> dict[str, str]:

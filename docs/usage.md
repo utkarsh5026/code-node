@@ -70,6 +70,17 @@ functions, or a function's code.
 
     Tests, virtual envs and build folders are skipped.
 
+??? more "Imports from folders on the path"
+    A file's imports are found the way Python finds them: from the top of its package, from the file's own folder, and
+    from the folders the project puts on the import path. Those are read from pyright's and Pylance's `extraPaths`
+    (`[tool.pyright]` in `pyproject.toml`, `pyrightconfig.json`, or `python.analysis.extraPaths` in
+    `.vscode/settings.json`) and pytest's `pythonpath`. With `src` in one of them, `from common.db import save` in
+    `src/handlers/orders/app.py` finds `src/common/db.py`. For a folder no setting names, pass it:
+
+    ```bash
+    code-node src/handlers/orders/app.py --path src
+    ```
+
 ## Go live { #serve }
 
 ```bash
@@ -138,4 +149,5 @@ to see its commit. The gear in the panel's head turns that off. It's read with `
 | `--no-open` | Don't open a browser |
 | `--platform`, `--lambda` | Run a platform's checks |
 | `--editor` | What line links open: `vscode`, `cursor` or `none` |
+| `--path` | A folder imports start from, as on `PYTHONPATH` |
 | `--no-git` | Leave out who changed each function, and when |

@@ -183,6 +183,7 @@ class _CodeReader:
         version: tuple[int, int] | None,
         libraries: set[str],
         layers: bool,
+        paths: tuple[str, ...] = (),
     ):
         self.texts, self.root, self.cmap, self.version, self.layers = texts, root, cmap, version, layers
         self.platform = get_platform(cmap.platform)
@@ -205,20 +206,24 @@ class _CodeReader:
                 self.sources[module] = path
         here = (cmap.handler_file or "").rpartition("/")[0]
         here = here + "/" if here else ""
-        if here.startswith(root) and here != root:
-            # the entry point's own folder is on sys.path too, as a script's is and a Lambda function's code is:
-            # `from helpers import x` beside it is its own code, though the folder is also a package from the root
-            beside: set[str] = set()
+        # the entry point's own folder is on sys.path too, as a script's is and a Lambda function's code is:
+        # `from helpers import x` beside it is its own code, though the folder is also a package from the root. So
+        # are the folders the project puts there (paths: pyright's extraPaths, pytest's pythonpath, --path), where
+        # `from common.db import save` finds src/common/db.py
+        places = [here] if here.startswith(root) and here != root else []
+        places += [place for place in paths if place != root and place not in places]
+        beside: set[str] = set()
+        for place in places:
             for path in texts:
-                if not path.startswith(here) or not path.endswith(".py") or "site-packages" in path:
+                if not path.startswith(place) or not path.endswith(".py") or "site-packages" in path:
                     continue
-                module = path[len(here) : -3].replace("/", ".")
+                module = path[len(place) : -3].replace("/", ".")
                 module = module[: -len(".__init__")] if module.endswith(".__init__") else module
                 if module and module != "__init__" and "-" not in module and module not in self.sources:
                     self.sources[module] = path
                     beside.add(module.split(".")[0])
-            self.tops |= beside
-            self.libraries = libraries - beside
+        self.tops |= beside
+        self.libraries = libraries - beside
         self.modules: dict[str, _Module] = {}
         self.defs: dict[str, tuple[str, Any, str | None]] = {}  # key -> (module, node, class key)
         self.classes: dict[str, dict[str, Any]] = {}

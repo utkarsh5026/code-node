@@ -4,6 +4,13 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Added
+
+- Imports are followed from the folders a project puts on the import path, as Python does with `sys.path`: with `src`
+  in pyright's or Pylance's `extraPaths` (`pyproject.toml`, `pyrightconfig.json` or `.vscode/settings.json`) or in
+  pytest's `pythonpath`, `from common.db import save` finds `src/common/db.py` from any file, however deep. Before,
+  it was taken for an installed library and left off the page. `--path DIR` adds a folder no setting names.
+
 ## [0.8.0] - 2026-10-21
 
 ### Added
