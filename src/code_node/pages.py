@@ -14,7 +14,7 @@ from .analysis.mapping import entry_file, map_code
 from .analysis.model import CodeMap
 from .deploys import find_deployment
 from .history import read_history
-from .project import EntryPoint, Project, read_project
+from .project import EntryPoint, Project, folder_prefixes, read_project
 from .report.build import page_blocks
 from .report.editor import editor_link
 from .report.style import render_page
@@ -40,6 +40,7 @@ class PageOptions:
     platform: str = ""  # --platform: its checks run whatever the entry point is ('' leaves it to the entry point)
     editor: str = "vscode"  # --editor: the editor its line links open ('vscode', 'cursor'; 'none' for no links)
     git: bool = True  # what git says about each function (--no-git leaves it out)
+    paths: tuple[str, ...] = ()  # --path: more folders imports start from, beside those the project's settings name
 
     @property
     def limits(self) -> tuple[int, int]:
@@ -56,6 +57,8 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
     project = read_project(root)
     file = entry.file or (entry_file(entry.name, project.files) or ("",))[0]
     deployment = find_deployment(project.deploy_files, project.files, file, entry.name.rsplit(".", 1)[-1])
+    given = folder_prefixes(project.root, [Path(path) for path in options.paths])
+    project.paths += [prefix for prefix in given if prefix not in project.paths]
     cmap = map_code(
         project.files,
         entry.name,
@@ -64,6 +67,7 @@ def map_entry(root: Path, entry: EntryPoint, options: PageOptions) -> tuple[Code
         max_depth=_ALL_READ_DEPTH if options.draw_all else None,
         platform=options.platform or entry.platform,
         deployment=deployment,
+        paths=project.paths,
     )
     if options.git:
         read_history(project.root, cmap.functions)

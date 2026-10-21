@@ -115,6 +115,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="the editor the page's line links open (default vscode; none for no links)",
     )
     parser.add_argument(
+        "--path",
+        dest="paths",
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="a folder imports start from, as on PYTHONPATH (again for more): --path src for `from common.db import x` "
+        "to find src/common/db.py. pyright's extraPaths and pytest's pythonpath are read on their own",
+    )
+    parser.add_argument(
         "--no-git", action="store_true", help="leave out what git says about each function (who changed it, when)"
     )
     return parser.parse_args(argv)
@@ -306,6 +315,11 @@ def main(argv: list[str] | None = None) -> int:
     if not project.files:
         _fail(f"No Python files under {project.root}.")
         return 1
+    paths = [Path(path).expanduser().resolve() for path in args.paths]
+    outside = [path for path in paths if path != project.root and project.root not in path.parents]
+    if outside or not all(path.is_dir() for path in paths):
+        _fail(f"--path {(outside or [p for p in paths if not p.is_dir()])[0]} isn't a folder in {project.root}.")
+        return 2
     if args.list:
         found = entry_points(project)
         console.print(
@@ -333,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
         platform=args.platform,
         editor=args.editor,
         git=not args.no_git,
+        paths=tuple(str(path) for path in paths),
     )
     if args.mermaid:
         print(make_mermaid(project.root, entry, options))

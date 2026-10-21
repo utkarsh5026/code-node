@@ -1267,3 +1267,75 @@ def page_blocks_for(project, entry: str) -> list:
 
     cmap = map_code(project.files, entry, libraries=project.libraries(), platform="lambda")
     return page_blocks(cmap, project="x", max_functions=24, max_depth=5, sources=project.files)
+
+
+IMPORTED_FROM_SRC = {
+    "src/common/__init__.py": "",
+    "src/common/db.py": (
+        'import boto3\n\ntable = boto3.resource("dynamodb").Table("orders")\n\n\n'
+        "def save(item):\n    table.put_item(Item=item)\n"
+    ),
+    "src/handlers/orders/app.py": "from common.db import save\n\n\ndef handler(event, context):\n    save(event)\n",
+}
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("pyproject.toml", '[tool.pyright]\nextraPaths = ["src"]\n'),
+        ("pyproject.toml", '[tool.pytest.ini_options]\npythonpath = "src"\n'),
+        ("pyproject.toml", '[tool.mypy]\nmypy_path = "src"\n'),
+        ("pyproject.toml", '[tool.setuptools.packages.find]\nwhere = ["src"]\n'),
+        ("pyproject.toml", '[tool.setuptools.package-dir]\n"" = "src"\n'),
+        ("pyproject.toml", '[tool.poetry]\npackages = [{ include = "common", from = "src" }]\n'),
+        ("pyproject.toml", '[[tool.poetry.packages]]\ninclude = "common"\nfrom = "src"\n'),
+        ("pyrightconfig.json", '{"extraPaths": ["./src"]}'),
+        (".vscode/settings.json", '{\n  // Pylance\n  "python.analysis.extraPaths": ["${workspaceFolder}/src"],\n}\n'),
+    ],
+)
+def test_imports_from_a_folder_the_project_puts_on_the_path(tmp_path: Path, name: str, text: str, capsys) -> None:
+    root = write(tmp_path / "repo", {**IMPORTED_FROM_SRC, name: text, ".git/HEAD": "ref: main\n"})
+    project = read_project(root)
+    assert project.paths == ["src/"] and "common" not in project.libraries()
+    out = tmp_path / "page.html"
+    assert main([str(root / "src/handlers/orders/app.py:handler"), "--no-open", "-o", str(out)]) == 0
+    assert "app.handler: 2 functions, 1 AWS calls" in capsys.readouterr().out
+
+
+def test_imports_from_a_folder_given_with_path(tmp_path: Path, capsys) -> None:
+    root = write(tmp_path / "repo", {**IMPORTED_FROM_SRC, ".git/HEAD": "ref: main\n"})
+    out = tmp_path / "page.html"
+    file = str(root / "src/handlers/orders/app.py:handler")
+    assert main([file, "--no-open", "-o", str(out)]) == 0
+    assert "app.handler: 1 functions, 0 AWS calls" in capsys.readouterr().out  # common.db read as a library
+    assert main([file, "--path", str(root / "src"), "--no-open", "-o", str(out)]) == 0
+    assert "app.handler: 2 functions, 1 AWS calls" in capsys.readouterr().out
+    assert main([file, "--path", str(tmp_path), "--no-open", "-o", str(out)]) == 2
+    assert "isn't a folder in" in capsys.readouterr().err
+    cmap = map_code(
+        {path: text for path, text in IMPORTED_FROM_SRC.items()},
+        "app.handler",
+        file="src/handlers/orders/app.py",
+        paths=["src/"],
+    )
+    assert {f.name for f in cmap.functions} >= {"app.handler", "common.db.save"}
+
+
+def test_a_pyproject_in_a_subfolder_names_paths_from_there(tmp_path: Path) -> None:
+    files = {f"services/orders/{name}": text for name, text in IMPORTED_FROM_SRC.items()}
+    files["services/orders/pyproject.toml"] = '[tool.pyright]\nextraPaths = ["src", "../../missing"]\n'
+    assert read_project(write(tmp_path, files)).paths == ["services/orders/src/"]
+
+
+def test_pyproject_paths_without_tomllib(monkeypatch) -> None:
+    from code_node.project import _pyproject_paths
+
+    text = (
+        '[project]\nname = "x"\n[tool.pyright]\nextraPaths = [\n  "src",\n  "lib",\n]\n'
+        '[tool.mypy]\nmypy_path = "a:b"\n[tool.setuptools.package-dir]\n"" = "pkgs"\n'
+        '[[tool.poetry.packages]]\ninclude = "app"\nfrom = "apps"\n'
+    )
+    expected = ["src", "lib", "a", "b", "pkgs", "apps"]
+    assert _pyproject_paths(text) == expected
+    monkeypatch.setitem(__import__("sys").modules, "tomllib", None)  # as on Python 3.10
+    assert _pyproject_paths(text) == expected

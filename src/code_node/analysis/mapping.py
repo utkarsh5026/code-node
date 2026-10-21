@@ -64,6 +64,7 @@ def map_code(
     max_depth: int | None = None,
     platform: str = "",
     deployment: Deployment | None = None,
+    paths: Iterable[str] = (),
 ) -> CodeMap:
     """
     How Python code works, read with Python's ast module and never run: files is {path: source}, entry the function
@@ -75,6 +76,8 @@ def map_code(
     runs (a code_node.platforms name: 'lambda' adds the checks only a Lambda handler needs), '' for plain Python.
     deployment is what a deploy file says about where it runs (code_node.deploys: a function in template.yaml): its
     runtime, environment variables and role are checked against the code, and it sets the platform when none is given.
+    paths are the other folders imports start from, as on sys.path ('src/' for `from common.db import save` to find
+    src/common/db.py), each as a prefix of the files' paths: '' for the top.
 
         map_code({"app.py": open("app.py").read()}, "app.handler")
     """
@@ -98,7 +101,14 @@ def map_code(
     libs = set(libraries) | _RUNTIME_MODULES | _LIBRARIES
     libs.discard(entry.split(".")[0])  # its own top package is never a library
     reader = _CodeReader(
-        texts, names, root, cmap, _python_version(python), libs, bool(deployment is not None and deployment.layers)
+        texts,
+        names,
+        root,
+        cmap,
+        _python_version(python),
+        libs,
+        bool(deployment is not None and deployment.layers),
+        tuple(paths),
     )
     if max_depth is not None:
         reader.max_depth = max_depth
