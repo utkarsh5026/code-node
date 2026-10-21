@@ -53,6 +53,7 @@ cd your/repo && code-node
 
 ```bash
 code-node                              # find entry points and pick one
+code-node -i                           # walk the folder (arrow keys, or type to search) and pick a file
 code-node --list                       # just list them
 code-node src/app/main.py:run          # start from a function
 code-node src/app/store.py:Store.save  # ...or a method
@@ -78,6 +79,7 @@ string is flagged.
 | --- | --- |
 | `path` | Folder to read, or a file to start from (`main.py`, `main.py:function`) |
 | `-e`, `--entry` | `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
+| `-i`, `--interactive` | Pick the file in the terminal: arrow keys through the folders, or type to search every file |
 | `-l`, `--list` | List entry points and stop |
 | `--plugins` | List platforms, libraries and deploy files and stop |
 | `--all` | Draw every function (default: 14 functions, 5 calls deep) |

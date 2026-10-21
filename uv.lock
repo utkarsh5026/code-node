@@ -310,6 +310,7 @@ source = { editable = "." }
 dependencies = [
     { name = "botocore" },
     { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -337,6 +338,7 @@ package = [
 requires-dist = [
     { name = "botocore", specifier = ">=1.35.72" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=13.7" },
 ]
 
 [package.metadata.requires-dev]
