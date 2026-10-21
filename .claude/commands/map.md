@@ -15,4 +15,4 @@ Then review the result against the code:
    dispatch it can't follow, the depth limit. List what it **got wrong**, if anything.
 3. For each miss that's a pattern many codebases use (a framework's decorators, dependency injection, a dispatch
    dict), propose where in `src/code_node/analysis/reader.py` (or `project.py` for entry points) it would be
-   followed, with a test for `tests/test_code_node.py`. Don't change code unless asked.
+   followed, with a test for `tests/unit/test_reader.py` (or `tests/unit/test_project.py`). Don't change code unless asked.
