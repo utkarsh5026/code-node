@@ -1284,6 +1284,11 @@ IMPORTED_FROM_SRC = {
     [
         ("pyproject.toml", '[tool.pyright]\nextraPaths = ["src"]\n'),
         ("pyproject.toml", '[tool.pytest.ini_options]\npythonpath = "src"\n'),
+        ("pyproject.toml", '[tool.mypy]\nmypy_path = "src"\n'),
+        ("pyproject.toml", '[tool.setuptools.packages.find]\nwhere = ["src"]\n'),
+        ("pyproject.toml", '[tool.setuptools.package-dir]\n"" = "src"\n'),
+        ("pyproject.toml", '[tool.poetry]\npackages = [{ include = "common", from = "src" }]\n'),
+        ("pyproject.toml", '[[tool.poetry.packages]]\ninclude = "common"\nfrom = "src"\n'),
         ("pyrightconfig.json", '{"extraPaths": ["./src"]}'),
         (".vscode/settings.json", '{\n  // Pylance\n  "python.analysis.extraPaths": ["${workspaceFolder}/src"],\n}\n'),
     ],
@@ -1314,3 +1319,23 @@ def test_imports_from_a_folder_given_with_path(tmp_path: Path, capsys) -> None:
         paths=["src/"],
     )
     assert {f.name for f in cmap.functions} >= {"app.handler", "common.db.save"}
+
+
+def test_a_pyproject_in_a_subfolder_names_paths_from_there(tmp_path: Path) -> None:
+    files = {f"services/orders/{name}": text for name, text in IMPORTED_FROM_SRC.items()}
+    files["services/orders/pyproject.toml"] = '[tool.pyright]\nextraPaths = ["src", "../../missing"]\n'
+    assert read_project(write(tmp_path, files)).paths == ["services/orders/src/"]
+
+
+def test_pyproject_paths_without_tomllib(monkeypatch) -> None:
+    from code_node.project import _pyproject_paths
+
+    text = (
+        '[project]\nname = "x"\n[tool.pyright]\nextraPaths = [\n  "src",\n  "lib",\n]\n'
+        '[tool.mypy]\nmypy_path = "a:b"\n[tool.setuptools.package-dir]\n"" = "pkgs"\n'
+        '[[tool.poetry.packages]]\ninclude = "app"\nfrom = "apps"\n'
+    )
+    expected = ["src", "lib", "a", "b", "pkgs", "apps"]
+    assert _pyproject_paths(text) == expected
+    monkeypatch.setitem(__import__("sys").modules, "tomllib", None)  # as on Python 3.10
+    assert _pyproject_paths(text) == expected

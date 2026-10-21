@@ -49,10 +49,13 @@ _MAIN_NAMES = ("main", "run", "cli", "app")
 
 _IMPORT_RE = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import|import[ \t]+([\w., \t]+))", re.M)
 
-_PATH_SETTINGS = (  # where a pyproject.toml puts folders on the import path: (table, key)
+_PATH_SETTINGS = (  # where a pyproject.toml puts folders on the import path: (table, key); "" is the key ""
     ("tool.pyright", "extraPaths"),
     ("tool.basedpyright", "extraPaths"),
     ("tool.pytest.ini_options", "pythonpath"),
+    ("tool.mypy", "mypy_path"),
+    ("tool.setuptools.packages.find", "where"),  # where = ["src"]: the packages are in src
+    ("tool.setuptools.package-dir", ""),  # "" = "src": the same
 )
 
 _VSCODE_PATHS_RE = re.compile(r'"python\.(?:analysis|autoComplete)\.extraPaths"\s*:\s*\[(.*?)\]', re.S)
@@ -165,6 +168,7 @@ def read_project(root: str | os.PathLike[str]) -> Project:
             rel = path.relative_to(base).as_posix()
             if len(project.files) >= _MAX_FILES:
                 project.limited = True
+                project.paths = import_paths(base, project.configs)
                 return project
             if path.stat().st_size > _MAX_FILE_BYTES:
                 project.skipped.append(rel)
@@ -172,47 +176,61 @@ def read_project(root: str | os.PathLike[str]) -> Project:
             text = path.read_text("utf-8", "replace")
             project.files[rel] = text
             project.modules[rel] = _module_name(path, base)
-    project.paths = import_paths(base)
+    project.paths = import_paths(base, project.configs)
     return project
 
 
-def _toml_lists(text: str, table: str, key: str) -> list[str]:
+def _pyproject_paths(text: str) -> list[str]:
     """
-    A pyproject.toml setting that's a list of strings, or one string: ["src"] for extraPaths = ["src"].
+    The folders a pyproject.toml puts on the import path, as it writes them: ['src'] for pyright's
+    extraPaths = ["src"], setuptools' where = ["src"] or Poetry's packages = [{include = "app", from = "src"}].
     """
     try:
         import tomllib
-    except ImportError:  # Python 3.10: find the table and the key by hand
-        body = re.search(rf"^\[{re.escape(table)}\]\s*$(.*?)(?=^\[|\Z)", text, re.M | re.S)
-        value = body and re.search(rf"^\s*{key}\s*=\s*(\[.*?\]|\"[^\"]*\"|'[^']*')", body.group(1), re.M | re.S)
-        if not value:
-            return []
-        if value.group(1).startswith("["):
-            return re.findall(r"[\"']([^\"']*)[\"']", value.group(1))
-        return value.group(1)[1:-1].split()
+    except ImportError:  # Python 3.10: find the tables and the keys by hand
+        found: list[str] = []
+        for table, key in _PATH_SETTINGS:
+            body = re.search(rf"^\[{re.escape(table)}\]\s*$(.*?)(?=^\[|\Z)", text, re.M | re.S)
+            name = re.escape(key) if key else "(?:\"\"|'')"
+            value = body and re.search(rf"^\s*{name}\s*=\s*(\[.*?\]|\"[^\"]*\"|'[^']*')", body.group(1), re.M | re.S)
+            if value and value.group(1).startswith("["):
+                found += re.findall(r"[\"']([^\"']*)[\"']", value.group(1))
+            elif value:
+                found += re.split(r"[\s,:]+", value.group(1)[1:-1])
+        for body in re.findall(r"^\[\[?tool\.poetry(?:\.packages)?\]\]?\s*$(.*?)(?=^\[|\Z)", text, re.M | re.S):
+            found += re.findall(r"\bfrom\s*=\s*[\"']([^\"']+)[\"']", body)
+        return [item for item in found if item]
     try:
-        data: object = tomllib.loads(text)
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
         return []
-    for part in [*table.split("."), key]:
-        data = data.get(part) if isinstance(data, dict) else None
-    if isinstance(data, str):
-        return data.split()  # pytest's pythonpath = "src lib" is split on spaces
-    return [str(item) for item in data] if isinstance(data, list) else []
+    found = []
+    for table, key in _PATH_SETTINGS:
+        value: object = data
+        for part in [*table.split("."), key]:
+            value = value.get(part) if isinstance(value, dict) else None
+        if isinstance(value, str):  # pytest's pythonpath = "src lib", mypy's mypy_path = "src:lib"
+            found += re.split(r"[\s,:]+", value)
+        elif isinstance(value, list):
+            found += [str(item) for item in value]
+    packages = data.get("tool", {}).get("poetry", {}).get("packages", [])
+    found += [str(package["from"]) for package in packages if isinstance(package, dict) and "from" in package]
+    return [item for item in found if item]
 
 
-def import_paths(root: Path) -> list[str]:
+def import_paths(root: Path, configs: list[str] | None = None) -> list[str]:
     """
     The folders under root the project puts on the import path, as prefixes of its files' paths ('src/', or '' for
-    root itself): pyright's (and Pylance's) extraPaths, in pyproject.toml, pyrightconfig.json or .vscode/settings.json,
-    and pytest's pythonpath. Folders outside root, or that aren't there, are left out.
+    root itself): what its pyproject.toml files say (configs, from root: pyright's extraPaths, pytest's pythonpath,
+    mypy's mypy_path, where setuptools or Poetry finds the packages), each from its own folder, and pyright's (and
+    Pylance's) extraPaths in pyrightconfig.json or .vscode/settings.json. Folders outside root, or that aren't there,
+    are left out.
     """
-    found: list[str] = []
-    pyproject = root / "pyproject.toml"
-    if pyproject.is_file():
-        text = pyproject.read_text("utf-8", "replace")
-        for table, key in _PATH_SETTINGS:
-            found += _toml_lists(text, table, key)
+    found: list[Path] = []
+    for config in configs if configs is not None else ["pyproject.toml"]:
+        pyproject = root / config
+        if pyproject.is_file():
+            found += [pyproject.parent / item for item in _pyproject_paths(pyproject.read_text("utf-8", "replace"))]
     pyright = root / "pyrightconfig.json"
     if pyright.is_file():
         try:
@@ -220,12 +238,14 @@ def import_paths(root: Path) -> list[str]:
         except ValueError:
             data = {}
         extra = data.get("extraPaths") if isinstance(data, dict) else None
-        found += [str(item) for item in extra] if isinstance(extra, list) else []
+        found += [root / str(item) for item in extra] if isinstance(extra, list) else []
     vscode = root / ".vscode" / "settings.json"
     if vscode.is_file():  # JSON with comments, so the lists are found as text
         for match in _VSCODE_PATHS_RE.finditer(vscode.read_text("utf-8", "replace")):
-            found += re.findall(r'"([^"]*)"', match.group(1))
-    return folder_prefixes(root, [root / item.replace("${workspaceFolder}", ".") for item in found])
+            found += [
+                root / item.replace("${workspaceFolder}", ".") for item in re.findall(r'"([^"]*)"', match.group(1))
+            ]
+    return folder_prefixes(root, found)
 
 
 def folder_prefixes(root: Path, folders: list[Path]) -> list[str]:
