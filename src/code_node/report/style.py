@@ -170,6 +170,10 @@ _EXTRA_CSS = """\
 .cnd .cg .cn .sb .sep{fill-opacity:.4}
 .cnd .cg .cn .dv{stroke:rgba(127,127,127,.2);stroke-width:1;fill:none}
 .cnd .cg .cn .rw{font:12.5px var(--mono);fill-opacity:.88}
+.cnd .cg .cn .rn{font-size:11px;fill-opacity:.38;font-variant-numeric:tabular-nums}
+.cnd .cg .cn .tg{font-size:11px;font-weight:600;fill-opacity:.5}
+.cnd .cg .cn .sr.off .rw{fill-opacity:.42}
+.cnd .cgw:not(.js) .cg .opn{display:none}
 .cnd .cg .cn .rw.mo{font-family:inherit;font-style:italic;fill-opacity:.55}
 .cnd .cg .cn .pr{font-size:12.5px;fill-opacity:.7}
 .cnd .cg .cn .pr.mo{font-style:italic;fill-opacity:.5}

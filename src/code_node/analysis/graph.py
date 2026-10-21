@@ -34,6 +34,25 @@ class CodeSpan:
 
 
 @dataclass
+class GraphStep:
+    """
+    A row of a function's box: one thing it does, in the order the code does it. A call to one of its own functions, or
+    an AWS call, a library's call or an HTTP request.
+    """
+
+    text: str  # 'save()', 'S3 PutObject', 'Redis GET cart:{user}', 'POST https://...'; '+3 more' for the rows left out
+    line: int
+    kind: str = "call"  # 'call', an AWS or library call's access ('reads', 'writes', 'sends', 'runs', 'signs'),
+    # 'http', or 'more' for the rows left out
+    target: str = ""  # the box it leads to, by id: a function's box, or what it reaches; '' for a function not drawn
+    leads: list[str] = field(default_factory=list)  # a function not drawn: the boxes reached through it
+    depth: int = 0  # the loops and ifs around it in its function
+    loop: bool = False  # in a loop: once per item
+    when: str = ""  # made only under an if: its test
+    name: str = ""  # a call to one of its own functions: the function, as module.name
+
+
+@dataclass
 class GraphNode:
     """
     A box in how_it_works()'s graph: what calls the code (the event), what it's configured with (its environment),
@@ -57,6 +76,7 @@ class GraphNode:
     # point's logo, when its platform names one: 'fastapi-icon'
     name: str = ""  # a function's box: the function, as module.name ('orders.repo.save')
     history: History | None = None  # a function's box: what git says about its lines
+    steps: list[GraphStep] = field(default_factory=list)  # a function's box: what it does, in order
 
 
 @dataclass
@@ -161,13 +181,17 @@ def _aws_node(service: str) -> str:
     return "aws-" + (re.sub(r"[^a-z0-9]+", "-", service.lower()).strip("-") or "service")
 
 
-_GRAPH_FUNCTIONS = 24  # functions code_graph() draws, at most (the ones that lead to the most code first)
+_GRAPH_FUNCTIONS = 14  # functions code_graph() draws, at most (the ones that lead to the most code first)
 
 _REACH_WEIGHT = 30  # lines of code an AWS call, HTTP request or environment variable counts as, picking boxes
 
 _GRAPH_DEPTH = 5  # ...and how deep below the handler
 
 _GRAPH_LINES = 5  # lines a box lists before "+3 more"
+
+_GRAPH_STEPS = 6  # rows of what a function does, at most, besides the ones that lead to a box (always shown)
+
+_STRUCTURE = ("loop", "if", "else", "except")  # the steps around a line that make it run more than once, or not always"
 
 
 _SPAN_BEFORE, _SPAN_AFTER = 2, 3  # lines shown around each place a box is about
@@ -260,12 +284,16 @@ def _pick(
     room: int,
     max_depth: int,
     first: bool = False,
+    reaching: frozenset[str] = frozenset(),
 ) -> list[str]:
     """
     The functions the graph draws besides the entry point, at most `room` of them and max_depth calls deep: grown out
     from the entry point (and what runs at import), each time taking the one the drawn boxes call that leads to the
     most code, so the boxes are the ones that do the work and each is joined to one above it. first takes every
     function the entry point calls before the rest.
+    When they don't all fit, a function that only passes on to one other (it calls one of its own functions and
+    reaches nothing itself: not in `reaching`) is passed through instead of taking a box: the one it calls is offered
+    in its place, and drawn joined to the box above by an arrow through it.
     """
 
     def depth(name: str) -> int:
@@ -288,6 +316,17 @@ def _pick(
         if name not in level:
             offer(name)
     picked: list[str] = []
+    passed: set[str] = set()  # functions passed through
+
+    def passes_on(name: str) -> str:  # the one function it calls, when it only passes on to it
+        if name in reaching:
+            return ""
+        called = {child for child, _ in children.get(name, []) if child in by_name and child != name}
+        if len(called) != 1:
+            return ""
+        (child,) = called
+        return child if child not in picked and child not in passed and depth(child) <= max_depth else ""
+
     if first:
         for child, _ in children.get(entry, []):
             if child in by_name and child != entry and child not in picked and depth(child) <= max_depth:
@@ -298,7 +337,12 @@ def _pick(
                     offer(child)
     while queue and len(picked) < room:
         name = heapq.heappop(queue)[3]
-        if name in picked:
+        if name in picked or name in passed:
+            continue
+        child = passes_on(name)
+        if child:
+            passed.add(name)
+            offer(child)
             continue
         picked.append(name)
         for child, _ in children.get(name, []):
@@ -342,6 +386,187 @@ def _focused(cmap: CodeMap, focus: str) -> CodeMap:
         spots=[s for s in cmap.spots if s.function in scope and not s.startup],
         routes=[r for r in cmap.routes if r[2] in scope],
     )
+
+
+def _bodies(cmap: CodeMap) -> dict[str, CodeStep]:
+    """
+    Each function's 'def' step with its lines under it, from the outline, by module.name.
+    """
+    found: dict[str, CodeStep] = {}
+    for root in cmap.steps:
+        for step in root.walk():
+            if step.kind == "def" and step.name and not step.seen and step.name not in found:
+                found[step.name] = step
+    return found
+
+
+def _frames(body: CodeStep | None) -> list[tuple[int, int, str, str]]:
+    """
+    The loops and branches in a function's own lines (not the functions it calls): (first line, last line, kind, code).
+    """
+    out: list[tuple[int, int, str, str]] = []
+
+    def last(step: CodeStep) -> int:
+        return max([step.line] + [last(s) for s in step.steps])
+
+    def visit(steps: list[CodeStep]) -> None:
+        for step in steps:
+            if step.kind in _STRUCTURE:
+                out.append((step.line, last(step), step.kind, step.code))
+            visit(step.steps)
+
+    if body is not None:
+        visit(body.steps)
+    return out
+
+
+def _steps(
+    f: CodeFunction,
+    cmap: CodeMap,
+    children: dict[str, list[tuple[str, str]]],
+    ids: dict[str, str],
+    by_name: dict[str, CodeFunction],
+    frames: list[tuple[int, int, str, str]],
+) -> list[GraphStep]:
+    """
+    What a function does, in the order its lines do it: its calls to its own functions, its AWS and library calls and
+    its HTTP requests, each with the box it leads to, how deep in loops and ifs it is, and whether it's in a loop or
+    under an if. A line in a loop's or an if's own header runs as often as the line itself, so isn't counted inside it.
+    Its loops are the ones in its own lines: a function called in a loop isn't in one itself. Calls in a row to one
+    service, the same way, are one row ('SQLite SELECT (+2)'). Past _GRAPH_STEPS rows, the rest are left out, counted
+    in a last '+3 more' row, but never a call to a function drawn, the first row to each service, nor the first call
+    through which each other box is reached.
+    """
+    reached: dict[str, set[str]] = {}  # a function not drawn -> the boxes reached through it
+
+    def through(name: str) -> set[str]:
+        if name not in reached:
+            reached[name] = set()
+            boxes: set[str] = set()
+            for c in [c for c in cmap.aws if c.function == name and not c.startup]:
+                boxes.add(_aws_node(c.service))
+            for lc in [c for c in cmap.library_calls if c.function == name and not c.startup]:
+                boxes.add(_service_node(lc.library, lc.service))
+            if any(s.kind == "http" and s.function == name for s in cmap.spots):
+                boxes.add("http")
+            for child, _ in children.get(name, []):
+                if child in ids:
+                    boxes.add(ids[child])
+                elif child in by_name:
+                    boxes |= through(child)
+            reached[name] = boxes
+        return reached[name]
+
+    def around(line: int) -> list[tuple[int, int, str, str]]:
+        return [fr for fr in frames if fr[0] < line <= fr[1]]
+
+    def test(line: int) -> str:
+        tests = [fr for fr in around(line) if fr[2] != "loop"]
+        if not tests:
+            return ""
+        code = tests[-1][3].rstrip(":")
+        return code[3:] if code.startswith("if ") else code
+
+    rows: list[GraphStep] = []
+    for child, line in children.get(f.name, []):
+        if child not in by_name or not line.isdigit():
+            continue
+        at = int(line)
+        rows.append(
+            GraphStep(
+                f"{_short_name(child)}()",
+                at,
+                target=ids.get(child, ""),
+                leads=[] if child in ids else sorted(through(child)),
+                depth=len(around(at)),
+                loop=any(fr[2] == "loop" for fr in around(at)),
+                when=by_name[child].when.get(f"{f.name} line {line}", "") or test(at),
+                name=child,
+            )
+        )
+    for c in cmap.aws:
+        if c.function == f.name and not c.startup:
+            rows.append(
+                GraphStep(
+                    f"{_service_name(c.service)} {c.operation}",
+                    c.line,
+                    c.access,
+                    _aws_node(c.service),
+                    depth=len(around(c.line)),
+                    loop=any(fr[2] == "loop" for fr in around(c.line)),
+                    when=test(c.line),
+                )
+            )
+    for lc in cmap.library_calls:
+        if lc.function == f.name and not lc.startup:
+            rows.append(
+                GraphStep(
+                    f"{lc.service} {lc.row}",
+                    lc.line,
+                    lc.access,
+                    _service_node(lc.library, lc.service),
+                    depth=len(around(lc.line)),
+                    loop=any(fr[2] == "loop" for fr in around(lc.line)),
+                    when=test(lc.line),
+                )
+            )
+    for spot in cmap.spots:
+        if spot.kind == "http" and spot.function == f.name and not spot.startup:
+            rows.append(
+                GraphStep(
+                    spot.detail,
+                    spot.line,
+                    "http",
+                    "http",
+                    depth=len(around(spot.line)),
+                    loop=any(fr[2] == "loop" for fr in around(spot.line)),
+                    when=test(spot.line),
+                )
+            )
+    seen: set[tuple[str, int, str]] = set()
+    ordered: list[GraphStep] = []
+    runs: list[int] = []  # how many calls each row stands for
+    for row in sorted(rows, key=lambda r: r.line):  # stable: calls on one line stay in the order they're read
+        if (row.text, row.line, row.kind) in seen:
+            continue
+        seen.add((row.text, row.line, row.kind))
+        last = ordered[-1] if ordered else None
+        if last and row.kind != "call" and (last.kind, last.target) == (row.kind, row.target):
+            runs[-1] += 1  # calls in a row to one service, the same way: one row
+            last.loop |= row.loop
+            last.when = last.when if last.when == row.when else ""
+            continue
+        ordered.append(row)
+        runs.append(1)
+    for row, run in zip(ordered, runs):
+        if run > 1:
+            row.text += f" (+{run - 1})"
+    if len(ordered) <= _GRAPH_STEPS:
+        return ordered
+    needed: set[int] = set()  # every call to a function drawn, the first way to each service, and the first call
+    # through which each other box is reached
+    firsts: set[tuple[str, str]] = set()
+    for k, row in enumerate(ordered):
+        if row.kind == "call" and row.target:
+            needed.add(k)
+        elif row.kind != "call" and (row.kind, row.target) not in firsts:
+            firsts.add((row.kind, row.target))
+            needed.add(k)
+    led_to = {row.target for k, row in enumerate(ordered) if k in needed}
+    for k, row in enumerate(ordered):
+        if row.kind == "call" and not row.target and set(row.leads) - led_to:
+            led_to |= set(row.leads)
+            needed.add(k)
+    room = max(_GRAPH_STEPS - 1 - len(needed), 0)
+    kept = []
+    for k, row in enumerate(ordered):
+        if k in needed:
+            kept.append(row)
+        elif room:
+            kept.append(row)
+            room -= 1
+    left = len(ordered) - len(kept)
+    return kept + ([GraphStep(f"+{left} more", 0, "more")] if left else [])
 
 
 def code_graph(
@@ -403,18 +628,54 @@ def code_graph(
     room = max_functions - entry_is_function
     if focus:  # a function opened on its own shows every call it makes
         room = max(room, len({child for child, _ in children.get(entry, [])}))
-    picked = _pick(cmap, entry, start_key, children, level, weight, order, room, max_depth, first=bool(focus))
+    reaching = frozenset(
+        [c.function for c in cmap.aws]
+        + [c.function for c in cmap.library_calls]
+        + [e.function for e in cmap.env]
+        + [s.function for s in cmap.spots if s.kind == "http"]
+        + [key for _, _, key in cmap.routes]
+    )
+    picked = _pick(
+        cmap, entry, start_key, children, level, weight, order, room, max_depth, first=bool(focus), reaching=reaching
+    )
     shown = ([by_name[entry]] if entry_is_function else []) + sorted(
         (by_name[name] for name in picked), key=lambda f: (level.get(f.name, f.depth + 1), order[f.name])
     )
     graph.hidden = len(cmap.functions) - len(shown)
     graph.too_deep = sum(1 for f in cmap.functions if level.get(f.name, f.depth + 1) > max_depth)
     ids = {f.name: f"f{i}" for i, f in enumerate(shown)}
+
+    # a box none of whose callers is drawn (they were passed through): an arrow from the nearest boxes above, through
+    # the functions between
+    through: dict[str, list[tuple[str, list[str]]]] = {}  # a function -> (a caller drawn, the functions between)
+    for f in shown:
+        if f.name == entry or any(caller in ids or caller == start_key for caller, _ in parents.get(f.name, [])):
+            continue
+        found: list[tuple[str, list[str]]] = []
+        seen, queue = {f.name}, [(f.name, list[str]())]
+        while queue:
+            key, between = queue.pop(0)
+            for caller, _ in parents.get(key, []):
+                if caller in seen:
+                    continue
+                seen.add(caller)
+                if caller in ids or caller == start_key:
+                    found.append((caller, between))
+                elif caller in by_name:
+                    queue.append((caller, [caller, *between]))
+        if found:
+            through[f.name] = found
+    passed = {name for found in through.values() for _, between in found for name in between}
+    via_children: dict[str, list[str]] = defaultdict(list)
+    for name, found in through.items():
+        for caller, _ in found:
+            via_children[caller].append(name)
+
     drawn_level = {entry: 0, start_key: 0}  # calls from the entry point through the boxes drawn: each box's column
     todo = [entry, start_key]
     while todo:
         key = todo.pop(0)
-        for child, _ in children.get(key, []):
+        for child in [child for child, _ in children.get(key, [])] + via_children.get(key, []):
             if child in ids and child not in drawn_level:
                 drawn_level[child] = drawn_level[key] + 1
                 todo.append(child)
@@ -519,6 +780,13 @@ def code_graph(
                     when=_when(f, [where for where in f.called_from if where.rpartition(" line ")[0] == caller]),
                 )
             )
+    for name, found in through.items():
+        for caller, between in found:
+            source = "start" if caller == start_key else ids[caller]
+            if (source, ids[name]) not in seen_calls:
+                seen_calls.add((source, ids[name]))
+                said = ", ".join(f"{_short_name(k)}()" for k in between)
+                edges.append(GraphEdge(source, ids[name], "call", f"via {said}", indirect=True))
     has_input = not focus and (bool(cmap.event) or platform.draws_input)
     if has_input:
         edges.insert(0, GraphEdge("event", entry_id, "event", "its input"))
@@ -801,7 +1069,7 @@ def code_graph(
             dict.fromkeys(
                 f"{_short_name(child)}()"
                 for child, _ in children.get(f.name, [])
-                if child in by_name and child not in ids
+                if child in by_name and child not in ids and child not in passed
             )
         )
         graph.nodes.append(
@@ -815,6 +1083,7 @@ def code_graph(
                 warned_tip(
                     f"{f.name}({f.args}) in {f.file}, {_plural(f.lines, 'line')}"
                     + (f": {f.doc}" if f.doc else "")
+                    + (f"\nCalled only when {when}" if (when := _when(f, f.called_from)) else "")
                     + (
                         f"\nIt calls {_plural(len(more), 'function')} the graph leaves out: {', '.join(more)}"
                         if more
@@ -838,6 +1107,10 @@ def code_graph(
                 history=f.history,
             )
         )
+    bodies = _bodies(cmap)
+    nodes_by_id = {n.id: n for n in graph.nodes}
+    for f in shown:
+        nodes_by_id[ids[f.name]].steps = _steps(f, cmap, children, ids, by_name, _frames(bodies.get(f.name)))
     out_column = 1 + max([n.column for n in graph.nodes if n.kind in ("handler", "function", "start")] + [1])
     for node in reach:
         node.column = out_column

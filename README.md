@@ -80,7 +80,7 @@ string is flagged.
 | `-e`, `--entry` | `module.function`, `module.Class.method`, `file.py[:function]`, or part of a name |
 | `-l`, `--list` | List entry points and stop |
 | `--plugins` | List platforms, libraries and deploy files and stop |
-| `--all` | Draw every function (default: 24 functions, 5 calls deep) |
+| `--all` | Draw every function (default: 14 functions, 5 calls deep) |
 | `--depth N`, `--functions N` | Your own limits |
 | `--serve`, `--port N` | Serve on localhost, redraw on change |
 | `--mermaid` | Print the graph as Mermaid |

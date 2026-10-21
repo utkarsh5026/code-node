@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .analysis.graph import code_graph
+from .analysis.graph import _GRAPH_DEPTH, _GRAPH_FUNCTIONS, code_graph
 from .analysis.mapping import entry_file, map_code
 from .analysis.model import CodeMap
 from .deploys import find_deployment
@@ -19,9 +19,9 @@ from .report.build import page_blocks
 from .report.editor import editor_link
 from .report.style import render_page
 
-GRAPH_FUNCTIONS = 24  # functions the graph draws by default, the ones that lead to the most code first
+GRAPH_FUNCTIONS = _GRAPH_FUNCTIONS  # functions the graph draws by default, the ones that lead to the most code first
 
-GRAPH_DEPTH = 5  # ...and how many calls deep
+GRAPH_DEPTH = _GRAPH_DEPTH  # ...and how many calls deep
 
 _ALL = 10_000  # --all: no limit that a real codebase reaches
 
