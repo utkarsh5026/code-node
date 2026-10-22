@@ -443,6 +443,55 @@ _EXTRA_CSS = """\
 .cnd .walk .wfacts code{font:12.5px var(--mono)}
 .cnd .walk :is(.wfm,.wfv){opacity:.6}
 .cnd .walk .wthen{margin-top:10px;font-size:12px;opacity:.6}
+.cnd .cdf{margin:6px 0 18px;--fe:rgba(127,127,127,.85);--fl:light-dark(#7c3aed,#a78bfa);--fa:light-dark(#d97706,#f59e0b);--fx:light-dark(#dc2626,#f87171);--fbg:var(--jp-layout-color0,var(--vscode-editor-background,Canvas))}
+.cnd .cdf .fhd{margin:0 0 6px;font-size:13.5px}.cnd .cdf .fhd small{opacity:.6;margin-left:6px}
+.cnd .cdfc{width:fit-content;max-width:100%;overflow:auto;border:1px solid rgba(127,127,127,.2);border-radius:14px;background-color:rgba(127,127,127,.035);background-attachment:local;background-size:18px 18px;
+ background-image:radial-gradient(circle at 1px 1px,rgba(127,127,127,.3) 1px,transparent 0);background-position:9px 9px}
+.cnd .cdfc>svg{display:block;max-width:none;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.cnd .cdf svg text{fill:currentColor}
+.cnd .cdf :is(.mono,.fr,.fp text,.fq text,.ff){font-family:var(--mono)}
+.cnd .cdf .fe{fill:none;stroke:var(--fe);stroke-width:1.6;stroke-linejoin:round}.cnd .cdf .fh{fill:var(--fe)}
+.cnd .cdf .fe.back{stroke:var(--fl);stroke-dasharray:5 4}.cnd .cdf .fh.back{fill:var(--fl)}
+.cnd .cdf .fe.fail{stroke:var(--fa);stroke-dasharray:5 4}.cnd .cdf .fh.fail{fill:var(--fa)}
+.cnd .cdf .fj{fill:var(--fe)}
+.cnd .cdf .fw rect{fill:var(--fbg);stroke:rgba(127,127,127,.3)}.cnd .cdf .fw text{font-size:11.5px;font-weight:650;fill-opacity:.65}
+.cnd .cdf :is(.fwyes,.fwno,.fwl,.fwf) text{fill-opacity:1}
+.cnd .cdf .fwyes text,.cnd .fkey .fwyes{fill:light-dark(#15803d,#4ade80);color:light-dark(#15803d,#4ade80)}
+.cnd .cdf .fwno text,.cnd .fkey .fwno{fill:light-dark(#b91c1c,#f87171);color:light-dark(#b91c1c,#f87171)}
+.cnd .cdf .fwl text{fill:var(--fl)}.cnd .cdf .fwf text{fill:var(--fa)}
+.cnd .cdf .fbg{fill:var(--fbg);stroke:rgba(127,127,127,.32);filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.07)) drop-shadow(0 6px 16px rgba(15,23,42,.06))}
+.cnd .cdf .fbd{fill:var(--t,rgba(127,127,127,.12));stroke:var(--c,rgba(127,127,127,.5));stroke-opacity:.22}
+.cnd .cdf .fbi{fill:none;stroke:var(--c,currentColor);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.cnd .cdf .fbi.fill{fill:var(--c,currentColor);stroke:none}
+.cnd .cdf .fbl,.cnd .cdf .fgt{font:600 15px Georgia,serif}
+.cnd .cdf .ft{font-size:13.5px;font-weight:650}.cnd .cdf .ft.mono{font-size:13px}
+.cnd .cdf .fs{font-size:12px;fill-opacity:.62}.cnd .cdf .fr{font-size:12px;fill-opacity:.88}
+.cnd .cdf .ff{font-size:11.5px;fill:light-dark(#2563eb,#60a5fa)}.cnd .cdf a:hover .ff{text-decoration:underline}
+.cnd .cdf .fl{stroke:rgba(127,127,127,.2);fill:none}
+.cnd .cdf .fdot{fill:var(--c,rgba(127,127,127,.6))}
+.cnd .cdf .k-event{--c:#16a34a;--t:rgba(22,163,74,.12)}.cnd .cdf .k-env{--c:#0d9488;--t:rgba(13,148,136,.13)}
+.cnd .cdf .k-reads{--c:#3b82f6;--t:rgba(59,130,246,.11)}.cnd .cdf .k-writes{--c:#ea580c;--t:rgba(234,88,12,.11)}
+.cnd .cdf .k-sends{--c:#db2777;--t:rgba(219,39,119,.1)}.cnd .cdf .k-runs{--c:#9333ea;--t:rgba(147,51,234,.1)}
+.cnd .cdf .k-warn{--c:#f59e0b}.cnd .cdf .k-quiet{--c:#64748b}
+.cnd .cdf .k-entry .fbg{stroke:currentColor;stroke-opacity:.9;stroke-width:1.5}.cnd .cdf .k-entry .fbd{fill:currentColor;stroke:none}.cnd .cdf .k-entry .fbi.fill{fill:var(--fbg)}
+.cnd .cdf .fq path{fill:light-dark(#fffbeb,rgba(245,158,11,.1));stroke:var(--fa);stroke-width:1.5}.cnd .cdf .fq text{font-size:13px;font-weight:600}
+.cnd .cdf .fx .fxb{fill:rgba(127,127,127,.04);stroke:rgba(127,127,127,.5);stroke-dasharray:6 4}
+.cnd .cdf .fxt{font-size:13px;font-weight:650}.cnd .cdf .fgl{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.cnd .cdf .fgl.fill{fill:currentColor;stroke:none}
+.cnd .cdf .floop .fxb{fill:light-dark(rgba(124,58,237,.05),rgba(167,139,250,.07));stroke:var(--fl);stroke-opacity:.5}.cnd .cdf .floop .fgl{stroke:var(--fl)}
+.cnd .cdf .ftry .fxb{fill:rgba(217,119,6,.04);stroke:var(--fa);stroke-opacity:.6}.cnd .cdf .ftry .fgl{stroke:var(--fa)}
+.cnd .cdf .felse .fgl{stroke-opacity:.6}
+.cnd .cdf .fp rect{fill:var(--fbg);stroke:rgba(127,127,127,.45);stroke-width:1.3}.cnd .cdf .fp text{font-size:12.5px}
+.cnd .cdf .fret rect{fill:currentColor;stroke:none}.cnd .cdf .fret text{fill:var(--fbg)}.cnd .cdf .fret .fgl.fill{fill:var(--fbg)}
+.cnd .cdf .fraise rect{fill:light-dark(rgba(220,38,38,.07),rgba(248,113,113,.1));stroke:var(--fx)}.cnd .cdf .fraise text{fill:var(--fx)}.cnd .cdf .fraise .fgl.fill{fill:var(--fx)}
+.cnd .cdf .fwarn rect{fill:rgba(245,158,11,.08);stroke:var(--fa)}.cnd .cdf .fwarn text{fill:var(--fa)}.cnd .cdf .fwarn .fgl.fill{fill:var(--fa)}
+.cnd .cdf .fgx{stroke:#fff;stroke-width:2;stroke-linecap:round}
+.cnd .cdf .fskip rect{fill:light-dark(rgba(124,58,237,.05),rgba(167,139,250,.08));stroke:var(--fl);stroke-dasharray:4 3}.cnd .cdf .fskip text{fill:var(--fl)}.cnd .cdf .fskip .fgl{stroke:var(--fl)}
+.cnd .fmore{opacity:.7;font-size:13px}
+.cnd .fkey{display:flex;flex-wrap:wrap;gap:8px 18px;margin:2px 0 8px;font-size:12.5px;align-items:center;opacity:.85}
+.cnd .fkey svg{vertical-align:middle;margin-right:6px}.cnd .fkey b{font-weight:650}
+.cnd .fkey .kq{fill:light-dark(#fffbeb,rgba(245,158,11,.12));stroke:light-dark(#d97706,#f59e0b);stroke-width:1.4}
+.cnd .fkey .kl{fill:none;stroke:light-dark(#7c3aed,#a78bfa);stroke-dasharray:4 3}
+.cnd .fkey .kr{fill:currentColor}.cnd .fkey .kx{fill:light-dark(rgba(220,38,38,.08),rgba(248,113,113,.1));stroke:light-dark(#dc2626,#f87171)}
+.cnd .fkey .kf{stroke:light-dark(#d97706,#f59e0b);stroke-dasharray:4 3;stroke-width:1.6}
 .cnd .walk .wf{display:none;position:absolute;left:var(--lw);right:0;top:var(--ch);bottom:0;flex-direction:column;border-left:1px solid rgba(127,127,127,.2);background:var(--bg)}
 .cnd .walk .wfn>.wr:checked~.wf{display:flex;animation:cnd-fade .25s ease}
 .cnd .walk .wfh{animation:cnd-in .25s ease}

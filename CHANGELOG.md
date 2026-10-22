@@ -4,6 +4,17 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+### Added
+
+- A Decisions tab beside the graph draws each call as a flowchart, top to bottom: each `if` as a question with an
+  arrow for yes and for no, `elif` and `match` as the next question, loops as boxes with an arrow back to their top,
+  `try` with the way taken when a line in it raises, and where the call returns or raises. The usual path runs down
+  the middle, and an answer that ends early (returns, raises, skips to the next item, leaves the loop) sits beside it.
+  A call into the code's own functions that decides things too is opened in place, or, deeper down, gets a flow of
+  its own its box links to. A web app has a flow for each route. It needs no JavaScript.
+- Step by step says when a branch ends in `continue` or `break`, and an `except` that only continues is no longer
+  left out.
+
 ## [0.9.0] - 2026-10-22
 
 ### Added

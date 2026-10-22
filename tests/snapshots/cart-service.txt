@@ -66,6 +66,11 @@ flowchart LR
   classDef warn stroke:#f59e0b,stroke-width:2px
   class env,f0,f3,aws_dynamodb,aws_sns,lib_sql_postgresql,lib_llm_openai warn
 
+-- How on_checkout() decides what to do: each question it asks, and where each answer goes --
+  on_checkout()  cart/app.py line 20
+   25  for item in cart['items']  (back to its top for each)
+   32  returns {'statusCode': 200, 'body': json.dumps(receipt)}
+
 -- When Python imports it, once, before the first call --
    13  from .assistant import summary
            ↳ cart/assistant.py, run when it's imported

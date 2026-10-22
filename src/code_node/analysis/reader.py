@@ -51,6 +51,7 @@ from .syntax import (
     _doc_line,
     _ends_early,
     _is_main_guard,
+    _jump,
     _names_in,
     _negated,
     _parse,
@@ -548,10 +549,14 @@ class _CodeReader:
             frame.guards.append(_negated(stmt.test))
             orelse = self._block(stmt.orelse, frame)
             frame.guards.pop()
-            if orelse:
-                rest = [CodeStep(frame.file, stmt.orelse[0].lineno - 1, "else:", "else", steps=orelse)]
-        if head.notes or head.calls or body or rest:
-            return [self._step(stmt, frame, f"if {test}:", "if", head, body), *rest]
+            ends = _jump(stmt.orelse)
+            if orelse or ends:
+                rest = [CodeStep(frame.file, stmt.orelse[0].lineno - 1, "else:", "else", steps=orelse, ends=ends)]
+        ends = _jump(stmt.body)
+        if head.notes or head.calls or body or rest or ends:
+            step = self._step(stmt, frame, f"if {test}:", "if", head, body)
+            step.ends = ends
+            return [step, *rest]
         return []
 
     def _with(self, stmt: Any, frame: _Frame) -> list[CodeStep]:
@@ -628,8 +633,10 @@ class _CodeReader:
             if silent:
                 code = " ".join([header] + [_unparse(s, 40) for s in h.body])
                 self._spot("swallow", frame.file, h.lineno, frame.function, code)
-            if hbody or head.notes:
+            ends = _jump(h.body)
+            if hbody or head.notes or ends:
                 handlers.append(self._step(h, frame, header, "except", head, hbody))
+                handlers[-1].ends = ends
         orelse = self._block(stmt.orelse, frame)
         final = self._block(stmt.finalbody, frame)
         if not (body or handlers or orelse or final):

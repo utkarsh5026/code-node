@@ -76,6 +76,13 @@ flowchart LR
   classDef warn stroke:#f59e0b,stroke-width:2px
   class f7,http warn
 
+-- How lambda_handler() decides what to do: each question it asks, and where each answer goes --
+  lambda_handler()  orders/handler.py line 30
+   32  for record in event['Records']  (back to its top for each)
+   35    for order in read_orders(bucket, key)  (back to its top for each)
+   36      check(order)?  yes: goes on · no: logs a warning, then skips to the next item
+   42  returns {'saved': saved}
+
 -- When Python imports it, once, before the first call --
    12  from .notify import announce
            ↳ orders/notify.py, run when it's imported
@@ -95,7 +102,7 @@ flowchart LR
    19          ↳ def read_orders(bucket, key):   # orders/handler.py
    21              body = s3.get_object(Bucket=bucket, Key=key)['Body'].read()   # S3 GetObject (reads) · Bucket ← event Records[].s3.bucket.name · Key ← event Records[].s3.object.key
    22              return [json.loads(line) for line in body.splitlines() if line]
-   36        if not check(order):
+   36        if not check(order):   # then continue
    25            ↳ def check(order):   # orders/handler.py
    27                return bool(order.get('id')) and bool(order.get('customer')) and (order.get('total', 0) > 0)
    37          log.warning('skipping %s', order.get('id'))   # logs a warning

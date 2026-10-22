@@ -90,6 +90,19 @@ flowchart LR
   classDef warn stroke:#f59e0b,stroke-width:2px
   class f3,f4,f7,lib_sql_postgresql,http warn
 
+-- How each route decides what to do: each question it asks, and where each answer goes --
+  get_book()  books/routes.py line 28  (GET /books/{book_id})
+   30  cached?  yes: returns json.loads(cached) · no: goes on
+   34  returns found
+  search()  books/routes.py line 38  (GET /books)
+       (no decisions: one path from start to end)
+  add_review()  books/routes.py line 43  (POST /books/{book_id}/reviews)
+       (no decisions: one path from start to end)
+  set_cover()  books/routes.py line 49  (PUT /books/{book_id}/cover)
+       (no decisions: one path from start to end)
+  export()  books/routes.py line 56  (GET /books/{book_id}/export)
+       (no decisions: one path from start to end)
+
 -- When Python imports it, once, before the first call --
     7  from . import routes
            ↳ books/routes.py, run when it's imported

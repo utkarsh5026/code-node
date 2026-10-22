@@ -35,6 +35,7 @@ class CodeStep:
     # [('S3 PutObject Bucket', 'env ARCHIVE_BUCKET')]
     when: list[str] = field(default_factory=list)  # a 'def' step: the tests of the ifs around the line calling it,
     # outermost first: ['args.command == "init"'], ['check(order)'] after `if not check(order): continue`
+    ends: str = ""  # an 'if', 'else' or 'except' whose lines end by leaving its loop: 'continue' or 'break'
 
     def walk(self) -> Iterable[CodeStep]:
         """
