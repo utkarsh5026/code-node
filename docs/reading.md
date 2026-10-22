@@ -1,6 +1,6 @@
 # Read the map
 
-What each tab of the page shows. The page is two tabs, with the entry point and the folder at the right of them.
+What each tab of the page shows. The page is three tabs, with the entry point and the folder at the right of them.
 { .gist }
 
 ## The tabs { #order }
@@ -8,6 +8,7 @@ What each tab of the page shows. The page is two tabs, with the entry point and 
 | Tab | Tells you |
 | --- | --- |
 | Graph | The paths: what comes in, who calls whom, and what it reaches |
+| Decisions | Each question the code asks, and where each answer goes |
 | Step by step | Every line that matters, in the order it runs |
 
 ## The graph { #graph }
@@ -80,9 +81,43 @@ and the boxes it calls are stacked in the same order, so you can read down the b
     every function at once. This is the one part of the page that needs JavaScript; without it the link isn't shown,
     and the Step by step tab has every call.
 
+## Decisions { #decisions }
+
+The second tab draws each call as a flowchart, top to bottom, so you can see what decides which way the code goes.
+{ .gist }
+
+It starts with what comes in and the entry point, then has a box for each line that does something, in the words
+Step by step uses ("Takes `bucket`, `key` from the event"). A call into one of the code's own functions is a box
+listing what it reaches, with the graph's logos.
+
+| Shape | Is |
+| --- | --- |
+| Box pointed at both ends | An `if`: the test, with **yes** and **no** on its two arrows. An `elif` is the next question on the no arrow, and so is each `case` of a `match` |
+| Dashed box with an arrow back to its top | A loop: its lines, and the arrow back for the next item ("next order") |
+| Dashed amber arrow | Out of a `try`, to what runs when a line in it raises |
+| Black pill | Where the call returns |
+| Red pill | Where it raises |
+| Dashed purple pill | `continue` or `break`: skips to the next item, or leaves the loop |
+
+The answer that goes on runs down the middle, and one that ends early (returns, raises, skips to the next item, leaves
+the loop) sits beside it, so the usual path reads as one line. `if not check(order): continue` is asked as
+`check(order)?`, with yes going on and no skipping to the next order.
+
+![The Decisions tab](images/decisions-light.webp#only-light){ loading=lazy }
+![The Decisions tab](images/decisions-dark.webp#only-dark){ loading=lazy }
+
+??? more "Calls that decide things too"
+    A call to one of the code's own functions that makes decisions of its own is opened in place: a box with its name,
+    holding its flow, whose returns go back to the caller. Past two calls deep, or when it would be very tall, it's a
+    box that says how many decisions are inside, and links to its flow under the first one. A web app has a flow for
+    each of its routes, each starting with its method and path.
+
+!!! tip "Worth knowing"
+    Point at a box, a question or an end to see the line of code it's for.
+
 ## Step by step { #steps }
 
-The tab beside the graph walks through the code in the order it runs, as a debugger steps through it.
+The third tab walks through the code in the order it runs, as a debugger steps through it.
 { .gist }
 
 The list on the left has every line that does something, each said in a few plain words ("Takes `bucket` from the

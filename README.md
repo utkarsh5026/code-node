@@ -37,6 +37,7 @@ cd your/repo && code-node
 | | |
 | --- | --- |
 | 🗺️ **Graph** | What comes in, who calls whom, what each path reaches. AWS calls coloured by kind (read, write, send, run); ↻ marks loops |
+| 🔀 **Decisions** | Each call as a flowchart: every `if` a question with a yes and a no arrow, loops, `try`, where it returns or raises |
 | 👣 **Step by step** | Walk the code in run order, like a debugger: Next, Skip call, Finish, arrow keys |
 | 🔌 **Plugins** | boto3, Redis, SQL (sqlite3, psycopg, PyMySQL, asyncpg, SQLAlchemy), MongoDB, OpenAI, Anthropic |
 | 📄 **Deploy checks** | Reads SAM `template.yaml` / `serverless.yml`: unset variables, IAM calls the role won't allow, timeouts that don't fit |

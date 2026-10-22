@@ -142,6 +142,8 @@ def test_services_show_their_real_logos(tmp_path: Path) -> None:
     page = render_page(page_blocks_for(project, "app.handler"), "x")
     assert page.count('<svg class="logo"') == 4  # SQLite, Redis, MongoDB, Anthropic
     assert 'id="cnl-sqlite-' in page  # each logo's gradient ids get its own prefix, so two logos never share one
+    # the decisions tab draws them too, with ids of its own: a gradient found first in a hidden tab draws nothing
+    assert page.count('<svg class="logo flg"') >= 4 and 'id="cnf-sqlite-' in page
     assert 'fill="#181818"' not in page  # Anthropic's black follows the text colour, for dark mode
 
 
@@ -156,3 +158,126 @@ def test_logos_come_in_two_sizes_as_favicons_do(tmp_path: Path) -> None:
     page = render_page(page_blocks_for(project, "app.lambda_handler"), "x")
     assert page.count('class="logo lgs"') == page.count('class="logo lgf"') == 1  # S3: both, the screen picks
     assert "@media (min-resolution:2dppx)" in page
+
+
+DECIDES = """
+import json
+import os
+
+import boto3
+import requests
+
+sqs = boto3.client("sqs")
+table = boto3.resource("dynamodb").Table(os.environ["TABLE"])
+
+
+def lambda_handler(event, context):
+    body = json.loads(event["body"])
+    kind = body.get("type")
+    if kind == "refund":
+        table.delete_item(Key={"id": body["id"]})
+    elif kind == "charge":
+        charge(body)
+    else:
+        raise ValueError(kind)
+    for item in body["items"]:
+        if not item.get("sku"):
+            continue
+        table.put_item(Item=item)
+    return {"statusCode": 200}
+
+
+def charge(body):
+    for attempt in range(3):
+        try:
+            answer = requests.post(os.environ["PSP_URL"], json=body, timeout=5)
+        except requests.Timeout:
+            continue
+        if answer.ok:
+            break
+    else:
+        sqs.send_message(QueueUrl=os.environ["RETRY_QUEUE"], MessageBody=json.dumps(body))
+"""
+
+
+def _decisions_page(tmp_path: Path, files: dict[str, str], entry: str = "app.lambda_handler") -> str:
+    project = read_project(write(tmp_path / "code", files))
+    return render_page(page_blocks_for(project, entry), "x")
+
+
+def _flow_part(page: str) -> str:
+    return page[page.index('<div class="cdf"') : page.index('<div class="fkey">')]
+
+
+def test_the_decisions_tab_draws_each_question_and_where_its_answers_go(tmp_path: Path) -> None:
+    page = _decisions_page(tmp_path, {"app.py": DECIDES})
+    assert '<label class="tl" for="cnd-tab0-1">Decisions<small>5 decisions</small></label>' in page
+    flow = _flow_part(page)
+    # an elif is the next question on the no path, and else's raise sits beside it
+    assert "kind == &#x27;refund&#x27;?" in flow and "kind == &#x27;charge&#x27;?" in flow
+    assert "Raises ValueError(kind)" in flow and "Deletes" not in flow and "Writes to DynamoDB (DeleteItem)" in flow
+    # `if not x: continue` is asked as x, and its no answer goes on to the next item
+    assert "item.get(&#x27;sku&#x27;)?" in flow and "skips to the next item" in flow
+    assert ">next item</text>" in flow and ">when every one is done</text>" in flow  # the arrow back, and out
+    assert '<g class="fw fwyes">' in flow and '<g class="fw fwno">' in flow
+    assert "Returns {&#x27;statusCode&#x27;: 200}" in flow
+    # charge() decides too, so it's opened in place: its try, the way taken when it raises, the loop's else
+    assert '<g class="fx fcall">' in flow and "charge()" in flow
+    assert "if it raises requests.Timeout" in flow and "skips to the next attempt" in flow
+    assert "leaves the loop" in flow and "If the loop ran to its end, with no break" in flow
+    assert "Sends a message with SQS" in flow
+    assert "<script" not in flow  # drawn whole: it needs no JavaScript
+
+
+def test_a_call_too_deep_to_open_in_place_gets_a_flow_of_its_own(tmp_path: Path) -> None:
+    deep = "".join(
+        f"def {name}(x):\n    if x:\n        return {after}(x)\n    return None\n\n\n"
+        for name, after in zip("abcd", ["b", "c", "d", "int"])
+    )
+    page = _decisions_page(tmp_path, {"app.py": deep + "def lambda_handler(event, context):\n    return a(event)\n"})
+    flow = page[page.index('<div class="cdf"') :]
+    first, own = flow.split('<div class="cdf" id="cnd-flow0-0">')
+    assert first.count('<g class="fx fcall">') == 2  # a() and b(), opened in place; c() is a box linking to its flow
+    assert 'href="#cnd-flow0-0"' in first and "2 decisions inside · its flow ↓" in first  # its own, and d()'s
+    assert "Inside <code>c()</code>" in own and own.count('<g class="fx fcall">') == 1  # d(), opened in c()'s
+
+
+def test_each_route_of_a_web_app_has_a_flow(tmp_path: Path) -> None:
+    app = """
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/books/{book_id}")
+def get_book(book_id: int):
+    if book_id < 0:
+        raise ValueError(book_id)
+    return {"id": book_id}
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+"""
+    project = read_project(write(tmp_path / "code", {"main.py": app}))
+    from code_node.report.build import page_blocks
+
+    cmap = map_code(project.files, "main.app", libraries=project.libraries(), platform="web")
+    blocks = page_blocks(cmap, project="x", max_functions=24, max_depth=5, sources=project.files)
+    page = render_page(blocks, "x")
+    assert "How each route decides what to do" in page
+    assert "<code>get_book()</code> · GET /books/{book_id}" in page and "<code>health()</code> · GET /health" in page
+    assert "book_id &lt; 0?" in page and "Raises ValueError(book_id)" in page
+
+
+def test_the_decisions_in_text_say_where_each_answer_goes(tmp_path: Path) -> None:
+    from code_node.kit.render import _render_text
+
+    project = read_project(write(tmp_path / "code", {"app.py": DECIDES}))
+    lines = _render_text(page_blocks_for(project, "app.lambda_handler"), 100)
+    said = lines[lines.index("-- How lambda_handler() decides") : lines.index("-- When Python imports it")]
+    assert "kind == 'refund'?  yes: writes to DynamoDB (DeleteItem) · no: asks the next question" in said
+    assert "kind == 'charge'?  yes: calls charge() · no: raises ValueError(kind)" in said
+    assert "item.get('sku')?  yes: goes on · no: skips to the next item" in said
+    assert "↳ charge()  app.py line" in said and "except requests.Timeout: skips to the next item" in said

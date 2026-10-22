@@ -44,8 +44,9 @@ Select a highlighted line to see the path it takes, or point at a box.</figcapti
 
 ## The page
 
-The graph is one of two tabs on an HTML page. The other walks through each call step by step. It's one file that works
-offline, and everything on it but opening a box's hidden calls works without JavaScript.
+The graph is one of three tabs on an HTML page. The next draws each call as a flowchart of the decisions it makes,
+and the last walks through each call step by step. It's one file that works offline, and everything on it but opening
+a box's hidden calls works without JavaScript.
 
 <figure class="cn-shot" markdown>
 ![A code-node page: the graph in its tab](images/page-light.webp#only-light){ loading=lazy }

@@ -26,6 +26,7 @@ from code_node.analysis.mapping import map_code
 from code_node.pages import PageOptions, map_entry
 from code_node.project import entry_points, read_project
 from code_node.report.build import page_blocks
+from code_node.report.flow import _Flow
 from code_node.report.graph import _Graph
 from code_node.report.style import render_page
 from code_node.report.tabs import _Tabs
@@ -53,6 +54,7 @@ def _inside(blocks: list[Any]) -> list[Any]:
 FIGURES: dict[str, Callable[[list[Any]], list[Any]]] = {
     "page": lambda blocks: blocks,
     "graph": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],
+    "decisions": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Flow)],
     "steps": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Walk)],
     "plugins": lambda blocks: [b for b in _inside(blocks) if isinstance(b, _Graph)],  # drawn from the cart example
 }

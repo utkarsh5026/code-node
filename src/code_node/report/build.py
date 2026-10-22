@@ -1,5 +1,6 @@
 """
-The page code-node draws for one entry point: tabs for the graph and the walk through its steps.
+The page code-node draws for one entry point: tabs for the graph, the decisions it makes and the walk through its
+steps.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from ..kit.fmt import _plural
 from ..analysis.findings import _listed, _short_name
 from ..analysis.graph import CodeGraph, code_graph, everything_graph, graph_views
 from ..analysis.model import CodeMap
+from .flow import _Flow, flow_entries
 from .graph import _Graph
 from .tabs import _Tabs
 from .walk import _Walk, walk_stops
@@ -62,7 +64,7 @@ def page_blocks(
     editor: str = "",
 ) -> list[Any]:
     """
-    The whole page for one entry point, as report blocks: tabs for the graph and the walk through its steps, with the
+    The whole page for one entry point, as report blocks: tabs for the graph, its decisions and the walk through its steps, with the
     entry point and the folder beside them. sources is the code read, {file: its text}: with it, a box of the graph
     clicked shows its code. editor is a link from editor_link(), to open the code at a line in an editor.
     """
@@ -111,6 +113,20 @@ def page_blocks(
                 ],
             )
         )
+    event = next((n for n in graph.nodes if n.kind == "event"), None)
+    routes = any(route for _, route in flow_entries(cmap.steps))  # a web app: a flow for each route
+    flow = _Flow(
+        cmap.steps,
+        f"How {'each route' if routes else f'{entry}()'} decides what to do: each question it asks, and where each "
+        "answer goes"
+        if entry
+        else "",
+        comes_in=(event.label, event.sub) if event else ("", ""),
+    )
+    decisions = sum(
+        1 for top in cmap.steps for s in top.walk() if s.kind in ("if", "try") and not s.code.startswith("case ")
+    )
+    tabs.append(("Decisions", _plural(decisions, "decision"), [flow]))
     tabs.append(("Step by step", _plural(len(walk_stops(walk)), "step"), [walk]))
     read = f"{_plural(cmap.files, 'file')}, {cmap.lines:,} lines, nothing run" if cmap.files else ""
     blocks.append(

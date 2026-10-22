@@ -46,6 +46,11 @@ _KIND_SAYS = {  # what a line of each kind means, said once on its card
     "raise": "Raises an error: the function stops here, and so does each caller that doesn't catch it.",
 }
 
+_ENDS_SAYS = {  # how the lines under it end, when they leave the loop: CodeStep.ends
+    "continue": "Then it skips the rest of the loop, on to the next item.",
+    "break": "Then it leaves the loop.",
+}
+
 _AWS_DOES = {  # an AWS call, by what it does, as a sentence: 'Reads from S3 (GetObject)'
     "reads": "Reads from {}",
     "writes": "Writes to {}",
@@ -370,6 +375,8 @@ def _says(
         )
     elif step.kind in _KIND_SAYS:
         said.append(_KIND_SAYS[step.kind])
+    if step.ends:
+        said.append(_ENDS_SAYS[step.ends])
     own = [call for call in step.calls if call.kind == "def"]
     if own:
         it = "it" if len(own) == 1 else "each"

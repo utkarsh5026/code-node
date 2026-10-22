@@ -241,3 +241,27 @@ def test_the_entry_point_s_file_is_found_from_its_name() -> None:
     assert entry_file("tool.main", names) == ("src/tool/__init__.py", "src/")  # a package's __init__
     assert entry_file("app.handler", names) == ("app.py", "")
     assert entry_file("missing.main", names) is None
+
+
+def test_an_if_or_except_that_leaves_its_loop_says_how() -> None:
+    code = """
+import requests
+
+def handler(event, context):
+    for url in event["urls"]:
+        if not url:
+            continue
+        try:
+            answer = requests.get(url, timeout=5)
+        except requests.Timeout:
+            continue
+        if answer.ok:
+            break
+"""
+    cmap = map_code({"app.py": code}, "app.handler", platform="lambda")
+    loop = cmap.steps[0].steps[0]
+    assert [(s.kind, s.code, s.ends) for s in loop.steps if s.kind in ("if", "except")] == [
+        ("if", "if not url:", "continue"),  # kept for its continue alone: it decides what runs
+        ("except", "except requests.Timeout:", "continue"),
+        ("if", "if answer.ok:", "break"),
+    ]

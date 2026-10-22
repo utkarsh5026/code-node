@@ -57,6 +57,14 @@ def _ends_early(body: list[Any]) -> bool:
     return bool(body) and isinstance(body[-1], (ast.Return, ast.Raise, ast.Continue, ast.Break))
 
 
+def _jump(body: list[Any]) -> str:
+    """
+    How a block leaves its loop, when its last line does: 'continue', 'break', or ''.
+    """
+    last = body[-1] if body else None
+    return "continue" if isinstance(last, ast.Continue) else "break" if isinstance(last, ast.Break) else ""
+
+
 def _secret_spots(node: Any) -> list[tuple[str, Any]]:
     """
     The secret-looking literals in a piece of code, with the name each is given to: a password=, token= or key given

@@ -210,7 +210,8 @@ def _outline_lines(block: _Outline, report: _Report) -> list[str]:
                 )
                 walk(step.steps, pad + (4 if called else 2), False)
                 continue
-            out.append(f"{step.line or '':>5}  {' ' * pad}{step.code}{comment(step.notes, step=step)}")
+            ends = f"then {step.ends}" if step.ends else ""
+            out.append(f"{step.line or '':>5}  {' ' * pad}{step.code}{comment(step.notes, ends, step=step)}")
             for call in step.calls:
                 walk([call], pad + 4, True)
             walk(step.steps, pad + 2, False)
