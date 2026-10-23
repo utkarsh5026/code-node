@@ -13,7 +13,7 @@ from .libraries import Library, register_library
 from .platforms import Platform, get_platform, register_platform
 from .project import EntryPoint, Project, entry_points, read_project
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 __all__ = [
     "CodeGraph",
