@@ -4,6 +4,8 @@ Every change a user would notice, newest first ([Keep a Changelog](https://keepa
 follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version may change what a command does.
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-23
+
 ### Added
 
 - A Decisions tab beside the graph draws each call as a flowchart, top to bottom: each `if` as a question with an
@@ -281,7 +283,8 @@ follow [Semantic Versioning](https://semver.org/); before 1.0, a minor version m
 - `--platform NAME` runs a platform's checks whatever the entry point is; `--lambda` is short for
   `--platform lambda`. `EntryPoint.is_lambda` and `PageOptions.is_lambda` are now `platform` (`"lambda"` or `""`).
 
-[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/utkarsh5026/code-node/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/utkarsh5026/code-node/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/utkarsh5026/code-node/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/utkarsh5026/code-node/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/utkarsh5026/code-node/compare/v0.6.0...v0.7.0
