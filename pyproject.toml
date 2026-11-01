@@ -41,7 +41,7 @@ dependencies = [
 # versions in uv.lock, and Dependabot proposes upgrades to both.
 [dependency-groups]
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "ruff==0.17.1",
     "rich==15.0.0",  # makefile.py's colours and tables
     "pillow==12.3.0",  # scripts/shots.py only (it also needs Chrome)
